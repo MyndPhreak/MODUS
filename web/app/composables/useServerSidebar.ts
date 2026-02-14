@@ -2,9 +2,11 @@ export interface ServerSidebarTab {
   id: string;
   label: string;
   icon: string;
+  to?: string;
   badge?: string;
   disabled?: boolean;
   action?: () => void;
+  separator?: boolean;
 }
 
 export interface ServerSidebarState {

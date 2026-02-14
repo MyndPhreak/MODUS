@@ -141,32 +141,62 @@ async function handleLogout() {
           >
             Configuration
           </p>
-          <button
-            v-for="tab in serverSidebar.tabs"
-            :key="tab.id"
-            class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-            :class="
-              serverSidebar.activeTab === tab.id
-                ? 'bg-primary-500/15 text-primary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                : tab.disabled
-                  ? 'text-gray-600 cursor-not-allowed'
+          <template v-for="tab in serverSidebar.tabs" :key="tab.id">
+            <!-- Separator -->
+            <div
+              v-if="tab.separator"
+              class="my-2 mx-3 border-t border-white/5"
+            />
+            <!-- Route-based tab (NuxtLink) -->
+            <NuxtLink
+              v-if="tab.to && !tab.disabled"
+              :to="tab.to"
+              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+              :class="
+                serverSidebar.activeTab === tab.id
+                  ? 'bg-primary-500/15 text-primary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
-            "
-            :disabled="tab.disabled"
-            @click="tab.action?.()"
-          >
-            <UIcon :name="tab.icon" class="text-base shrink-0" />
-            <span>{{ tab.label }}</span>
-            <UBadge
-              v-if="tab.badge"
-              variant="soft"
-              color="neutral"
-              size="xs"
-              class="ml-auto"
+              "
             >
-              {{ tab.badge }}
-            </UBadge>
-          </button>
+              <UIcon :name="tab.icon" class="text-base shrink-0" />
+              <span>{{ tab.label }}</span>
+              <UBadge
+                v-if="tab.badge"
+                variant="soft"
+                color="neutral"
+                size="xs"
+                class="ml-auto"
+              >
+                {{ tab.badge }}
+              </UBadge>
+            </NuxtLink>
+            <!-- Action-based tab (button) -->
+            <button
+              v-else
+              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+              :class="
+                serverSidebar.activeTab === tab.id
+                  ? 'bg-primary-500/15 text-primary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                  : tab.disabled
+                    ? 'text-gray-600 cursor-not-allowed'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+              "
+              :disabled="tab.disabled"
+              @click="tab.action?.()"
+            >
+              <UIcon :name="tab.icon" class="text-base shrink-0" />
+              <span>{{ tab.label }}</span>
+              <UBadge
+                v-if="tab.badge"
+                variant="soft"
+                color="neutral"
+                size="xs"
+                class="ml-auto"
+              >
+                {{ tab.badge }}
+              </UBadge>
+            </button>
+          </template>
         </template>
       </nav>
 

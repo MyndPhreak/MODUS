@@ -405,7 +405,7 @@
                 size="sm"
                 color="primary"
                 variant="soft"
-                :to="`/server/${server.$id}/settings`"
+                :to="`/server/${server.$id}/modules`"
                 :ui="{ rounded: 'rounded-xl' }"
                 class="bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-300 hover:text-violet-200 transition-all flex-1"
               >
