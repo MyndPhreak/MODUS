@@ -1,0 +1,45 @@
+{
+  "name": "bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --watch . --ext ts --exec ts-node index.ts",
+    "dev:sharded": "TS_NODE_DEV=true ts-node sharding.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:sharded": "node dist/sharding.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.9.0",
+  "dependencies": {
+    "@discord-player/extractor": "^7.1.0",
+    "@napi-rs/canvas": "^0.1.92",
+    "appwrite": "^21.5.0",
+    "discord-player": "^7.1.0",
+    "discord-player-youtubei": "2.0.0-dev",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3",
+    "ffmpeg-static": "^5.3.0",
+    "googlevideo": "^4.0.4",
+    "mediaplex": "^1.0.0",
+    "node-appwrite": "^20.3.0",
+    "ws": "^8.18.3",
+    "youtubei.js": "https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "youtubei.js": "https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MODUS — Docker Compose
+# Runs both the Discord bot and the Nuxt web dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+# Usage (build locally):
+#   docker compose up -d --build     # build & start both services
+#   docker compose logs -f           # tail all logs
+#   docker compose down              # stop & remove containers
+#
+# Usage (pull from GHCR — for Unraid docker-compose plugin):
+#   export GHCR_OWNER=mynd           # your GitHub username
+#   docker compose --profile ghcr up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Discord Bot ───────────────────────────────────────────────────────────
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-local}/modus-bot:latest
+    container_name: modus-bot
+    restart: unless-stopped
+    env_file: ./bot/.env
+    ports:
+      - "3005:3005"
+    environment:
+      - BOT_PORT=3005
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http = require('http'); http.get('http://localhost:3005', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - modus
+
+  # ── Web Dashboard (Nuxt) ─────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-local}/modus-web:latest
+    container_name: modus-web
+    restart: unless-stopped
+    env_file: ./web/.env
+    ports:
+      - "3000:3000"
+    environment:
+      # Override bot URL to use the internal Docker network hostname
+      - NUXT_PUBLIC_BOT_URL=http://bot:3005
+    depends_on:
+      bot:
+        condition: service_healthy
+    networks:
+      - modus
+
+networks:
+  modus:
+    driver: bridge
