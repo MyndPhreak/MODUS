@@ -49,6 +49,13 @@ export const useUserStore = defineStore("user", {
     userGuilds(): DiscordGuild[] {
       return this.discord?.guilds || [];
     },
+    /**
+     * Check if the current user has the "admin" label in Appwrite.
+     * Labels are managed from the Appwrite console — no env vars needed.
+     */
+    isAdmin(): boolean {
+      return this.user?.labels?.includes("admin") ?? false;
+    },
   },
 
   actions: {
@@ -131,6 +138,9 @@ export const useUserStore = defineStore("user", {
         // Try to use the session secret from our cookie (set by server-side OAuth callback)
         const projectId = config.public.appwriteProjectId;
         const sessionCookie = useCookie(`a_session_${projectId}`);
+        console.log(
+          `[UserStore] Session cookie present: ${!!sessionCookie.value}, Project ID: ${projectId}`,
+        );
         if (sessionCookie.value) {
           client.setSession(sessionCookie.value);
         }
@@ -139,8 +149,15 @@ export const useUserStore = defineStore("user", {
         this.session = session;
         this.isLoggedIn = true;
 
+        console.log(
+          `[UserStore] Session loaded — Provider: ${session.provider}, Has providerAccessToken: ${!!session.providerAccessToken}, Token length: ${session.providerAccessToken?.length || 0}`,
+        );
+
         const userDetails = await account.get();
         this.user = userDetails;
+        console.log(
+          `[UserStore] User loaded — ID: ${userDetails.$id}, Name: ${userDetails.name}`,
+        );
 
         // Fetch Discord profile data
         // Always use server API since SSR OAuth sessions don't expose
@@ -168,15 +185,33 @@ export const useUserStore = defineStore("user", {
             // Second try: server API which uses admin key to access provider tokens
             if (!profileData) {
               try {
-                const response = await fetch("/api/discord/me");
+                console.log(
+                  "[UserStore] Fetching Discord profile from server API...",
+                );
+                const response = await fetch("/api/discord/me", {
+                  credentials: "include",
+                });
+                console.log(
+                  `[UserStore] Server API response: ${response.status} ${response.statusText}`,
+                );
                 if (response.ok) {
                   const data = await response.json();
+                  console.log(
+                    `[UserStore] Server API data — Profile ID: ${data.profile?.id}, Avatar: ${data.profile?.avatar}, Guilds: ${data.guilds?.length ?? 0}`,
+                  );
                   profileData = data.profile;
                   guildsData = data.guilds || [];
+                } else {
+                  const errorText = await response.text();
+                  console.error(
+                    `[UserStore] Server API error body:`,
+                    errorText,
+                  );
                 }
-              } catch {
+              } catch (serverErr) {
                 console.warn(
                   "[UserStore] Server Discord API unavailable, keeping persisted data",
+                  serverErr,
                 );
               }
             }
@@ -186,6 +221,10 @@ export const useUserStore = defineStore("user", {
               // (happens when token is expired and we fall back to Appwrite identity)
               const avatarHash = profileData.avatar || this.discord?.avatar;
               const discordId = profileData.id;
+
+              console.log(
+                `[UserStore] Building profile — Discord ID: ${discordId}, Avatar hash: ${avatarHash}, Guilds count: ${guildsData.length}`,
+              );
 
               const avatarUrl = avatarHash
                 ? `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.${avatarHash.startsWith("a_") ? "gif" : "webp"}?size=256`
@@ -212,6 +251,15 @@ export const useUserStore = defineStore("user", {
                       }))
                     : this.discord?.guilds || [], // Preserve existing guilds if new data has none
               };
+
+              // Log admin check info
+              const adminIds = (config.public.botAdminIds || "")
+                .split(",")
+                .map((id: string) => id.trim())
+                .filter(Boolean);
+              console.log(
+                `[UserStore] Admin check — Discord ID: ${discordId}, Admin IDs config: "${config.public.botAdminIds}", Parsed: [${adminIds.join(", ")}], Is admin: ${adminIds.includes(discordId)}`,
+              );
             }
           } catch (err) {
             console.error(

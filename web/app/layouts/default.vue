@@ -11,14 +11,7 @@ onMounted(() => {
   isMounted.value = true;
 });
 
-const isBotAdmin = computed(() => {
-  if (!userStore.discordId) return false;
-  const config = useRuntimeConfig();
-  const adminIds = (config.public.botAdminIds || "")
-    .split(",")
-    .map((id: string) => id.trim());
-  return adminIds.includes(userStore.discordId);
-});
+const isBotAdmin = computed(() => userStore.isAdmin);
 
 const navigation = computed(() => {
   const items = [

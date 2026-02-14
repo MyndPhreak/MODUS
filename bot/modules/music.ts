@@ -15,12 +15,101 @@ import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
 
+// ─── Available Audio Filters ──────────────────────────────────────────────
+
+const AVAILABLE_FILTERS: Record<
+  string,
+  { label: string; emoji: string; description: string }
+> = {
+  bassboost: {
+    label: "Bass Boost",
+    emoji: "🔊",
+    description: "Enhances low frequencies",
+  },
+  bassboost_high: {
+    label: "Bass Boost (Heavy)",
+    emoji: "💥",
+    description: "Extreme bass enhancement",
+  },
+  nightcore: {
+    label: "Nightcore",
+    emoji: "🌙",
+    description: "Higher pitch + faster tempo",
+  },
+  vaporwave: {
+    label: "Vaporwave",
+    emoji: "🌊",
+    description: "Slowed down + lower pitch",
+  },
+  "8D": {
+    label: "8D Audio",
+    emoji: "🎧",
+    description: "Rotating spatial audio effect",
+  },
+  karaoke: {
+    label: "Karaoke",
+    emoji: "🎤",
+    description: "Reduces vocal frequencies",
+  },
+  tremolo: {
+    label: "Tremolo",
+    emoji: "〰️",
+    description: "Wavering volume effect",
+  },
+  vibrato: {
+    label: "Vibrato",
+    emoji: "🎻",
+    description: "Wavering pitch effect",
+  },
+  lofi: {
+    label: "Lo-Fi",
+    emoji: "📻",
+    description: "Warm, low-fidelity sound",
+  },
+  phaser: {
+    label: "Phaser",
+    emoji: "🔮",
+    description: "Sweeping phase effect",
+  },
+  chorus: {
+    label: "Chorus",
+    emoji: "👥",
+    description: "Rich, layered vocal effect",
+  },
+  flanger: {
+    label: "Flanger",
+    emoji: "✨",
+    description: "Jet-like sweeping effect",
+  },
+  treble: {
+    label: "Treble Boost",
+    emoji: "🔔",
+    description: "Enhances high frequencies",
+  },
+  normalizer: {
+    label: "Normalizer",
+    emoji: "📊",
+    description: "Levels out volume differences",
+  },
+  fadein: {
+    label: "Fade In",
+    emoji: "🌅",
+    description: "Gradually increases volume",
+  },
+  surrounding: {
+    label: "Surround",
+    emoji: "🔈",
+    description: "Spatial surround sound",
+  },
+};
+
 // Default settings for the music module per guild
 const DEFAULT_SETTINGS = {
   defaultVolume: 50,
   djRoleId: "",
   updateChannelTopic: false,
   maxQueueSize: 200,
+  activeFilters: [] as string[],
 };
 
 type MusicSettings = typeof DEFAULT_SETTINGS;
@@ -69,7 +158,7 @@ async function updateBotNickname(queue: GuildQueue, trackTitle?: string) {
 
 let eventsRegistered = false;
 
-function registerPlayerEvents() {
+function registerPlayerEvents(moduleManager: ModuleManager) {
   if (eventsRegistered) return;
   eventsRegistered = true;
 
@@ -164,6 +253,69 @@ function registerPlayerEvents() {
   player.on("debug" as any, (message: string) => {
     console.log(`[Music Debug] ${message}`);
   });
+
+  // ─── Realtime Filter Sync from Dashboard ─────────────────────────────
+  moduleManager.appwriteService.subscribeToGuildConfigs(
+    async (payload: any) => {
+      try {
+        // Only react to music module config changes
+        if (payload.moduleName !== "music") return;
+
+        const guildId = payload.guildId;
+        if (!guildId || !payload.settings) return;
+
+        const settings = JSON.parse(payload.settings);
+        const newFilters: string[] = settings.activeFilters ?? [];
+
+        // Check if there's an active queue for this guild
+        const queue = player.queues.get(guildId);
+        if (!queue || !queue.currentTrack) return;
+
+        // Determine which filters need toggling
+        const currentlyEnabled = queue.filters.ffmpeg.getFiltersEnabled();
+        const toEnable = newFilters.filter(
+          (f) => !currentlyEnabled.includes(f as any),
+        );
+        const toDisable = currentlyEnabled.filter(
+          (f) => !newFilters.includes(f),
+        );
+
+        const toToggle = [...toEnable, ...toDisable];
+        if (toToggle.length === 0) return;
+
+        console.log(
+          `[Music] Dashboard filter sync for guild ${guildId}: +[${toEnable.join(",")}] -[${toDisable.join(",")}]`,
+        );
+
+        await queue.filters.ffmpeg.toggle(toToggle as any[]);
+
+        // Notify the channel
+        const channel = (queue.metadata as any)?.channel;
+        if (channel) {
+          const activeDisplay =
+            newFilters.length > 0
+              ? newFilters
+                  .map((f) => {
+                    const info = AVAILABLE_FILTERS[f];
+                    return info ? `${info.emoji} ${info.label}` : f;
+                  })
+                  .join(" • ")
+              : "None";
+
+          const embed = new EmbedBuilder()
+            .setColor(0x9333ea)
+            .setTitle("🎛️ Audio Effects Updated")
+            .setDescription("Effects were changed from the dashboard.")
+            .addFields({ name: "Active Effects", value: activeDisplay })
+            .setFooter({ text: "Updated via web dashboard" });
+
+          channel.send({ embeds: [embed] }).catch(() => {});
+        }
+      } catch (err) {
+        console.error("[Music] Error processing realtime filter sync:", err);
+      }
+    },
+  );
 }
 
 // ─── Command Definitions ─────────────────────────────────────────────────
@@ -240,6 +392,29 @@ const loopCommand = new SlashCommandBuilder()
 const settingsCommand = new SlashCommandBuilder()
   .setName("music-settings")
   .setDescription("Show music settings for this server");
+
+const filterCommand = new SlashCommandBuilder()
+  .setName("filter")
+  .setDescription("Toggle an audio effect on the current playback")
+  .addStringOption((opt) =>
+    opt
+      .setName("effect")
+      .setDescription("Audio effect to toggle")
+      .setRequired(true)
+      .addChoices(
+        ...Object.entries(AVAILABLE_FILTERS).map(([key, val]) => ({
+          name: `${val.emoji} ${val.label}`,
+          value: key,
+        })),
+      ),
+  )
+  .addBooleanOption((opt) =>
+    opt
+      .setName("save")
+      .setDescription(
+        "Save as default for this server (auto-applied to new queues)",
+      ),
+  );
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -357,6 +532,30 @@ async function handlePlay(
       // First track — just confirm it's starting; "Now Playing" embed
       // will be sent by the playerStart event listener.
       await interaction.editReply({ content: "🎵 Loading track..." });
+
+      // Auto-apply saved filters for this guild when a new queue starts
+      if (
+        settings.activeFilters &&
+        settings.activeFilters.length > 0 &&
+        queue
+      ) {
+        // Apply filters asynchronously so we don't block the response
+        setTimeout(async () => {
+          try {
+            const activeQueue = player.queues.get(interaction.guildId!);
+            if (activeQueue) {
+              await activeQueue.filters.ffmpeg.toggle(
+                settings.activeFilters as any[],
+              );
+              console.log(
+                `[Music] Auto-applied saved filters: ${settings.activeFilters.join(", ")} in ${interaction.guild?.name}`,
+              );
+            }
+          } catch (err) {
+            console.error("[Music] Failed to auto-apply filters:", err);
+          }
+        }, 2000); // Wait for playback to stabilize before applying filters
+      }
     }
   } catch (error: any) {
     console.error("[Music] Play error:", error);
@@ -602,6 +801,17 @@ async function handleSettings(
 ) {
   const settings = await getSettings(moduleManager, interaction.guildId!);
 
+  // Show active filters
+  const activeFiltersList =
+    settings.activeFilters && settings.activeFilters.length > 0
+      ? settings.activeFilters
+          .map((f: string) => {
+            const info = AVAILABLE_FILTERS[f];
+            return info ? `${info.emoji} ${info.label}` : f;
+          })
+          .join(", ")
+      : "None";
+
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("⚙️ Music Settings")
@@ -631,9 +841,87 @@ async function handleSettings(
         value: settings.updateChannelTopic ? "Yes" : "No",
         inline: true,
       },
+      {
+        name: "🎛️ Saved Filters",
+        value: activeFiltersList,
+        inline: false,
+      },
     );
 
   await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleFilter(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const queue = requireQueue(interaction, false);
+  if (!queue) return;
+
+  const effect = interaction.options.getString("effect", true);
+  const shouldSave = interaction.options.getBoolean("save") ?? false;
+  const filterInfo = AVAILABLE_FILTERS[effect];
+
+  if (!filterInfo) {
+    await interaction.editReply({ content: "❌ Unknown effect." });
+    return;
+  }
+
+  try {
+    // Toggle the FFmpeg filter
+    await queue.filters.ffmpeg.toggle([effect as any]);
+
+    const isNowEnabled = queue.filters.ffmpeg.isEnabled(effect as any);
+    const statusEmoji = isNowEnabled ? "✅" : "❌";
+    const statusText = isNowEnabled ? "enabled" : "disabled";
+
+    // Build active filters list for the response
+    const allActive = queue.filters.ffmpeg.getFiltersEnabled();
+    const activeDisplay =
+      allActive.length > 0
+        ? allActive
+            .map((f) => {
+              const info = AVAILABLE_FILTERS[f];
+              return info ? `${info.emoji} ${info.label}` : f;
+            })
+            .join(" • ")
+        : "None";
+
+    // Save to guild settings if requested
+    if (shouldSave) {
+      try {
+        const settings = await getSettings(moduleManager, interaction.guildId!);
+        settings.activeFilters = allActive;
+        await moduleManager.appwriteService.setModuleSettings(
+          interaction.guildId!,
+          "music",
+          settings,
+        );
+      } catch (err) {
+        console.error("[Music] Failed to save filter settings:", err);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(isNowEnabled ? 0x57f287 : 0xed4245)
+      .setTitle(`${filterInfo.emoji} ${filterInfo.label} — ${statusText}`)
+      .setDescription(filterInfo.description)
+      .addFields({
+        name: "🎛️ Active Effects",
+        value: activeDisplay,
+      });
+
+    if (shouldSave) {
+      embed.setFooter({ text: "💾 Saved as server default" });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error: any) {
+    console.error("[Music] Filter error:", error);
+    await interaction.editReply({
+      content: `❌ Failed to apply filter: ${error.message}`,
+    });
+  }
 }
 
 function formatViews(views: number | undefined): string {
@@ -677,6 +965,7 @@ const musicModule: BotModule = {
     shuffleCommand.toJSON(),
     loopCommand.toJSON(),
     settingsCommand.toJSON(),
+    filterCommand.toJSON(),
   ],
 
   async autocomplete(
@@ -793,7 +1082,7 @@ const musicModule: BotModule = {
     moduleManager: ModuleManager,
   ) {
     // Register player events on first use
-    registerPlayerEvents();
+    registerPlayerEvents(moduleManager);
 
     // Dispatch based on the top-level command name
     const commandName = interaction.commandName;
@@ -821,6 +1110,8 @@ const musicModule: BotModule = {
         return handleLoop(interaction);
       case "music-settings":
         return handleSettings(interaction, moduleManager);
+      case "filter":
+        return handleFilter(interaction, moduleManager);
       default:
         await interaction.editReply({ content: "❓ Unknown command." });
     }

@@ -138,6 +138,75 @@
                 </div>
                 <USwitch v-model="musicSettings.updateChannelTopic" />
               </div>
+
+              <!-- Audio Effects Section -->
+              <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center gap-2 mb-3">
+                  <div
+                    class="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20"
+                  >
+                    <UIcon
+                      name="i-heroicons-sparkles"
+                      class="text-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-semibold text-white">
+                      Audio Effects
+                    </h4>
+                    <p class="text-[10px] text-gray-500">
+                      Auto-applied when music starts playing
+                    </p>
+                  </div>
+                  <UBadge
+                    v-if="musicSettings.activeFilters.length > 0"
+                    color="primary"
+                    variant="soft"
+                    size="xs"
+                    class="ml-auto"
+                  >
+                    {{ musicSettings.activeFilters.length }} active
+                  </UBadge>
+                </div>
+
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    v-for="(info, key) in availableFilters"
+                    :key="key"
+                    type="button"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-left"
+                    :class="
+                      musicSettings.activeFilters.includes(key)
+                        ? 'bg-violet-500/20 border border-violet-500/40 text-violet-300 ring-1 ring-violet-500/30'
+                        : 'bg-gray-800/50 border border-white/5 text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
+                    "
+                    @click="toggleFilter(key)"
+                  >
+                    <span class="text-base leading-none">{{ info.emoji }}</span>
+                    <div class="min-w-0">
+                      <div class="truncate">{{ info.label }}</div>
+                      <div class="text-[9px] opacity-60 truncate">
+                        {{ info.description }}
+                      </div>
+                    </div>
+                    <UIcon
+                      v-if="musicSettings.activeFilters.includes(key)"
+                      name="i-heroicons-check-circle-solid"
+                      class="ml-auto text-violet-400 shrink-0"
+                    />
+                  </button>
+                </div>
+
+                <button
+                  v-if="musicSettings.activeFilters.length > 0"
+                  type="button"
+                  class="w-full mt-2 text-[10px] text-gray-500 hover:text-red-400 transition-colors py-1"
+                  @click="musicSettings.activeFilters = []"
+                >
+                  Clear all effects
+                </button>
+              </div>
+
               <UButton
                 block
                 color="primary"
@@ -1014,7 +1083,104 @@ const musicSettings = ref({
   djRoleId: "",
   updateChannelTopic: false,
   maxQueueSize: 200,
+  activeFilters: [] as string[],
 });
+
+// Available audio filters (mirrored from bot/modules/music.ts)
+const availableFilters: Record<
+  string,
+  { label: string; emoji: string; description: string }
+> = {
+  bassboost: {
+    label: "Bass Boost",
+    emoji: "🔊",
+    description: "Enhances low frequencies",
+  },
+  bassboost_high: {
+    label: "Bass Boost (Heavy)",
+    emoji: "💥",
+    description: "Extreme bass enhancement",
+  },
+  nightcore: {
+    label: "Nightcore",
+    emoji: "🌙",
+    description: "Higher pitch + faster tempo",
+  },
+  vaporwave: {
+    label: "Vaporwave",
+    emoji: "🌊",
+    description: "Slowed down + lower pitch",
+  },
+  "8D": {
+    label: "8D Audio",
+    emoji: "🎧",
+    description: "Rotating spatial audio",
+  },
+  karaoke: {
+    label: "Karaoke",
+    emoji: "🎤",
+    description: "Reduces vocal frequencies",
+  },
+  tremolo: {
+    label: "Tremolo",
+    emoji: "〰️",
+    description: "Wavering volume effect",
+  },
+  vibrato: {
+    label: "Vibrato",
+    emoji: "🎻",
+    description: "Wavering pitch effect",
+  },
+  lofi: {
+    label: "Lo-Fi",
+    emoji: "📻",
+    description: "Warm, low-fidelity sound",
+  },
+  phaser: {
+    label: "Phaser",
+    emoji: "🔮",
+    description: "Sweeping phase effect",
+  },
+  chorus: {
+    label: "Chorus",
+    emoji: "👥",
+    description: "Rich, layered vocal effect",
+  },
+  flanger: {
+    label: "Flanger",
+    emoji: "✨",
+    description: "Jet-like sweeping effect",
+  },
+  treble: {
+    label: "Treble Boost",
+    emoji: "🔔",
+    description: "Enhances high frequencies",
+  },
+  normalizer: {
+    label: "Normalizer",
+    emoji: "📊",
+    description: "Levels out volume",
+  },
+  fadein: {
+    label: "Fade In",
+    emoji: "🌅",
+    description: "Gradually increases volume",
+  },
+  surrounding: {
+    label: "Surround",
+    emoji: "🔈",
+    description: "Spatial surround sound",
+  },
+};
+
+const toggleFilter = (key: string) => {
+  const idx = musicSettings.value.activeFilters.indexOf(key);
+  if (idx >= 0) {
+    musicSettings.value.activeFilters.splice(idx, 1);
+  } else {
+    musicSettings.value.activeFilters.push(key);
+  }
+};
 
 // Sidebar tab definitions
 const sidebarTabs = computed(() => [
@@ -1336,6 +1502,7 @@ const toggleExpand = async (moduleName: string) => {
           djRoleId: saved.djRoleId ?? "",
           updateChannelTopic: saved.updateChannelTopic ?? false,
           maxQueueSize: saved.maxQueueSize ?? 200,
+          activeFilters: saved.activeFilters ?? [],
         };
       } catch {
         // Use defaults if JSON is invalid

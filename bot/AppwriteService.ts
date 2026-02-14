@@ -206,6 +206,17 @@ export class AppwriteService {
     );
   }
 
+  subscribeToGuildConfigs(callback: (payload: any) => void) {
+    return this.realtimeClient.subscribe(
+      [
+        `databases.${this.databaseId}.collections.${this.guildConfigsCollectionId}.documents`,
+      ],
+      (response) => {
+        callback(response.payload);
+      },
+    );
+  }
+
   async getEnabledModules(): Promise<string[]> {
     try {
       const response = await this.databases.listDocuments(

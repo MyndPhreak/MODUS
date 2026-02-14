@@ -437,18 +437,7 @@ const serversLoading = ref(false);
 const databaseId = "discord_bot";
 const config = useRuntimeConfig();
 
-const adminIds = computed(() => {
-  const ids = config.public.botAdminIds || "";
-  return ids
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
-});
-
-const isBotAdmin = computed(() => {
-  if (!userStore.discordId) return false;
-  return adminIds.value.includes(userStore.discordId);
-});
+const isBotAdmin = computed(() => userStore.isAdmin);
 
 const allShards = ref([]);
 

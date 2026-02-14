@@ -89,20 +89,12 @@
       <section
         class="bg-primary-50 dark:bg-primary-900/10 rounded-xl p-8 border border-primary-100 dark:border-primary-800"
       >
-        <h2 class="text-xl font-bold mb-4">Admin IDs Configuration</h2>
+        <h2 class="text-xl font-bold mb-4">Admin Access</h2>
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Current Bot Admin IDs are managed via the code. In the future, these
-          can be moved to Appwrite Configuration.
+          Admin access is managed via Appwrite user labels. Users with the
+          <UBadge color="primary" variant="soft" size="xs">admin</UBadge>
+          label have access to this dashboard.
         </p>
-        <div class="flex flex-wrap gap-2">
-          <UBadge
-            v-for="id in adminIds"
-            :key="id"
-            color="primary"
-            variant="soft"
-            >{{ id }}</UBadge
-          >
-        </div>
       </section>
 
       <!-- Live Bot Logs — Enhanced -->
@@ -279,19 +271,7 @@ const adminLogLevels = [
 const databaseId = "discord_bot";
 const collectionId = "modules";
 
-// Fetch from runtime config
-const adminIds = computed(() => {
-  const ids = config.public.botAdminIds || "";
-  return ids
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
-});
-
-const isBotAdmin = computed(() => {
-  if (!userStore.discordId) return false;
-  return adminIds.value.includes(userStore.discordId);
-});
+const isBotAdmin = computed(() => userStore.isAdmin);
 
 const filteredBotLogs = computed(() => {
   let logs = [...botLogs.value];
