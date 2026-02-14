@@ -51,7 +51,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 
 # Install production dependencies only (no devDependencies)
-RUN pnpm install --frozen-lockfile --prod
+# --ignore-scripts: youtubei.js postinstall runs `npm install` which isn't
+# available in the slim image; all native addons were already built in the
+# builder stage so lifecycle scripts aren't needed here.
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Copy compiled JavaScript from builder stage
 COPY --from=builder /app/dist ./dist
