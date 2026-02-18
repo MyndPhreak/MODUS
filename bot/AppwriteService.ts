@@ -246,6 +246,7 @@ export class AppwriteService {
 
   async updateServerStatus(
     serverId: string,
+    guildId: string,
     status: boolean,
     ping: number,
     shardId: number,
@@ -256,6 +257,7 @@ export class AppwriteService {
         this.serversCollectionId,
         serverId,
         {
+          guild_id: guildId,
           status,
           ping,
           shard_id: shardId,
