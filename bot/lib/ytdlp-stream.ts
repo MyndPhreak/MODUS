@@ -5,8 +5,9 @@
  *   1. yt-dlp resolves the direct audio URL (--get-url)
  *   2. FFmpeg fetches that URL directly with reconnect flags + large buffer
  *
- * This gives FFmpeg real HTTP-level reconnect capability (the -reconnect
- * flags only work on HTTP/HTTPS inputs, NOT on pipe:0 stdin).
+ * IMPORTANT: Outputs raw PCM s16le at 48kHz stereo.
+ * discord-player handles the Opus encoding internally — providing pre-encoded
+ * Opus causes double-encoding, which leads to pitch/speed anomalies and stutter.
  *
  * Usage in index.ts:
  *   import { createYtDlpStreamFunction } from "./lib/ytdlp-stream";
@@ -91,16 +92,30 @@ function getDirectAudioUrl(videoId: string): Promise<string> {
  * Creates a stable, buffered readable audio stream using FFmpeg
  * fetching directly from the resolved audio URL.
  *
- * Key FFmpeg flags:
- *   -reconnect 1              Auto-reconnect on connection drop
- *   -reconnect_streamed 1     Reconnect even on streamed (non-seekable) inputs
- *   -reconnect_delay_max 5    Max seconds between reconnect attempts
- *   -multiple_requests 1      Allow FFmpeg to reopen the URL if needed
+ * Key design decisions:
  *
- * Output: OGG/Opus container — discord-player can identify and process this
+ *   OUTPUT FORMAT: Raw PCM s16le at 48kHz stereo
+ *   discord-player expects to handle Opus encoding itself. Providing pre-encoded
+ *   Opus (OGG container) caused double-encoding → pitch/speed drift and stutter.
+ *   Raw PCM is the cleanest handoff.
+ *
+ *   RECONNECT FLAGS (HTTP-level):
+ *     -reconnect 1                   Auto-reconnect on connection drop
+ *     -reconnect_streamed 1          Reconnect even on non-seekable streams
+ *     -reconnect_on_network_error 1  Reconnect on transient network errors
+ *     -reconnect_delay_max 5         Max seconds between reconnect attempts
+ *     -multiple_requests 1           Allow FFmpeg to reopen the URL if needed
+ *
+ *   BUFFERING:
+ *     -thread_queue_size 4096        Large input thread queue to absorb jitter
+ *     -analyzeduration 10000000      10s probe window — enough to lock onto
+ *                                    variable-bitrate WebM/Opus streams
+ *     -probesize 2000000             2MB probe for reliable format detection
+ *     PassThrough highWaterMark 2MB  Absorbs up to ~80s of audio at 192kbps,
+ *                                    surviving significant network hiccups
  */
 function createFfmpegStream(directUrl: string): Readable {
-  console.log("[FFmpeg] Spawning with reconnect flags...");
+  console.log("[FFmpeg] Spawning PCM stream with reconnect + buffering...");
 
   const ffmpeg = spawn(
     "ffmpeg",
@@ -110,32 +125,38 @@ function createFfmpegStream(directUrl: string): Readable {
       "1",
       "-reconnect_streamed",
       "1",
+      "-reconnect_on_network_error",
+      "1",
       "-reconnect_delay_max",
       "5",
       "-multiple_requests",
       "1",
 
+      // ── Input buffering ──
+      "-thread_queue_size",
+      "4096",
+      "-analyzeduration",
+      "10000000", // 10 seconds — reliable format lock
+      "-probesize",
+      "2000000", // 2MB probe
+
       "-i",
       directUrl,
 
-      // ── Buffering ──
-      "-analyzeduration",
-      "0", // Skip analysis delay (we know it's audio)
+      // ── Resilience ──
       "-fflags",
-      "+discardcorrupt", // Discard corrupted frames instead of dying
+      "+discardcorrupt+genpts", // Discard corrupted frames, regenerate timestamps
 
-      // ── Output: OGG/Opus (self-describing format discord-player can probe) ──
+      // ── Output: raw PCM — let discord-player handle Opus encoding ──
       "-vn", // No video
       "-c:a",
-      "libopus", // Encode as Opus
-      "-b:a",
-      "128k", // 128kbps — good quality for Discord
+      "pcm_s16le", // Raw 16-bit signed little-endian PCM
       "-ar",
       "48000", // 48kHz (Discord native sample rate)
       "-ac",
       "2", // Stereo
       "-f",
-      "ogg", // OGG container
+      "s16le", // Raw PCM container
       "-loglevel",
       "warning",
 
@@ -147,8 +168,9 @@ function createFfmpegStream(directUrl: string): Readable {
   );
 
   // ── PassThrough with generous buffer ──
+  // 2MB ≈ ~10s of 48kHz stereo s16le PCM audio
   const output = new PassThrough({
-    highWaterMark: 512 * 1024, // 512KB output buffer
+    highWaterMark: 2 * 1024 * 1024,
   });
 
   ffmpeg.stdout.pipe(output);
@@ -203,7 +225,7 @@ function killProcess(proc: ChildProcess) {
  *
  * Two-stage flow:
  *   1. yt-dlp --get-url  →  resolves the direct CDN audio URL
- *   2. FFmpeg fetches that URL with reconnect + buffer  →  outputs OGG/Opus stream
+ *   2. FFmpeg fetches that URL with reconnect + buffer  →  outputs raw PCM stream
  */
 export async function createYtDlpStreamFunction(
   query: { url: string },
@@ -219,6 +241,6 @@ export async function createYtDlpStreamFunction(
   // Stage 1: Resolve direct URL via yt-dlp
   const directUrl = await getDirectAudioUrl(videoId);
 
-  // Stage 2: Stream via FFmpeg with reconnect + buffering
+  // Stage 2: Stream via FFmpeg with reconnect + buffering → raw PCM
   return createFfmpegStream(directUrl);
 }

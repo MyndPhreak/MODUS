@@ -46,7 +46,9 @@ export function useServerSettings(guildId: string) {
   };
 
   const hasModuleSettings = (moduleName: string): boolean => {
-    return ["music", "moderation"].includes(moduleName.toLowerCase());
+    return ["music", "moderation", "recording"].includes(
+      moduleName.toLowerCase(),
+    );
   };
 
   const toggleModule = async (moduleName: string, enabled: boolean) => {

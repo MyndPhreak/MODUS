@@ -9,7 +9,7 @@
  */
 
 import "dotenv/config";
-import { Client, Databases, IndexType } from "node-appwrite";
+import { Client, Databases, IndexType, Storage } from "node-appwrite";
 
 // ──────────────────────────────────────────────
 // Configuration
@@ -17,6 +17,7 @@ import { Client, Databases, IndexType } from "node-appwrite";
 
 const DATABASE_ID = "discord_bot";
 const DATABASE_NAME = "Discord Bot";
+const RECORDINGS_BUCKET_ID = "recordings";
 
 interface AttributeDef {
   key: string;
@@ -136,6 +137,51 @@ const collections: CollectionDef[] = [
       },
     ],
   },
+  {
+    id: "recordings",
+    name: "Recordings",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "channel_name", type: "string", size: 256, required: true },
+      { key: "recorded_by", type: "string", size: 64, required: true },
+      { key: "mixed_file_id", type: "string", size: 128, required: false },
+      { key: "duration", type: "integer", required: false },
+      { key: "started_at", type: "string", size: 64, required: true },
+      { key: "ended_at", type: "string", size: 64, required: false },
+      { key: "title", type: "string", size: 256, required: false },
+      { key: "participants", type: "string", size: 4096, required: false },
+      { key: "bitrate", type: "integer", required: false },
+    ],
+    indexes: [
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+      {
+        key: "idx_guild_started",
+        type: "key",
+        attributes: ["guild_id", "started_at"],
+        orders: ["ASC", "DESC"],
+      },
+    ],
+  },
+  {
+    id: "recording_tracks",
+    name: "Recording Tracks",
+    attributes: [
+      { key: "recording_id", type: "string", size: 128, required: true },
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "user_id", type: "string", size: 64, required: true },
+      { key: "username", type: "string", size: 256, required: true },
+      { key: "file_id", type: "string", size: 128, required: true },
+      { key: "file_size", type: "integer", required: false },
+    ],
+    indexes: [
+      {
+        key: "idx_recording_id",
+        type: "key",
+        attributes: ["recording_id"],
+      },
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+    ],
+  },
 ];
 
 // ──────────────────────────────────────────────
@@ -148,13 +194,23 @@ const client = new Client()
   .setKey(process.env.APPWRITE_API_KEY!);
 
 const databases = new Databases(client);
+const storage = new Storage(client);
 
 async function exists(fn: () => Promise<any>): Promise<boolean> {
   try {
     await fn();
     return true;
   } catch (e: any) {
-    if (e.code === 404) return false;
+    if (e.code === 404 || e?.response?.statusCode === 404) return false;
+    // If Appwrite returned an HTML error page, the SDK might throw
+    // without a .code — treat that as "not found" for idempotent setup
+    if (!e.code && !e.response) {
+      console.warn(
+        `  ⚠  Could not determine existence (treating as not found):`,
+        e?.message || e,
+      );
+      return false;
+    }
     throw e;
   }
 }
@@ -316,6 +372,35 @@ async function main() {
         `  ✅ Created index "${idx.key}" (${idx.type}) on [${idx.attributes.join(", ")}]`,
       );
     }
+  }
+
+  // ── Bucket provisioning ──
+  console.log(`\n── Storage Bucket: recordings ──`);
+  const bucketExists = await exists(() =>
+    storage.getBucket(RECORDINGS_BUCKET_ID),
+  );
+  if (!bucketExists) {
+    try {
+      await storage.createBucket(
+        RECORDINGS_BUCKET_ID,
+        "Recordings",
+        undefined, // permissions
+        false, // fileSecurity
+        true, // enabled
+        536870912, // maxFileSize = 512 MB (requires _APP_STORAGE_LIMIT ≥ this in Appwrite config)
+      );
+      console.log(`  ✅ Created bucket "recordings"`);
+    } catch (bucketErr: any) {
+      console.error(
+        `  ❌ Failed to create bucket:`,
+        bucketErr?.message || bucketErr,
+      );
+      console.error(
+        `     (You may need to create it manually in the Appwrite Console)`,
+      );
+    }
+  } else {
+    console.log(`  ✔  Bucket "recordings" already exists`);
   }
 
   console.log("\n🎉 Schema setup complete!\n");

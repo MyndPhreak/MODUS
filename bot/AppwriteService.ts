@@ -1,4 +1,6 @@
-import { Client, Databases, Query } from "node-appwrite";
+import { Client, Databases, Query, Storage, ID } from "node-appwrite";
+// @ts-ignore — subpath export resolves at runtime; legacy moduleResolution can't see it
+import { InputFile } from "node-appwrite/file";
 import { Client as AppwriteClient } from "appwrite";
 import WebSocket from "ws";
 
@@ -12,6 +14,10 @@ export class AppwriteService {
   private botStatusCollectionId = "bot_status";
   private logsCollectionId = "logs";
   private guildConfigsCollectionId = "guild_configs";
+  private recordingsCollectionId = "recordings";
+  private recordingTracksCollectionId = "recording_tracks";
+  private recordingsBucketId = "recordings";
+  public storage: Storage;
 
   constructor() {
     this.client = new Client()
@@ -20,6 +26,7 @@ export class AppwriteService {
       .setKey(process.env.APPWRITE_API_KEY!);
 
     this.databases = new Databases(this.client);
+    this.storage = new Storage(this.client);
 
     // Required for Appwrite Realtime in Node.js
     if (typeof global !== "undefined") {
@@ -369,5 +376,151 @@ export class AppwriteService {
     } catch (error) {
       console.error(`Error registering module ${moduleName}:`, error);
     }
+  }
+
+  // ── Recording Storage ──────────────────────────────────────────────────
+
+  async uploadRecordingFile(
+    fileBuffer: Buffer,
+    fileName: string,
+  ): Promise<string> {
+    const file = await this.storage.createFile(
+      this.recordingsBucketId,
+      ID.unique(),
+      InputFile.fromBuffer(fileBuffer, fileName),
+    );
+    return file.$id;
+  }
+
+  async deleteRecordingFile(fileId: string) {
+    await this.storage.deleteFile(this.recordingsBucketId, fileId);
+  }
+
+  getRecordingFileUrl(fileId: string): string {
+    const endpoint = process.env.APPWRITE_ENDPOINT!;
+    const projectId = process.env.APPWRITE_PROJECT_ID!;
+    return `${endpoint}/storage/buckets/${this.recordingsBucketId}/files/${fileId}/view?project=${projectId}`;
+  }
+
+  async getRecordingFileBuffer(fileId: string): Promise<Buffer> {
+    const result = await this.storage.getFileView(
+      this.recordingsBucketId,
+      fileId,
+    );
+    return Buffer.from(result);
+  }
+
+  // ── Recording Metadata ─────────────────────────────────────────────────
+
+  async createRecording(data: {
+    guild_id: string;
+    channel_name: string;
+    recorded_by: string;
+    mixed_file_id?: string;
+    duration?: number;
+    started_at: string;
+    ended_at?: string;
+    title?: string;
+    participants?: string;
+    bitrate?: number;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.recordingsCollectionId,
+      ID.unique(),
+      data,
+    );
+    return doc.$id;
+  }
+
+  async updateRecording(recordingId: string, data: Record<string, any>) {
+    await this.databases.updateDocument(
+      this.databaseId,
+      this.recordingsCollectionId,
+      recordingId,
+      data,
+    );
+  }
+
+  async getRecordings(guildId: string, limit = 50): Promise<any[]> {
+    const response = await this.databases.listDocuments(
+      this.databaseId,
+      this.recordingsCollectionId,
+      [
+        Query.equal("guild_id", guildId),
+        Query.orderDesc("started_at"),
+        Query.limit(limit),
+      ],
+    );
+    return response.documents;
+  }
+
+  async deleteRecording(recordingId: string) {
+    // Delete tracks first
+    const tracks = await this.databases.listDocuments(
+      this.databaseId,
+      this.recordingTracksCollectionId,
+      [Query.equal("recording_id", recordingId), Query.limit(100)],
+    );
+    for (const track of tracks.documents) {
+      try {
+        await this.storage.deleteFile(this.recordingsBucketId, track.file_id);
+      } catch {}
+      await this.databases.deleteDocument(
+        this.databaseId,
+        this.recordingTracksCollectionId,
+        track.$id,
+      );
+    }
+
+    // Delete mixed file
+    const recording = await this.databases.getDocument(
+      this.databaseId,
+      this.recordingsCollectionId,
+      recordingId,
+    );
+    if (recording.mixed_file_id) {
+      try {
+        await this.storage.deleteFile(
+          this.recordingsBucketId,
+          recording.mixed_file_id,
+        );
+      } catch {}
+    }
+
+    // Delete recording document
+    await this.databases.deleteDocument(
+      this.databaseId,
+      this.recordingsCollectionId,
+      recordingId,
+    );
+  }
+
+  // ── Recording Tracks ───────────────────────────────────────────────────
+
+  async createRecordingTrack(data: {
+    recording_id: string;
+    guild_id: string;
+    user_id: string;
+    username: string;
+    file_id: string;
+    file_size?: number;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.recordingTracksCollectionId,
+      ID.unique(),
+      data,
+    );
+    return doc.$id;
+  }
+
+  async getRecordingTracks(recordingId: string): Promise<any[]> {
+    const response = await this.databases.listDocuments(
+      this.databaseId,
+      this.recordingTracksCollectionId,
+      [Query.equal("recording_id", recordingId), Query.limit(100)],
+    );
+    return response.documents;
   }
 }

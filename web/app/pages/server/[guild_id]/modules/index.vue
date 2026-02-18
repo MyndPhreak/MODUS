@@ -195,6 +195,11 @@ const moduleStyle = (name: string) => {
       bgClass: "bg-emerald-500/10 border border-emerald-500/20",
       iconClass: "text-emerald-400",
     },
+    recording: {
+      icon: "i-heroicons-microphone",
+      bgClass: "bg-red-500/10 border border-red-500/20",
+      iconClass: "text-red-400",
+    },
   };
   return (
     styles[name.toLowerCase()] || {
