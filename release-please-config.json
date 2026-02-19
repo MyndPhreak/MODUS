@@ -17,7 +17,10 @@
         { "type": "style", "section": "💅 Styles", "hidden": true },
         { "type": "test", "section": "🧪 Tests", "hidden": true }
       ],
-      "extra-files": ["docker-compose.yml"]
+      "extra-files": [
+        "docker-compose.yml",
+        { "type": "json", "path": "bot/package.json", "jsonpath": "$.version" }
+      ]
     }
   }
 }
