@@ -62,7 +62,9 @@
       </div>
 
       <!-- Content layout: Left = Player | Right = Queue -->
-      <div class="relative z-10 flex flex-col lg:flex-row min-h-[420px]">
+      <div
+        class="relative z-10 flex flex-col lg:flex-row min-h-[420px] max-h-[600px]"
+      >
         <!-- ─── Left: Now Playing ─── -->
         <div
           class="flex-shrink-0 w-full lg:w-[480px] p-6 lg:p-8 flex flex-col justify-between"
@@ -240,6 +242,33 @@
                 {{ volumeLocal }}%
               </span>
             </div>
+
+            <!-- Player settings: Max Queue & Nickname -->
+            <div
+              class="flex items-center gap-4 mt-2 pt-2 border-t border-white/5"
+            >
+              <div class="flex items-center gap-2 flex-1 min-w-0">
+                <UIcon
+                  name="i-heroicons-queue-list"
+                  class="text-gray-500 w-3.5 h-3.5 shrink-0"
+                />
+                <span class="text-[10px] text-gray-500 shrink-0"
+                  >Max queue</span
+                >
+                <UInput
+                  v-model.number="musicSettings.maxQueueSize"
+                  type="number"
+                  :min="1"
+                  :max="1000"
+                  size="xs"
+                  class="w-16"
+                />
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-[10px] text-gray-500">Nickname sync</span>
+                <USwitch v-model="musicSettings.updateNickname" size="xs" />
+              </div>
+            </div>
           </div>
 
           <!-- Empty state -->
@@ -400,7 +429,7 @@
           </div>
 
           <!-- Queue list -->
-          <div class="flex-1 overflow-y-auto custom-scrollbar">
+          <div class="flex-1 overflow-y-auto custom-scrollbar min-h-0">
             <!-- Currently playing row -->
             <div
               v-if="playerState.currentTrack"
@@ -619,58 +648,6 @@
          SETTINGS — Existing settings cards
          ═══════════════════════════════════════════════════════════════════════ -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- Playback Section -->
-      <div
-        class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5 space-y-5"
-      >
-        <div
-          class="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent pointer-events-none"
-        />
-        <div class="relative space-y-5">
-          <div class="flex items-center gap-2 mb-1">
-            <div
-              class="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20"
-            >
-              <UIcon name="i-heroicons-play" class="text-violet-400" />
-            </div>
-            <h3 class="font-semibold text-white">Playback</h3>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-2">
-              Default Volume: {{ musicSettings.defaultVolume }}%
-            </label>
-            <USlider
-              v-model="musicSettings.defaultVolume"
-              :min="1"
-              :max="100"
-              :step="1"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-1">Max Queue Size</label>
-            <UInput
-              v-model.number="musicSettings.maxQueueSize"
-              type="number"
-              :min="1"
-              :max="1000"
-              size="sm"
-            />
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm font-medium">Update Channel Topic</label>
-              <p class="text-[10px] text-gray-500">
-                Show current song in voice channel topic
-              </p>
-            </div>
-            <USwitch v-model="musicSettings.updateChannelTopic" />
-          </div>
-        </div>
-      </div>
-
       <!-- Permissions Section -->
       <div
         class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5 space-y-5"
@@ -836,7 +813,7 @@ const saving = ref(false);
 const musicSettings = ref({
   defaultVolume: 50,
   djRoleId: "",
-  updateChannelTopic: false,
+  updateNickname: true,
   maxQueueSize: 200,
   activeFilters: [] as string[],
 });
@@ -1000,38 +977,71 @@ const addToQueue = async (searchResult: { url: string; title: string }) => {
 };
 
 // ── Add all playlist tracks at once ──
+// Sends the original playlist URL in a single request to the bot,
+// which handles playlist expansion server-side. This avoids N sequential
+// HTTP requests (one per track) which was ~1s/track.
 const addAllPlaylistTracks = async () => {
   const tracks = [...searchResultsList.value];
   if (tracks.length === 0) return;
 
   const name = playlistTitle.value || "Playlist";
+  // Capture the original playlist URL before clearing search state
+  const originalQuery = searchQuery.value;
   searchQuery.value = "";
   clearSearchFn();
 
-  try {
-    let addedTotal = 0;
-    // Add tracks in sequence to avoid overwhelming the bot
-    for (const track of tracks) {
-      try {
-        if (isBotActive.value) {
-          await playFn(track.url);
-        } else {
-          await addToPreQueueFn(track.url);
-        }
-        addedTotal++;
-      } catch {
-        // Skip individual failures and continue
-      }
-    }
+  // If we have the original playlist URL, send it as a single request
+  // The bot's prequeue-add and play endpoints already expand playlists
+  const playlistUrl =
+    originalQuery && /^https?:\/\//i.test(originalQuery) ? originalQuery : null;
 
-    toast.add({
-      title: `Added ${addedTotal} track${addedTotal !== 1 ? "s" : ""} from ${name}`,
-      description:
-        addedTotal < tracks.length
-          ? `${tracks.length - addedTotal} track(s) could not be added (queue limit or errors).`
-          : undefined,
-      color: "success",
-    });
+  try {
+    if (playlistUrl) {
+      // Single request — bot resolves all tracks server-side
+      if (isBotActive.value) {
+        await playFn(playlistUrl);
+        toast.add({
+          title: `Added playlist to queue`,
+          description: name,
+          color: "success",
+        });
+      } else {
+        const result = await addToPreQueueFn(playlistUrl);
+        const added = result?.addedCount ?? tracks.length;
+        const total = result?.totalFound ?? added;
+        const capped = added < total;
+        toast.add({
+          title: `Added ${added} track${added !== 1 ? "s" : ""} from ${name}`,
+          description: capped
+            ? `Playlist had ${total} tracks but only ${added} fit (queue limit).`
+            : undefined,
+          color: "success",
+        });
+      }
+    } else {
+      // Fallback: no URL available, add tracks individually
+      let addedTotal = 0;
+      for (const track of tracks) {
+        try {
+          if (isBotActive.value) {
+            await playFn(track.url);
+          } else {
+            await addToPreQueueFn(track.url);
+          }
+          addedTotal++;
+        } catch {
+          // Skip individual failures
+        }
+      }
+      toast.add({
+        title: `Added ${addedTotal} track${addedTotal !== 1 ? "s" : ""} from ${name}`,
+        description:
+          addedTotal < tracks.length
+            ? `${tracks.length - addedTotal} track(s) could not be added.`
+            : undefined,
+        color: "success",
+      });
+    }
   } catch {
     toast.add({
       title: "Error",
@@ -1150,7 +1160,7 @@ onMounted(() => {
     musicSettings.value = {
       defaultVolume: saved.defaultVolume ?? 50,
       djRoleId: saved.djRoleId ?? "",
-      updateChannelTopic: saved.updateChannelTopic ?? false,
+      updateNickname: saved.updateNickname ?? true,
       maxQueueSize: saved.maxQueueSize ?? 200,
       activeFilters: saved.activeFilters ?? [],
     };

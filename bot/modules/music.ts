@@ -13,7 +13,9 @@ import {
 } from "discord-player";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
+import { Databases, Query } from "node-appwrite";
 import type { BotModule } from "../ModuleManager";
+import { activeSessions as recordingActiveSessions } from "./recording";
 
 // ─── Available Audio Filters ──────────────────────────────────────────────
 
@@ -107,7 +109,7 @@ const AVAILABLE_FILTERS: Record<
 const DEFAULT_SETTINGS = {
   defaultVolume: 50,
   djRoleId: "",
-  updateChannelTopic: false,
+  updateNickname: true,
   maxQueueSize: 200,
   activeFilters: [] as string[],
 };
@@ -164,12 +166,17 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
 
   const player = useMainPlayer();
 
-  player.events.on("playerStart", (queue: GuildQueue, track) => {
+  player.events.on("playerStart", async (queue: GuildQueue, track) => {
     const channel = (queue.metadata as any)?.channel;
     console.log(`[Music] playerStart: "${track.title}" in ${queue.guild.name}`);
 
-    // Update bot nickname to current track
-    updateBotNickname(queue, track.title);
+    // Update bot nickname to current track (if setting enabled)
+    try {
+      const settings = await getSettings(moduleManager, queue.guild.id);
+      if (settings.updateNickname) {
+        updateBotNickname(queue, track.title);
+      }
+    } catch {}
 
     if (!channel) return;
 
@@ -191,12 +198,17 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     channel.send({ embeds: [embed] }).catch(() => {});
   });
 
-  player.events.on("emptyQueue", (queue: GuildQueue) => {
+  player.events.on("emptyQueue", async (queue: GuildQueue) => {
     const channel = (queue.metadata as any)?.channel;
     console.log(`[Music] emptyQueue in ${queue.guild.name}`);
 
-    // Reset nickname when queue finishes
-    updateBotNickname(queue);
+    // Reset nickname when queue finishes (if setting enabled)
+    try {
+      const settings = await getSettings(moduleManager, queue.guild.id);
+      if (settings.updateNickname) {
+        updateBotNickname(queue);
+      }
+    } catch {}
 
     if (!channel) return;
 
@@ -207,10 +219,15 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     channel.send({ embeds: [embed] }).catch(() => {});
   });
 
-  player.events.on("disconnect", (queue: GuildQueue) => {
+  player.events.on("disconnect", async (queue: GuildQueue) => {
     console.log(`[Music] disconnect in ${queue.guild.name}`);
-    // Reset nickname when bot disconnects from voice
-    updateBotNickname(queue);
+    // Reset nickname when bot disconnects from voice (if setting enabled)
+    try {
+      const settings = await getSettings(moduleManager, queue.guild.id);
+      if (settings.updateNickname) {
+        updateBotNickname(queue);
+      }
+    } catch {}
   });
 
   player.events.on("playerError", (queue: GuildQueue, error) => {
@@ -249,10 +266,7 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     }
   });
 
-  // Global debug logging
-  player.on("debug" as any, (message: string) => {
-    console.log(`[Music Debug] ${message}`);
-  });
+  // Note: discord-player debug logging removed — too noisy for production
 
   // ─── Realtime Filter Sync from Dashboard ─────────────────────────────
   moduleManager.appwriteService.subscribeToGuildConfigs(
@@ -270,6 +284,15 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
         // Check if there's an active queue for this guild
         const queue = player.queues.get(guildId);
         if (!queue || !queue.currentTrack) return;
+
+        // Don't touch filters while the voice connection is still initializing
+        if (
+          !queue.connection ||
+          queue.connection.state?.status === "connecting" ||
+          queue.connection.state?.status === "signalling"
+        ) {
+          return;
+        }
 
         // Determine which filters need toggling
         const currentlyEnabled = queue.filters.ffmpeg.getFiltersEnabled();
@@ -478,6 +501,15 @@ async function handlePlay(
   const member = requireVoiceChannel(interaction);
   if (!member) return;
 
+  // Block if recording is active in this guild
+  if (recordingActiveSessions.has(interaction.guildId!)) {
+    await interaction.editReply({
+      content:
+        "\u274c A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
+    });
+    return;
+  }
+
   const query = interaction.options.getString("query", true);
   const settings = await getSettings(moduleManager, interaction.guildId!);
   const player = useMainPlayer();
@@ -492,6 +524,8 @@ async function handlePlay(
       nodeOptions: {
         metadata: { channel: interaction.channel },
         volume: settings.defaultVolume,
+        bufferingTimeout: 15_000,
+        selfDeaf: true,
         leaveOnEmpty: true,
         leaveOnEmptyCooldown: 60000,
         leaveOnEnd: true,
@@ -580,12 +614,20 @@ async function handleSkip(interaction: ChatInputCommandInteraction) {
   });
 }
 
-async function handleStop(interaction: ChatInputCommandInteraction) {
+async function handleStop(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
   const queue = requireQueue(interaction, false);
   if (!queue) return;
 
-  // Reset nickname before deleting queue
-  updateBotNickname(queue);
+  // Reset nickname before deleting queue (if setting enabled)
+  try {
+    const settings = await getSettings(moduleManager, interaction.guildId!);
+    if (settings.updateNickname) {
+      updateBotNickname(queue);
+    }
+  } catch {}
 
   queue.delete();
   // Force cleanup in case queue.delete() didn't catch everything due to metadata errors
@@ -841,8 +883,8 @@ async function handleSettings(
         inline: true,
       },
       {
-        name: "Update Channel Topic",
-        value: settings.updateChannelTopic ? "Yes" : "No",
+        name: "Update Bot Nickname",
+        value: settings.updateNickname ? "Yes" : "No",
         inline: true,
       },
       {
@@ -935,18 +977,58 @@ async function handlePlayQueue(
   const member = requireVoiceChannel(interaction);
   if (!member) return;
 
+  // Block if recording is active in this guild
+  if (recordingActiveSessions.has(interaction.guildId!)) {
+    await interaction.editReply({
+      content:
+        "\u274c A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
+    });
+    return;
+  }
+
   const settings = await getSettings(moduleManager, interaction.guildId!);
   const player = useMainPlayer();
 
   try {
-    const preQueueSettings =
-      await moduleManager.appwriteService.getModuleSettings(
-        interaction.guildId!,
-        "music",
-      );
-    const preQueue: any[] = Array.isArray(preQueueSettings?.preQueue)
-      ? preQueueSettings.preQueue
-      : [];
+    // Read pre-queue from the dedicated preQueueData column
+    const { Client: AClient } = require("node-appwrite");
+    const aClient = new AClient()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setKey(process.env.APPWRITE_API_KEY!);
+    const db = new Databases(aClient);
+    const configResponse = await db.listDocuments(
+      "discord_bot",
+      "guild_configs",
+      [
+        Query.equal("guildId", interaction.guildId!),
+        Query.equal("moduleName", "music"),
+      ],
+    );
+
+    let preQueue: any[] = [];
+    let configDocId: string | null = null;
+
+    if (configResponse.total > 0) {
+      const doc = configResponse.documents[0];
+      configDocId = doc.$id;
+
+      // Try the new dedicated column first
+      if (doc.preQueueData) {
+        try {
+          const parsed = JSON.parse(doc.preQueueData);
+          if (Array.isArray(parsed)) preQueue = parsed;
+        } catch {}
+      }
+
+      // Legacy fallback: read from settings.preQueue
+      if (preQueue.length === 0 && doc.settings) {
+        try {
+          const s = JSON.parse(doc.settings);
+          if (Array.isArray(s?.preQueue)) preQueue = s.preQueue;
+        } catch {}
+      }
+    }
 
     if (preQueue.length === 0) {
       await interaction.editReply({
@@ -974,6 +1056,8 @@ async function handlePlayQueue(
           nodeOptions: {
             metadata: { channel: interaction.channel },
             volume: settings.defaultVolume,
+            bufferingTimeout: 15_000,
+            selfDeaf: true,
             leaveOnEmpty: true,
             leaveOnEmptyCooldown: 60000,
             leaveOnEnd: true,
@@ -991,12 +1075,26 @@ async function handlePlayQueue(
       }
     }
 
-    // Clear the pre-queue after loading
-    await moduleManager.appwriteService.setModuleSettings(
-      interaction.guildId!,
-      "music",
-      { ...preQueueSettings, preQueue: [] },
-    );
+    // Clear the pre-queue after loading (new column + legacy)
+    if (configDocId) {
+      const updates: Record<string, any> = { preQueueData: "[]" };
+      // Also clear legacy settings.preQueue if it existed
+      if (configResponse.documents[0].settings) {
+        try {
+          const s = JSON.parse(configResponse.documents[0].settings);
+          if (s.preQueue) {
+            delete s.preQueue;
+            updates.settings = JSON.stringify(s);
+          }
+        } catch {}
+      }
+      await db.updateDocument(
+        "discord_bot",
+        "guild_configs",
+        configDocId,
+        updates,
+      );
+    }
 
     const embed = new EmbedBuilder()
       .setColor(0x57f287)
@@ -1205,7 +1303,7 @@ const musicModule: BotModule = {
       case "skip":
         return handleSkip(interaction);
       case "stop":
-        return handleStop(interaction);
+        return handleStop(interaction, moduleManager);
       case "pause":
         return handlePause(interaction);
       case "resume":

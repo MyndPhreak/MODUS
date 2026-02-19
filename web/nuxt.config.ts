@@ -4,12 +4,12 @@ export default defineNuxtConfig({
   modules: ["@nuxt/ui", "@pinia/nuxt", "pinia-plugin-persistedstate/nuxt"],
   app: {
     head: {
-      title: "MODUS — Modular Operational Discord Utility System",
+      title: "MODUS — Modular Discord Utility System",
       meta: [
         {
           name: "description",
           content:
-            "MODUS — A modular operational system for managing and configuring your Discord bot.",
+            "MODUS — A modular system for managing and configuring your Discord bot.",
         },
       ],
     },

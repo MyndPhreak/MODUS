@@ -56,8 +56,13 @@
       <div class="mt-8 text-center">
         <p class="text-xs text-gray-500">
           By signing in, you agree to our
-          <a href="#" class="text-purple-400 hover:underline">Terms</a> and
-          <a href="#" class="text-purple-400 hover:underline">Privacy Policy</a>
+          <NuxtLink to="/legal/terms" class="text-purple-400 hover:underline"
+            >Terms</NuxtLink
+          >
+          and
+          <NuxtLink to="/legal/privacy" class="text-purple-400 hover:underline"
+            >Privacy Policy</NuxtLink
+          >
         </p>
       </div>
 

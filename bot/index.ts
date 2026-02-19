@@ -3,6 +3,9 @@ import { Player } from "discord-player";
 import { DefaultExtractors } from "@discord-player/extractor";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import http from "http";
+import path from "path";
+import fs from "fs";
+import os from "os";
 import dotenv from "dotenv";
 import { ModuleManager } from "./ModuleManager";
 import { AppwriteService } from "./AppwriteService";
@@ -62,6 +65,54 @@ client.once("ready", async () => {
   const shardIdStr = client.shard?.ids[0] ?? "N/A";
   logger.info(`Logged in as ${client.user?.tag}!`);
 
+  // ─── Crash-Recovery ─────────────────────────────────────────────────
+
+  // 1. Reset stale nicknames left behind by music (🎵) or recording (🔴)
+  try {
+    const staleGuilds: string[] = [];
+    await Promise.allSettled(
+      client.guilds.cache.map(async (guild) => {
+        const me =
+          guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+        if (me?.nickname?.startsWith("🎵") || me?.nickname?.startsWith("🔴")) {
+          await me.setNickname(null);
+          staleGuilds.push(`${guild.name} (was: ${me.nickname})`);
+        }
+      }),
+    );
+    if (staleGuilds.length > 0) {
+      logger.info(
+        `[CrashRecovery] Reset stale nickname in ${staleGuilds.length} guild(s): ${staleGuilds.join(", ")}`,
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      `[CrashRecovery] Nickname reset check failed: ${(err as Error).message}`,
+    );
+  }
+
+  // 2. Clean up orphaned temp recording files from a previous crash
+  try {
+    const tempDir = path.join(os.tmpdir(), "modus-recordings");
+    if (fs.existsSync(tempDir)) {
+      const files = fs.readdirSync(tempDir);
+      if (files.length > 0) {
+        for (const file of files) {
+          try {
+            fs.unlinkSync(path.join(tempDir, file));
+          } catch {}
+        }
+        logger.info(
+          `[CrashRecovery] Cleaned up ${files.length} orphaned temp recording file(s)`,
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn(
+      `[CrashRecovery] Temp file cleanup failed: ${(err as Error).message}`,
+    );
+  }
+
   // Auto-populate CLIENT_ID from token if missing
   if (!process.env.CLIENT_ID && process.env.DISCORD_TOKEN) {
     try {
@@ -105,6 +156,25 @@ const server = http.createServer((req, res) => {
   res.end(`OK (Shard ${shardOffset})`);
 });
 
+// Handle port-in-use gracefully (common during nodemon restarts)
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    const retryCount = (server as any).__retryCount ?? 0;
+    if (retryCount < 5) {
+      (server as any).__retryCount = retryCount + 1;
+      console.warn(
+        `[Bot] Port ${PORT} still in use, retrying in 1.5s... (attempt ${retryCount + 1}/5)`,
+      );
+      setTimeout(() => server.listen(PORT), 1500);
+    } else {
+      console.error(`[Bot] Port ${PORT} occupied after 5 retries. Exiting.`);
+      process.exit(1);
+    }
+  } else {
+    throw err;
+  }
+});
+
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
   registerMusicAPI(server, client);
@@ -115,6 +185,25 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+
+// ─── Graceful Shutdown (prevents "port in use" on nodemon restart) ────────
+function gracefulShutdown(signal: string) {
+  console.log(`[Bot] Received ${signal}, shutting down gracefully...`);
+
+  // Close the HTTP server first to free the port immediately
+  server.close(() => {
+    console.log("[Bot] HTTP server closed.");
+  });
+
+  // Destroy the Discord client connection
+  client.destroy();
+
+  // Force exit after a short grace period
+  setTimeout(() => process.exit(0), 2000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Global Error Handlers to prevent bot crashes
 process.on("unhandledRejection", (reason, promise) => {

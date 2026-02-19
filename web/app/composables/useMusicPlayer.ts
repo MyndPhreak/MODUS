@@ -45,7 +45,8 @@ interface SearchResponse {
   playlistTitle?: string;
 }
 
-const POLL_INTERVAL = 3000; // 3 seconds
+const POLL_INTERVAL = 5000; // 5 seconds — reduced from 3s to ease event-loop pressure on the bot
+const PROGRESS_TICK_INTERVAL = 1000; // Client-side progress estimation every 1s
 
 export function useMusicPlayer(guildId: string) {
   const state = useState<PlayerState>(`music-player-${guildId}`, () => ({
@@ -82,6 +83,7 @@ export function useMusicPlayer(guildId: string) {
   );
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let progressTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── Fetch player state ──
   const fetchState = async () => {
@@ -98,6 +100,32 @@ export function useMusicPlayer(guildId: string) {
       error.value = err?.data?.message || err?.message || "Could not reach bot";
     } finally {
       loading.value = false;
+    }
+  };
+
+  // ── Client-side progress estimation ──
+  // Ticks progress forward locally every second while playing, so the
+  // progress bar stays smooth without needing a server poll each second.
+  const startProgressEstimation = () => {
+    if (progressTimer) return;
+    progressTimer = setInterval(() => {
+      if (
+        state.value.isPlaying &&
+        !state.value.isPaused &&
+        state.value.currentTrack
+      ) {
+        const newProgress = state.value.progress + PROGRESS_TICK_INTERVAL;
+        if (newProgress <= state.value.totalDuration) {
+          state.value = { ...state.value, progress: newProgress };
+        }
+      }
+    }, PROGRESS_TICK_INTERVAL);
+  };
+
+  const stopProgressEstimation = () => {
+    if (progressTimer) {
+      clearInterval(progressTimer);
+      progressTimer = null;
     }
   };
 
@@ -274,6 +302,7 @@ export function useMusicPlayer(guildId: string) {
         fetchPreQueue();
       }
     }, POLL_INTERVAL);
+    startProgressEstimation();
   };
 
   const stopPolling = () => {
@@ -281,6 +310,7 @@ export function useMusicPlayer(guildId: string) {
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    stopProgressEstimation();
   };
 
   onMounted(() => {

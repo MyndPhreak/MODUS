@@ -5,6 +5,10 @@ import {
   GuildMember,
   ChannelType,
   TextChannel,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
 } from "discord.js";
 import {
   joinVoiceChannel,
@@ -12,7 +16,12 @@ import {
   EndBehaviorType,
   VoiceConnectionStatus,
   entersState,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus,
+  StreamType,
 } from "@discordjs/voice";
+import { useMainPlayer } from "discord-player";
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -44,7 +53,8 @@ interface UserRecordingStream {
 const DEFAULT_SETTINGS = {
   maxDuration: 14400, // 4 hours in seconds
   bitrate: 64, // kbps
-  ttsAnnounce: true,
+  announceMode: "tts" as "none" | "tts" | "soundClip",
+  announceSoundFileId: "",
   allowedRoleIds: [] as string[],
   allowedUserIds: [] as string[],
 };
@@ -53,7 +63,7 @@ type RecordingSettings = typeof DEFAULT_SETTINGS;
 
 // ─── Active Sessions ─────────────────────────────────────────────────────
 
-const activeSessions = new Map<string, RecordingSession>();
+export const activeSessions = new Map<string, RecordingSession>();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -65,7 +75,13 @@ async function getSettings(
     guildId,
     "recording",
   );
-  return { ...DEFAULT_SETTINGS, ...saved };
+
+  // Backward compatibility: migrate old ttsAnnounce boolean → announceMode
+  const merged = { ...DEFAULT_SETTINGS, ...saved };
+  if ("ttsAnnounce" in saved && !("announceMode" in saved)) {
+    merged.announceMode = (saved as any).ttsAnnounce ? "tts" : "none";
+  }
+  return merged;
 }
 
 function getTempDir(): string {
@@ -121,6 +137,131 @@ async function updateNickname(member: GuildMember | null, recording: boolean) {
       `[Recording] Could not update nickname:`,
       (err as Error).message,
     );
+  }
+}
+
+// ─── Sound Clip Playback ─────────────────────────────────────────────────
+
+async function playAnnounceSoundClip(
+  connection: VoiceConnection,
+  moduleManager: ModuleManager,
+  fileId: string,
+): Promise<void> {
+  let player: ReturnType<typeof createAudioPlayer> | undefined;
+  let subscription: ReturnType<VoiceConnection["subscribe"]> | undefined;
+
+  try {
+    console.log(`[Recording] Downloading announce sound clip: ${fileId}`);
+
+    // Download the file from Appwrite
+    const fileBuffer =
+      await moduleManager.appwriteService.getRecordingFileBuffer(fileId);
+
+    console.log(
+      `[Recording] Downloaded announce clip: ${fileBuffer.length} bytes`,
+    );
+
+    if (fileBuffer.length === 0) {
+      console.warn("[Recording] Announce sound clip is empty, skipping.");
+      return;
+    }
+
+    // Write to a temp file so FFmpeg can decode it
+    const tempFile = path.join(getTempDir(), `announce_${Date.now()}.tmp`);
+    fs.writeFileSync(tempFile, fileBuffer);
+
+    // Use FFmpeg to decode the file to raw PCM
+    const ffmpeg = spawn(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        tempFile,
+        "-f",
+        "s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "pipe:1",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] }, // pipe stderr too for diagnostics
+    );
+
+    // Capture stderr for diagnostics
+    let ffmpegStderr = "";
+    ffmpeg.stderr?.on("data", (chunk: Buffer) => {
+      ffmpegStderr += chunk.toString();
+    });
+
+    ffmpeg.on("error", (err) => {
+      console.error("[Recording] FFmpeg spawn error:", err.message);
+    });
+
+    ffmpeg.on("close", (code) => {
+      if (code !== 0) {
+        console.error(
+          `[Recording] FFmpeg announce decode exited ${code}:`,
+          ffmpegStderr.slice(-500),
+        );
+      } else {
+        console.log("[Recording] FFmpeg announce decode completed OK");
+      }
+    });
+
+    const resource = createAudioResource(ffmpeg.stdout!, {
+      inputType: StreamType.Raw,
+    });
+
+    player = createAudioPlayer();
+    subscription = connection.subscribe(player);
+    player.play(resource);
+
+    console.log("[Recording] Announce playback started");
+
+    // Wait for playback to finish (max 10s safety)
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn("[Recording] Announce playback timed out after 10s");
+        player?.stop(true);
+        resolve();
+      }, 10_000);
+
+      player!.on(AudioPlayerStatus.Idle, () => {
+        console.log("[Recording] Announce playback finished (idle)");
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      player!.on("error", (err) => {
+        console.error("[Recording] Announce player error:", err.message);
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFile);
+    } catch {}
+  } catch (err) {
+    console.error(
+      "[Recording] Failed to play announce sound clip:",
+      (err as Error).message,
+    );
+  } finally {
+    // CRITICAL: Clean up the audio player and unsubscribe from the connection
+    // so it doesn't interfere with the recording receiver.
+    if (player) {
+      player.stop(true);
+    }
+    if (subscription) {
+      subscription.unsubscribe();
+    }
+
+    // Brief delay to let the voice connection stabilize before recording starts
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("[Recording] Announce clip cleanup complete");
   }
 }
 
@@ -197,6 +338,15 @@ function startUserRecording(
     frameSize: 960,
   });
 
+  // Diagnostic: track data flow
+  let opusPacketCount = 0;
+  opusStream.on("data", () => {
+    opusPacketCount++;
+    if (opusPacketCount === 1) {
+      console.log(`[Recording] First opus packet received for ${username}`);
+    }
+  });
+
   opusStream.pipe(decoder).pipe(ffmpeg.stdin!);
 
   opusStream.on("error", (err: Error) => {
@@ -208,6 +358,16 @@ function startUserRecording(
 
   decoder.on("error", (err: Error) => {
     console.error(`[Recording] Decoder error for ${username}:`, err.message);
+  });
+
+  ffmpeg.stdin?.on("error", (err: Error) => {
+    // EPIPE is expected when FFmpeg closes before all data is written
+    if ((err as any).code !== "EPIPE") {
+      console.error(
+        `[Recording] FFmpeg stdin error for ${username}:`,
+        err.message,
+      );
+    }
   });
 
   session.userStreams.set(userId, {
@@ -271,10 +431,21 @@ async function stopRecording(
 
   for (const [userId, stream] of session.userStreams) {
     try {
-      if (!fs.existsSync(stream.tempFilePath)) continue;
+      if (!fs.existsSync(stream.tempFilePath)) {
+        console.warn(
+          `[Recording] Temp file missing for ${stream.username}: ${stream.tempFilePath}`,
+        );
+        continue;
+      }
       const stats = fs.statSync(stream.tempFilePath);
-      if (stats.size < 100) {
-        // Empty or near-empty file — skip
+      console.log(
+        `[Recording] Track file for ${stream.username}: ${stats.size} bytes`,
+      );
+      if (stats.size < 1000) {
+        // Empty or near-empty file (just container headers, no real audio) — skip
+        console.warn(
+          `[Recording] Skipping near-empty file for ${stream.username} (${stats.size} bytes)`,
+        );
         fs.unlinkSync(stream.tempFilePath);
         continue;
       }
@@ -485,6 +656,73 @@ async function handleStart(
     return;
   }
 
+  // Check if music is currently playing in this guild
+  try {
+    const musicPlayer = useMainPlayer();
+    const musicQueue = musicPlayer.queues.get(guildId);
+    if (musicQueue && (musicQueue.isPlaying() || musicQueue.currentTrack)) {
+      const stopButton = new ButtonBuilder()
+        .setCustomId(`rec_stop_music_${guildId}`)
+        .setLabel("Stop Music & Start Recording")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji("⏹️");
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        stopButton,
+      );
+
+      const reply = await interaction.editReply({
+        content:
+          "⚠️ Music is currently playing in this server. You need to stop the music before starting a recording.\n\nClick the button below to stop music and start recording automatically.",
+        components: [row],
+      });
+
+      // Listen for button click (60s timeout)
+      try {
+        const collected = await reply.awaitMessageComponent({
+          componentType: ComponentType.Button,
+          filter: (i) =>
+            i.customId === `rec_stop_music_${guildId}` &&
+            i.user.id === member.id,
+          time: 60_000,
+        });
+
+        // Stop the music queue
+        try {
+          const currentQueue = musicPlayer.queues.get(guildId);
+          if (currentQueue) {
+            currentQueue.delete();
+            try {
+              musicPlayer.queues.delete(guildId);
+            } catch {}
+          }
+        } catch {}
+
+        // Wait a moment for the voice connection to fully disconnect
+        await new Promise((r) => setTimeout(r, 1000));
+
+        await collected.update({
+          content: "🎵 Music stopped. Starting recording...",
+          components: [],
+        });
+
+        // Fall through to continue with recording start
+      } catch {
+        // Timeout — disable the button
+        await interaction
+          .editReply({
+            content:
+              "⏰ Timed out. Use `/record start` again when you're ready.",
+            components: [],
+          })
+          .catch(() => {});
+        return;
+      }
+    }
+  } catch {
+    // discord-player not initialized or no queues — safe to proceed
+  }
+
   // Check voice channel
   if (!member?.voice?.channel) {
     await interaction.editReply({
@@ -518,7 +756,7 @@ async function handleStart(
     guildId,
     adapterCreator: interaction.guild!.voiceAdapterCreator,
     selfDeaf: false, // Must not be deafened to receive audio
-    selfMute: true, // Mute ourselves — we're only listening
+    selfMute: false, // Start unmuted so we can play announce clip
   });
 
   // Wait for connection to be ready
@@ -530,6 +768,18 @@ async function handleStart(
       content: "❌ Failed to join voice channel. Please try again.",
     });
     return;
+  }
+
+  // Play announcement sound clip before recording starts (if configured)
+  if (settings.announceMode === "soundClip" && settings.announceSoundFileId) {
+    await interaction.editReply({
+      content: "🔊 Playing announcement sound...",
+    });
+    await playAnnounceSoundClip(
+      connection,
+      moduleManager,
+      settings.announceSoundFileId,
+    );
   }
 
   // Create recording metadata in Appwrite
@@ -620,12 +870,12 @@ async function handleStart(
   await updateNickname(interaction.guild?.members.me ?? null, true);
 
   // Send TTS announcement
-  if (settings.ttsAnnounce) {
+  if (settings.announceMode === "tts") {
     const ch = interaction.channel;
     if (ch && "send" in ch) {
       await (ch as TextChannel)
         .send({
-          content: `🔴 Recording has started in **${voiceChannel.name}**. All audio is being captured.`,
+          content: `Recording has started in **${voiceChannel.name}**. All audio is being captured.`,
           tts: true,
         })
         .catch(() => {});

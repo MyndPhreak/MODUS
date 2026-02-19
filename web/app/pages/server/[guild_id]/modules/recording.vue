@@ -121,14 +121,144 @@
             </p>
           </div>
 
-          <div class="flex items-center justify-between">
+          <div class="space-y-4">
             <div>
-              <label class="text-sm font-medium">TTS Announcement</label>
-              <p class="text-[10px] text-gray-500">
-                Announce recording start via text-to-speech
+              <label class="block text-sm font-medium mb-2"
+                >Announcement Mode</label
+              >
+              <p class="text-[10px] text-gray-500 mb-3">
+                Choose how to announce when recording starts
               </p>
+              <div class="space-y-2">
+                <button
+                  v-for="option in announceModeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-all duration-200"
+                  :class="
+                    recordingSettings.announceMode === option.value
+                      ? 'bg-orange-500/20 border border-orange-500/40 text-orange-300 ring-1 ring-orange-500/30'
+                      : 'bg-gray-800/50 border border-white/5 text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
+                  "
+                  @click="recordingSettings.announceMode = option.value"
+                >
+                  <UIcon
+                    :name="
+                      recordingSettings.announceMode === option.value
+                        ? 'i-heroicons-check-circle-solid'
+                        : 'i-heroicons-stop'
+                    "
+                    :class="
+                      recordingSettings.announceMode === option.value
+                        ? 'text-orange-400'
+                        : 'text-gray-600'
+                    "
+                  />
+                  <div class="text-left">
+                    <div class="font-medium">{{ option.label }}</div>
+                    <div class="text-[10px] opacity-60">
+                      {{ option.description }}
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
-            <USwitch v-model="recordingSettings.ttsAnnounce" />
+
+            <!-- Sound Clip Upload (only visible when soundClip mode selected) -->
+            <div
+              v-if="recordingSettings.announceMode === 'soundClip'"
+              class="space-y-3 pl-1 border-l-2 border-orange-500/30 ml-2"
+            >
+              <div class="pl-3">
+                <label class="block text-sm font-medium mb-2 text-orange-300"
+                  >Sound Clip</label
+                >
+
+                <!-- Current file info -->
+                <div
+                  v-if="recordingSettings.announceSoundFileId"
+                  class="flex items-center gap-3 p-3 rounded-lg bg-gray-800/60 border border-white/5 mb-3"
+                >
+                  <UIcon
+                    name="i-heroicons-musical-note"
+                    class="text-orange-400 text-lg"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm text-white truncate">
+                      Announcement clip uploaded
+                    </div>
+                    <div class="text-[10px] text-gray-500">
+                      {{ recordingSettings.announceSoundFileId }}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-heroicons-play"
+                      @click="previewAnnounceClip"
+                    />
+                    <UButton
+                      color="error"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-heroicons-trash"
+                      :loading="deletingAnnounce"
+                      @click="deleteAnnounceClip"
+                    />
+                  </div>
+                </div>
+
+                <!-- Upload area -->
+                <div
+                  class="relative rounded-lg border-2 border-dashed transition-all duration-200 p-4 text-center"
+                  :class="
+                    isDraggingClip
+                      ? 'border-orange-400 bg-orange-500/10'
+                      : 'border-white/10 hover:border-white/20 bg-gray-800/30'
+                  "
+                  @dragover.prevent="isDraggingClip = true"
+                  @dragleave="isDraggingClip = false"
+                  @drop.prevent="handleClipDrop"
+                >
+                  <input
+                    ref="clipFileInput"
+                    type="file"
+                    accept="audio/*,.ogg,.mp3,.wav,.m4a,.flac,.aac"
+                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    @change="handleClipSelect"
+                  />
+                  <div
+                    v-if="uploadingAnnounce"
+                    class="flex flex-col items-center gap-2"
+                  >
+                    <UIcon
+                      name="i-heroicons-arrow-path"
+                      class="animate-spin text-orange-400 text-xl"
+                    />
+                    <span class="text-xs text-gray-400">Uploading...</span>
+                  </div>
+                  <div v-else class="flex flex-col items-center gap-2">
+                    <UIcon
+                      name="i-heroicons-arrow-up-tray"
+                      class="text-gray-500 text-xl"
+                    />
+                    <span class="text-xs text-gray-400">
+                      {{
+                        recordingSettings.announceSoundFileId
+                          ? "Replace"
+                          : "Upload"
+                      }}
+                      sound clip
+                    </span>
+                    <span class="text-[10px] text-gray-600">
+                      Max 10 seconds, 5 MB • mp3, ogg, wav, m4a, flac
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -522,10 +652,36 @@ const newUserId = ref("");
 const recordingSettings = ref({
   maxDuration: 14400,
   bitrate: 64,
-  ttsAnnounce: true,
+  announceMode: "tts" as "none" | "tts" | "soundClip",
+  announceSoundFileId: "",
   allowedRoleIds: [] as string[],
   allowedUserIds: [] as string[],
 });
+
+const announceModeOptions = [
+  {
+    value: "none" as const,
+    label: "None",
+    description: "Recording starts silently",
+  },
+  {
+    value: "tts" as const,
+    label: "Text-to-Speech",
+    description: "Send a TTS message announcing the recording",
+  },
+  {
+    value: "soundClip" as const,
+    label: "Sound Clip",
+    description: "Play a custom audio file into the voice channel",
+  },
+];
+
+// ── Announce Clip State ──
+
+const uploadingAnnounce = ref(false);
+const deletingAnnounce = ref(false);
+const isDraggingClip = ref(false);
+const clipFileInput = ref<HTMLInputElement | null>(null);
 
 const bitrateOptions = [
   {
@@ -801,6 +957,82 @@ function removeUser(userId: string) {
     recordingSettings.value.allowedUserIds.filter((id) => id !== userId);
 }
 
+// ── Announce Clip Upload / Delete ──
+
+async function uploadAnnounceClip(file: File) {
+  if (file.size > 5 * 1024 * 1024) {
+    alert("File too large. Maximum size is 5 MB.");
+    return;
+  }
+
+  uploadingAnnounce.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await $fetch<{ fileId: string }>(
+      "/api/recordings/upload-announce",
+      { method: "POST", body: formData },
+    );
+
+    // Delete the old file if one existed
+    if (recordingSettings.value.announceSoundFileId) {
+      try {
+        await $fetch("/api/recordings/delete-file", {
+          method: "POST",
+          body: { fileId: recordingSettings.value.announceSoundFileId },
+        });
+      } catch {}
+    }
+
+    recordingSettings.value.announceSoundFileId = result.fileId;
+  } catch (err: any) {
+    const message =
+      err?.data?.statusMessage || err?.message || "Upload failed.";
+    alert(message);
+  } finally {
+    uploadingAnnounce.value = false;
+  }
+}
+
+async function deleteAnnounceClip() {
+  if (!recordingSettings.value.announceSoundFileId) return;
+
+  deletingAnnounce.value = true;
+  try {
+    await $fetch("/api/recordings/delete-file", {
+      method: "POST",
+      body: { fileId: recordingSettings.value.announceSoundFileId },
+    });
+    recordingSettings.value.announceSoundFileId = "";
+  } catch (err) {
+    console.error("Error deleting announce clip:", err);
+  } finally {
+    deletingAnnounce.value = false;
+  }
+}
+
+function previewAnnounceClip() {
+  if (!recordingSettings.value.announceSoundFileId) return;
+  const url = getStreamUrl(recordingSettings.value.announceSoundFileId);
+  const audio = new Audio(url);
+  audio.play().catch(() => {});
+}
+
+function handleClipSelect(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) uploadAnnounceClip(file);
+  // Reset the input so same file can be re-selected
+  if (input) input.value = "";
+}
+
+function handleClipDrop(event: DragEvent) {
+  isDraggingClip.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  if (file) uploadAnnounceClip(file);
+}
+
 // ── Save ──
 
 const save = async () => {
@@ -886,10 +1118,17 @@ onMounted(async () => {
   // Load saved settings
   const saved = getModuleConfig("recording");
   if (saved && Object.keys(saved).length > 0) {
+    // Backward compat: migrate old ttsAnnounce → announceMode
+    let announceMode = saved.announceMode ?? "tts";
+    if ("ttsAnnounce" in saved && !("announceMode" in saved)) {
+      announceMode = saved.ttsAnnounce ? "tts" : "none";
+    }
+
     recordingSettings.value = {
       maxDuration: saved.maxDuration ?? 14400,
       bitrate: saved.bitrate ?? 64,
-      ttsAnnounce: saved.ttsAnnounce ?? true,
+      announceMode,
+      announceSoundFileId: saved.announceSoundFileId ?? "",
       allowedRoleIds: saved.allowedRoleIds ?? [],
       allowedUserIds: saved.allowedUserIds ?? [],
     };

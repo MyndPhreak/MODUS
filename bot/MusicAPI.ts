@@ -4,8 +4,48 @@ import { Player, useMainPlayer, QueryType } from "discord-player";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { Client } from "discord.js";
 import { AppwriteService } from "./AppwriteService";
+import { Databases, Query } from "node-appwrite";
 
-const PRE_QUEUE_MAX = 100;
+const DEFAULT_MAX_QUEUE_SIZE = 200;
+
+/** Read the guild's maxQueueSize from its music config, falling back to default */
+async function getMaxQueueSize(guildId: string): Promise<number> {
+  try {
+    const doc = await findMusicConfigDoc(guildId);
+    if (doc?.settings) {
+      const settings = JSON.parse(doc.settings);
+      if (
+        typeof settings.maxQueueSize === "number" &&
+        settings.maxQueueSize > 0
+      ) {
+        return settings.maxQueueSize;
+      }
+    }
+  } catch {}
+  return DEFAULT_MAX_QUEUE_SIZE;
+}
+
+// ─── State Cache ────────────────────────────────────────────────────────────
+// Caches the player state per guild to avoid calling queue.node.getTimestamp()
+// and queue.filters.ffmpeg.getFiltersEnabled() on every single poll.
+// These calls can cause event-loop contention that starves the audio pipeline,
+// producing periodic crackles.
+const STATE_CACHE_TTL = 10_000; // 10 seconds – longer than the dashboard's 5s poll to ensure most polls hit cache
+const stateCache = new Map<string, { data: any; timestamp: number }>();
+
+function getCachedState(guildId: string): any | null {
+  const entry = stateCache.get(guildId);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > STATE_CACHE_TTL) {
+    stateCache.delete(guildId);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedState(guildId: string, data: any): void {
+  stateCache.set(guildId, { data, timestamp: Date.now() });
+}
 
 interface PreQueueItem {
   title: string;
@@ -94,6 +134,11 @@ function sendJson(res: http.ServerResponse, statusCode: number, data: any) {
 }
 
 // ─── Pre-Queue Helpers ──────────────────────────────────────────────────────
+// Pre-queue data is stored in a dedicated `preQueueData` column (100K chars)
+// on the guild_configs collection, separate from the 5000-char `settings` field.
+
+const DB_ID = "discord_bot";
+const GUILD_CONFIGS_COLLECTION = "guild_configs";
 
 let _preQueueAppwrite: AppwriteService | null = null;
 function getAppwrite(): AppwriteService {
@@ -101,21 +146,88 @@ function getAppwrite(): AppwriteService {
   return _preQueueAppwrite;
 }
 
+/** Lazily initialised Databases instance for direct column access */
+let _databases: Databases | null = null;
+function getDatabases(): Databases {
+  if (!_databases) {
+    // Re-use the same Client that AppwriteService creates internally
+    const { Client } = require("node-appwrite");
+    const client = new Client()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setKey(process.env.APPWRITE_API_KEY!);
+    _databases = new Databases(client);
+  }
+  return _databases!;
+}
+
+/** Find the guild_configs document for the music module */
+async function findMusicConfigDoc(guildId: string): Promise<any | null> {
+  const db = getDatabases();
+  const response = await db.listDocuments(DB_ID, GUILD_CONFIGS_COLLECTION, [
+    Query.equal("guildId", guildId),
+    Query.equal("moduleName", "music"),
+  ]);
+  return response.total > 0 ? response.documents[0] : null;
+}
+
 async function getPreQueue(guildId: string): Promise<PreQueueItem[]> {
-  const settings = await getAppwrite().getModuleSettings(guildId, "music");
-  return Array.isArray(settings?.preQueue) ? settings.preQueue : [];
+  const doc = await findMusicConfigDoc(guildId);
+  if (!doc) return [];
+
+  // Read from the new dedicated column
+  if (doc.preQueueData) {
+    try {
+      const items = JSON.parse(doc.preQueueData);
+      if (Array.isArray(items)) return items;
+    } catch {
+      // corrupted JSON — fall through to legacy
+    }
+  }
+
+  // Legacy fallback: read from the old settings.preQueue field
+  // (one-time migration — next save will write to the new column)
+  if (doc.settings) {
+    try {
+      const settings = JSON.parse(doc.settings);
+      if (Array.isArray(settings?.preQueue)) return settings.preQueue;
+    } catch {}
+  }
+
+  return [];
 }
 
 async function savePreQueue(
   guildId: string,
   preQueue: PreQueueItem[],
 ): Promise<void> {
-  const appwrite = getAppwrite();
-  const settings = await appwrite.getModuleSettings(guildId, "music");
-  await appwrite.setModuleSettings(guildId, "music", {
-    ...settings,
-    preQueue,
-  });
+  const db = getDatabases();
+  const doc = await findMusicConfigDoc(guildId);
+  const preQueueData = JSON.stringify(preQueue);
+
+  if (doc) {
+    // Also clear legacy settings.preQueue if present
+    const updates: Record<string, any> = { preQueueData };
+    if (doc.settings) {
+      try {
+        const settings = JSON.parse(doc.settings);
+        if (settings.preQueue) {
+          delete settings.preQueue;
+          updates.settings = JSON.stringify(settings);
+        }
+      } catch {}
+    }
+    await db.updateDocument(DB_ID, GUILD_CONFIGS_COLLECTION, doc.$id, updates);
+  } else {
+    // Create a new config document for this guild's music module
+    await db.createDocument(DB_ID, GUILD_CONFIGS_COLLECTION, "unique()", {
+      guildId,
+      moduleName: "music",
+      enabled: true,
+      settings: "{}",
+      preQueueData,
+    });
+  }
 }
 
 // ─── Music API ──────────────────────────────────────────────────────────────
@@ -155,6 +267,8 @@ export function registerMusicAPI(server: http.Server, client: Client) {
           const queue = player.queues.get(guildId);
 
           if (!queue || !queue.currentTrack) {
+            // Clear cache when nothing is playing
+            stateCache.delete(guildId);
             const state: PlayerState = {
               isPlaying: false,
               isPaused: false,
@@ -170,23 +284,66 @@ export function registerMusicAPI(server: http.Server, client: Client) {
             return sendJson(res, 200, state);
           }
 
+          // ── Check cache first to avoid heavy node introspection ──
+          // getTimestamp() and getFiltersEnabled() can cause event-loop
+          // contention that starves the audio stream, producing crackles.
+          const cached = getCachedState(guildId);
+          if (cached) {
+            // Update lightweight fields that don't touch the audio pipeline
+            cached.currentTrack = serializeTrack(queue.currentTrack);
+            cached.queue = queue.tracks.toArray().map(serializeTrack);
+            cached.repeatMode = queue.repeatMode;
+            cached.voiceChannel = queue.channel?.name || null;
+            return sendJson(res, 200, cached);
+          }
+
           const currentTrack = queue.currentTrack;
           const tracks = queue.tracks.toArray();
-          const progress = queue.node.getTimestamp();
+
+          // ── Safety: avoid touching queue.node during voice-connection init ──
+          let isPlaying = false;
+          let isPaused = false;
+          let volume = 50;
+          let progress = 0;
+          let totalDuration = currentTrack.durationMS ?? 0;
+          let activeFilters: string[] = [];
+
+          const connectionReady =
+            queue.connection &&
+            !queue.connection.state?.status?.match?.(/connecting|signalling/i);
+
+          if (connectionReady) {
+            try {
+              isPlaying = queue.node.isPlaying();
+              isPaused = queue.node.isPaused();
+              volume = queue.node.volume;
+              const ts = queue.node.getTimestamp();
+              progress = ts?.current?.value ?? 0;
+              totalDuration = ts?.total?.value ?? totalDuration;
+              activeFilters = queue.filters.ffmpeg.getFiltersEnabled();
+            } catch (nodeErr) {
+              console.warn(
+                "[MusicAPI] Skipped node access (still initializing):",
+                (nodeErr as Error).message,
+              );
+            }
+          }
 
           const state: PlayerState = {
-            isPlaying: queue.node.isPlaying(),
-            isPaused: queue.node.isPaused(),
+            isPlaying,
+            isPaused,
             currentTrack: serializeTrack(currentTrack),
             queue: tracks.map(serializeTrack),
-            volume: queue.node.volume,
+            volume,
             repeatMode: queue.repeatMode,
-            progress: progress?.current?.value ?? 0,
-            totalDuration:
-              progress?.total?.value ?? currentTrack.durationMS ?? 0,
-            activeFilters: queue.filters.ffmpeg.getFiltersEnabled(),
+            progress,
+            totalDuration,
+            activeFilters,
             voiceChannel: queue.channel?.name || null,
           };
+
+          // Cache the state so subsequent polls skip heavy node calls
+          setCachedState(guildId, state);
 
           return sendJson(res, 200, state);
         } catch (err) {
@@ -222,6 +379,8 @@ export function registerMusicAPI(server: http.Server, client: Client) {
             nodeOptions: {
               metadata: queue.metadata,
               volume: queue.node.volume,
+              bufferingTimeout: 15_000,
+              selfDeaf: true,
             },
             requestedBy: { username: "Dashboard" } as any,
           });
@@ -487,9 +646,10 @@ export function registerMusicAPI(server: http.Server, client: Client) {
           if (!query) return sendJson(res, 400, { error: "Missing query" });
 
           const preQueue = await getPreQueue(guildId);
-          if (preQueue.length >= PRE_QUEUE_MAX) {
+          const maxQueueSize = await getMaxQueueSize(guildId);
+          if (preQueue.length >= maxQueueSize) {
             return sendJson(res, 400, {
-              error: `Pre-queue is full (max ${PRE_QUEUE_MAX} songs)`,
+              error: `Pre-queue is full (max ${maxQueueSize} songs)`,
             });
           }
 
@@ -515,7 +675,7 @@ export function registerMusicAPI(server: http.Server, client: Client) {
           const isPlaylist =
             result.playlist != null || (isUrl && result.tracks.length > 1);
           const tracksToAdd = isPlaylist ? result.tracks : [result.tracks[0]];
-          const slotsAvailable = PRE_QUEUE_MAX - preQueue.length;
+          const slotsAvailable = maxQueueSize - preQueue.length;
           const capped = tracksToAdd.slice(0, slotsAvailable);
 
           const addedItems: PreQueueItem[] = capped.map((track: any) => ({
