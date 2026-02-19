@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MODUS — Automated Releases with release-please
+#
+# On every push to main, release-please opens (or updates) a Release PR
+# that bumps the version in package.json and generates a CHANGELOG.md.
+#
+# When you merge the Release PR:
+#   1. A GitHub Release is created with the changelog
+#   2. A git tag (e.g., v1.2.0) is pushed
+#   3. The docker-publish workflow is triggered to build versioned images
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # When a release is created, trigger the Docker build with the new version
+  trigger-docker-build:
+    name: Trigger Docker Build
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
