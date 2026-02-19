@@ -18,11 +18,12 @@
 
     <div class="w-full max-w-md p-6 z-10">
       <div class="flex flex-col items-center mb-10">
-        <div class="relative mb-4">
-          <h1 class="text-3xl font-black text-white tracking-tighter">
-            MOD<span class="text-purple-400">US</span>
-          </h1>
+        <div class="relative -mb-6">
+          <img src="/modus2.svg" alt="MODUS Logo" class="w-40 logo-glow" />
         </div>
+        <h1 class="text-3xl font-black text-white tracking-tighter mt-2">
+          MODUS
+        </h1>
         <p
           class="text-xs font-bold uppercase tracking-[0.3em] text-gray-500 mt-1"
         >
@@ -51,5 +52,23 @@
   -webkit-backdrop-filter: blur(24px) !important;
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8) !important;
+}
+
+.logo-glow {
+  filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.4))
+    drop-shadow(0 0 40px rgba(99, 102, 241, 0.2));
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+
+@keyframes logo-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.3))
+      drop-shadow(0 0 30px rgba(99, 102, 241, 0.15));
+  }
+  50% {
+    filter: drop-shadow(0 0 25px rgba(139, 92, 246, 0.5))
+      drop-shadow(0 0 50px rgba(99, 102, 241, 0.3));
+  }
 }
 </style>

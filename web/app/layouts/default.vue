@@ -62,13 +62,15 @@ async function handleLogout() {
           class="flex items-center gap-3 px-6 py-6 border-b border-white/5 bg-[#050507]/20"
         >
           <div class="relative flex-shrink-0">
-            <div
-              class="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-30 animate-pulse"
-            ></div>
+            <img
+              src="/modus2.svg"
+              alt="MODUS Logo"
+              class="relative w-16 rounded-xl"
+            />
           </div>
           <div>
             <h1 class="text-base font-black text-white tracking-tight">
-              MOD<span class="text-violet-400">US</span>
+              MODUS
             </h1>
             <p
               class="text-[9px] font-bold uppercase tracking-widest text-gray-500"

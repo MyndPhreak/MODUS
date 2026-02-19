@@ -5,6 +5,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "MODUS — Modular Discord Utility System",
+      link: [{ rel: "icon", type: "image/svg+xml", href: "/modus.svg" }],
       meta: [
         {
           name: "description",
