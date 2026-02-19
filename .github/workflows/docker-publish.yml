@@ -3,9 +3,8 @@
 #
 # Triggers:
 #   1. On push to main      → builds :latest + :sha-xxxxx
-#   2. On release tag        → builds :latest + :1.2.0 + :1.2 + :1
+#   2. On release published  → builds :latest + :1.2.0 + :1.2 + :1
 #   3. On manual dispatch    → builds :latest
-#   4. On workflow_call      → called by release-please with version input
 #
 # Publishes:
 #   ghcr.io/<owner>/modus-bot:<tag>
@@ -17,20 +16,16 @@ name: Build & Publish Docker Images
 on:
   push:
     branches: [main]
-    # Don't rebuild on release-please's version bump commit (it triggers
-    # the workflow_call path instead via release-please.yml)
+    # Don't rebuild on release-please's version bump commit — the
+    # release:published event handles versioned builds separately
     paths-ignore:
       - "CHANGELOG.md"
       - ".release-please-manifest.json"
+      - "package.json"
+      - "bot/package.json"
   release:
     types: [published]
   workflow_dispatch: # Allow manual trigger from GitHub UI
-  workflow_call:
-    inputs:
-      version:
-        description: "Semver version string (e.g., 1.2.0)"
-        required: false
-        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -68,8 +63,6 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # Semver tag from workflow_call input (release-please path)
-            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Build and push Bot image
         uses: docker/build-push-action@v5
@@ -109,7 +102,6 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Build and push Web image
         uses: docker/build-push-action@v5
