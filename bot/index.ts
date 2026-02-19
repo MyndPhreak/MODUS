@@ -133,10 +133,23 @@ client.once("ready", async () => {
   registerMilestoneEvents(moduleManager);
   serverStatusService.start();
 
+  let botVersion = process.env.npm_package_version || "1.0.0";
+  if (!process.env.npm_package_version) {
+    try {
+      const pkgPath = path.join(__dirname, "package.json");
+      botVersion = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
+    } catch {
+      try {
+        const pkgPath = path.join(__dirname, "../package.json");
+        botVersion = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
+      } catch {}
+    }
+  }
+
   const updateHeartbeat = () => {
     appwriteService.updateBotHeartbeat(
       `bot-shard-${shardId}`,
-      process.env.npm_package_version || "1.0.0",
+      botVersion,
       typeof shardId === "number" ? shardId : 0,
       client.shard?.count ?? 1,
     );
