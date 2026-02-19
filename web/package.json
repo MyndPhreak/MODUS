@@ -14,6 +14,7 @@
     "@pinia/nuxt": "^0.11.3",
     "@tailwindcss/vite": "latest",
     "appwrite": "^21.4.0",
+    "jszip": "^3.10.1",
     "konva": "^10.2.0",
     "lucide-vue-next": "latest",
     "node-appwrite": "^14.1.0",
@@ -23,6 +24,7 @@
     "tailwindcss": "latest",
     "vue": "^3.5.25",
     "vue-konva": "^3.3.0",
-    "vue-router": "^4.6.3"
+    "vue-router": "^4.6.3",
+    "wavesurfer.js": "^7.12.1"
   }
 }

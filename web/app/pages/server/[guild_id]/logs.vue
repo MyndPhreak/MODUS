@@ -42,6 +42,7 @@
           icon="i-heroicons-adjustments-horizontal"
           size="sm"
           class="w-40"
+          clear
         />
         <UInput
           v-model="searchQuery"
@@ -168,10 +169,9 @@ const currentPage = ref(1);
 const perPage = 25;
 
 const searchQuery = ref("");
-const levelFilter = ref("");
+const levelFilter = ref<string | undefined>(undefined);
 
 const levelOptions = [
-  { label: "All Levels", value: "" },
   { label: "Info", value: "info" },
   { label: "Warning", value: "warn" },
   { label: "Error", value: "error" },

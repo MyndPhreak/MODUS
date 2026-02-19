@@ -200,6 +200,11 @@ const moduleStyle = (name: string) => {
       bgClass: "bg-red-500/10 border border-red-500/20",
       iconClass: "text-red-400",
     },
+    milestones: {
+      icon: "i-heroicons-trophy",
+      bgClass: "bg-amber-500/10 border border-amber-500/20",
+      iconClass: "text-amber-400",
+    },
   };
   return (
     styles[name.toLowerCase()] || {

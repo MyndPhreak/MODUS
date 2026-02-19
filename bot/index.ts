@@ -10,6 +10,8 @@ import { ServerStatusService } from "./ServerStatusService";
 import { Logger } from "./Logger";
 import { createYtDlpStreamFunction } from "./lib/ytdlp-stream";
 import { registerWelcomeEvents } from "./modules/welcome";
+import { registerMilestoneEvents } from "./modules/milestones";
+import { registerMusicAPI } from "./MusicAPI";
 
 dotenv.config();
 
@@ -77,6 +79,7 @@ client.once("ready", async () => {
   await loadExtractors();
   await moduleManager.loadModules();
   registerWelcomeEvents(moduleManager);
+  registerMilestoneEvents(moduleManager);
   serverStatusService.start();
 
   const updateHeartbeat = () => {
@@ -104,6 +107,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
+  registerMusicAPI(server, client);
 });
 
 client.on("interactionCreate", async (interaction) => {

@@ -2,12 +2,6 @@
   <div class="p-6 lg:p-8 space-y-6">
     <!-- Header -->
     <div class="flex items-center gap-4">
-      <NuxtLink
-        :to="`/server/${guildId}/modules`"
-        class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-      >
-        <UIcon name="i-heroicons-arrow-left" class="text-gray-400" />
-      </NuxtLink>
       <div class="flex items-center gap-3">
         <div class="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
           <UIcon name="i-heroicons-microphone" class="text-red-400 text-lg" />
@@ -277,193 +271,181 @@
       </UButton>
     </div>
 
-    <!-- Recordings List -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- Recordings Table                                                   -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
     <div
-      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5"
+      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl"
     >
       <div
         class="absolute inset-0 bg-gradient-to-br from-red-500/3 to-transparent pointer-events-none"
       />
-      <div class="relative">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2">
-            <div
-              class="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20"
-            >
-              <UIcon name="i-heroicons-folder-open" class="text-red-400" />
-            </div>
-            <div>
-              <h3 class="font-semibold text-white">Recordings</h3>
-              <p class="text-[10px] text-gray-500">
-                {{ recordings.length }} recording{{
-                  recordings.length !== 1 ? "s" : ""
-                }}
-                found
-              </p>
-            </div>
+
+      <!-- Table Header Bar -->
+      <div
+        class="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 border-b border-white/5"
+      >
+        <div class="flex items-center gap-3">
+          <div class="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+            <UIcon name="i-heroicons-folder-open" class="text-red-400" />
           </div>
+          <div>
+            <h3 class="font-semibold text-white">Recordings</h3>
+            <p class="text-[10px] text-gray-500">
+              {{ recordings.length }} recording{{
+                recordings.length !== 1 ? "s" : ""
+              }}
+              found
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <UInput
+            v-model="searchQuery"
+            placeholder="Search recordings..."
+            icon="i-heroicons-magnifying-glass"
+            size="sm"
+            class="flex-1 sm:w-56"
+          />
           <UButton
-            v-if="!loadingRecordings"
             color="neutral"
             variant="ghost"
-            size="xs"
+            size="sm"
             icon="i-heroicons-arrow-path"
+            :loading="loadingRecordings"
             @click="fetchRecordings"
-          >
-            Refresh
-          </UButton>
-        </div>
-
-        <!-- Loading -->
-        <div
-          v-if="loadingRecordings"
-          class="flex items-center justify-center py-12 text-gray-400"
-        >
-          <UIcon
-            name="i-heroicons-arrow-path"
-            class="animate-spin text-red-400 mr-2"
           />
-          Loading recordings...
         </div>
+      </div>
 
-        <!-- Empty State -->
-        <div
-          v-else-if="recordings.length === 0"
-          class="text-center py-12 text-gray-500"
+      <!-- Loading -->
+      <div
+        v-if="loadingRecordings"
+        class="relative flex items-center justify-center py-16 text-gray-400"
+      >
+        <UIcon
+          name="i-heroicons-arrow-path"
+          class="animate-spin text-2xl text-red-400 mr-3"
+        />
+        <span class="text-sm">Loading recordings…</span>
+      </div>
+
+      <!-- Empty State -->
+      <div
+        v-else-if="filteredRecordings.length === 0"
+        class="relative text-center py-16"
+      >
+        <UIcon
+          name="i-heroicons-microphone"
+          class="text-5xl text-gray-600 mb-3"
+        />
+        <p class="text-gray-400">
+          {{
+            recordings.length === 0
+              ? "No recordings yet"
+              : "No recordings matching your search"
+          }}
+        </p>
+        <p v-if="recordings.length === 0" class="text-xs text-gray-600 mt-1">
+          Use <code class="text-red-400">/record start</code> in a voice channel
+        </p>
+      </div>
+
+      <!-- Table -->
+      <div v-else class="relative">
+        <UTable
+          :data="paginatedRecordings"
+          :columns="tableColumns"
+          :loading="loadingRecordings"
+          :ui="{
+            root: 'w-full',
+            th: 'text-gray-400 text-xs font-medium uppercase tracking-wider',
+            td: 'text-sm',
+          }"
         >
-          <UIcon
-            name="i-heroicons-microphone"
-            class="text-4xl mb-3 text-gray-600"
-          />
-          <p>No recordings yet</p>
-          <p class="text-xs mt-1">
-            Use <code class="text-red-400">/record start</code> in a voice
-            channel
-          </p>
-        </div>
-
-        <!-- Recording Cards -->
-        <div v-else class="space-y-3">
-          <div
-            v-for="rec in recordings"
-            :key="rec.$id"
-            class="bg-gray-800/50 border border-white/5 rounded-lg p-4 space-y-3 group hover:border-white/10 transition-colors"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <h4 class="font-medium text-white text-sm">
-                  {{ rec.title || rec.channel_name }}
-                </h4>
-                <div
-                  class="flex items-center gap-3 text-[10px] text-gray-500 mt-0.5"
-                >
-                  <span>{{ formatDateTime(rec.started_at) }}</span>
-                  <span v-if="rec.duration">
-                    {{ formatDuration(rec.duration) }}
-                  </span>
-                  <span v-if="rec.bitrate">{{ rec.bitrate }} kbps</span>
-                  <span v-if="rec.participants">
-                    {{ getParticipantCount(rec.participants) }} user{{
-                      getParticipantCount(rec.participants) !== 1 ? "s" : ""
-                    }}
-                  </span>
-                </div>
-              </div>
-              <div class="flex items-center gap-1">
-                <UButton
-                  v-if="expandedRecording !== rec.$id"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  icon="i-heroicons-chevron-down"
-                  @click="toggleExpand(rec.$id)"
-                />
-                <UButton
-                  v-else
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  icon="i-heroicons-chevron-up"
-                  @click="toggleExpand(rec.$id)"
-                />
-                <UButton
-                  color="error"
-                  variant="ghost"
-                  size="xs"
-                  icon="i-heroicons-trash"
-                  :loading="deletingId === rec.$id"
-                  @click="confirmDelete(rec)"
-                />
-              </div>
-            </div>
-
-            <!-- Mixed Audio Player -->
-            <div v-if="rec.mixed_file_id" class="space-y-2">
-              <div class="flex items-center gap-2">
-                <UIcon
-                  name="i-heroicons-speaker-wave"
-                  class="text-red-400 text-xs"
-                />
-                <span class="text-[10px] text-gray-400 font-medium">
-                  Mixed Audio
-                </span>
-              </div>
-              <audio
-                controls
-                :src="getFileUrl(rec.mixed_file_id)"
-                class="w-full h-8"
-                preload="none"
-              />
-            </div>
-
-            <!-- Expanded: Per-User Tracks -->
-            <div
-              v-if="expandedRecording === rec.$id"
-              class="border-t border-white/5 pt-3 space-y-2"
-            >
+          <template #expanded="{ row }">
+            <div class="px-4 py-4 bg-gray-950/50">
+              <!-- Loading tracks -->
               <div
                 v-if="loadingTracks"
-                class="flex items-center gap-2 py-2 text-gray-500 text-sm"
+                class="flex items-center gap-2 py-6 justify-center text-gray-500 text-sm"
               >
-                <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+                <UIcon
+                  name="i-heroicons-arrow-path"
+                  class="animate-spin text-red-400"
+                />
                 Loading tracks...
               </div>
+
+              <!-- No tracks -->
               <div
-                v-else-if="activeTracks.length === 0"
-                class="text-xs text-gray-500 italic py-2"
+                v-else-if="
+                  expandedTracks.length === 0 && !row.original.mixed_file_id
+                "
+                class="text-xs text-gray-500 italic py-6 text-center"
               >
-                No individual tracks found
+                No audio tracks found for this recording.
               </div>
-              <div
-                v-for="track in activeTracks"
-                :key="track.$id"
-                class="bg-gray-900/40 border border-white/5 rounded-lg p-3 space-y-2"
-              >
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <UIcon
-                      name="i-heroicons-user"
-                      class="text-indigo-400 text-xs"
-                    />
-                    <span class="text-xs font-medium text-gray-300">
-                      {{ track.username }}
-                    </span>
-                  </div>
-                  <span
-                    v-if="track.file_size"
-                    class="text-[10px] text-gray-600 font-mono"
+
+              <!-- Multi-track Player -->
+              <RecordingMultiTrackPlayer
+                v-else-if="expandedTracks.length > 0"
+                :tracks="expandedTracks"
+                :mixed-file-id="row.original.mixed_file_id"
+                :recording-title="
+                  row.original.title || row.original.channel_name
+                "
+              />
+
+              <!-- Only mixed, no individual tracks -->
+              <div v-else-if="row.original.mixed_file_id" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <UIcon
+                    name="i-heroicons-speaker-wave"
+                    class="text-red-400 text-xs"
+                  />
+                  <span class="text-xs font-medium text-gray-300"
+                    >Mixed Audio</span
                   >
-                    {{ formatFileSize(track.file_size) }}
-                  </span>
                 </div>
                 <audio
                   controls
-                  :src="getFileUrl(track.file_id)"
+                  :src="getStreamUrl(row.original.mixed_file_id)"
                   class="w-full h-8"
                   preload="none"
                 />
               </div>
             </div>
+          </template>
+        </UTable>
+
+        <!-- Pagination -->
+        <div
+          v-if="totalPages > 1"
+          class="flex items-center justify-between px-5 py-3 border-t border-white/5"
+        >
+          <span class="text-xs text-gray-500">
+            Showing {{ (currentPage - 1) * perPage + 1 }}–{{
+              Math.min(currentPage * perPage, filteredRecordings.length)
+            }}
+            of {{ filteredRecordings.length }}
+          </span>
+          <div class="flex gap-1">
+            <UButton
+              icon="i-heroicons-chevron-left"
+              size="xs"
+              variant="ghost"
+              :disabled="currentPage <= 1"
+              @click="currentPage--"
+            />
+            <UButton
+              icon="i-heroicons-chevron-right"
+              size="xs"
+              variant="ghost"
+              :disabled="currentPage >= totalPages"
+              @click="currentPage++"
+            />
           </div>
         </div>
       </div>
@@ -518,7 +500,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { h, ref, computed, onMounted, resolveComponent } from "vue";
+import type { TableColumn } from "@nuxt/ui";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -573,24 +556,58 @@ const bitrateOptions = [
 
 // ── Recordings State ──
 
-const recordings = ref<any[]>([]);
+type Recording = {
+  $id: string;
+  title?: string;
+  channel_name: string;
+  started_at: string;
+  ended_at?: string;
+  duration?: number;
+  bitrate?: number;
+  participants?: string;
+  mixed_file_id?: string;
+  recorded_by: string;
+  guild_id: string;
+};
+
+const recordings = ref<Recording[]>([]);
 const loadingRecordings = ref(true);
-const expandedRecording = ref<string | null>(null);
-const activeTracks = ref<any[]>([]);
+const expandedTracks = ref<any[]>([]);
 const loadingTracks = ref(false);
 const showDeleteConfirm = ref(false);
-const recordingToDelete = ref<any>(null);
+const recordingToDelete = ref<Recording | null>(null);
 const deletingId = ref<string | null>(null);
+const searchQuery = ref("");
+const currentPage = ref(1);
+const perPage = 10;
 
-const { databases } = useAppwrite();
+// ── Computed ──
 
-// ── API Helpers ──
+const filteredRecordings = computed(() => {
+  if (!searchQuery.value) return recordings.value;
+  const q = searchQuery.value.toLowerCase();
+  return recordings.value.filter(
+    (r) =>
+      r.title?.toLowerCase().includes(q) ||
+      r.channel_name?.toLowerCase().includes(q),
+  );
+});
 
-const appwriteEndpoint = useRuntimeConfig().public.appwriteEndpoint;
-const appwriteProjectId = useRuntimeConfig().public.appwriteProjectId;
+const totalPages = computed(() =>
+  Math.ceil(filteredRecordings.value.length / perPage),
+);
 
-function getFileUrl(fileId: string): string {
-  return `${appwriteEndpoint}/storage/buckets/recordings/files/${fileId}/view?project=${appwriteProjectId}`;
+const paginatedRecordings = computed(() =>
+  filteredRecordings.value.slice(
+    (currentPage.value - 1) * perPage,
+    currentPage.value * perPage,
+  ),
+);
+
+// ── Stream URL (proxied through our server) ──
+
+function getStreamUrl(fileId: string): string {
+  return `/api/recordings/stream?file_id=${fileId}`;
 }
 
 // ── Formatting ──
@@ -634,6 +651,136 @@ function getRoleName(roleId: string): string {
   return role ? `@${role.name}` : roleId;
 }
 
+// ── Table Columns ──
+
+const UBadge = resolveComponent("UBadge");
+const UButton = resolveComponent("UButton");
+
+const tableColumns: TableColumn<Recording>[] = [
+  {
+    accessorKey: "channel_name",
+    header: "Recording",
+    cell: ({ row }) => {
+      const rec = row.original;
+      const title = rec.title || rec.channel_name;
+      return h("div", { class: "space-y-0.5" }, [
+        h("div", { class: "font-medium text-white text-sm" }, title),
+        h(
+          "div",
+          { class: "text-[10px] text-gray-500" },
+          formatDateTime(rec.started_at),
+        ),
+      ]);
+    },
+  },
+  {
+    id: "duration",
+    header: "Duration",
+    cell: ({ row }) => {
+      const rec = row.original;
+      if (!rec.duration)
+        return h("span", { class: "text-gray-600 text-xs" }, "–");
+      return h(
+        "span",
+        { class: "text-xs font-mono text-gray-300" },
+        formatDuration(rec.duration),
+      );
+    },
+    meta: { class: { th: "w-24", td: "w-24" } },
+  },
+  {
+    id: "bitrate",
+    header: "Quality",
+    cell: ({ row }) => {
+      const rec = row.original;
+      if (!rec.bitrate)
+        return h("span", { class: "text-gray-600 text-xs" }, "–");
+      return h(
+        UBadge,
+        { color: "neutral", variant: "subtle", size: "xs" },
+        () => `${rec.bitrate} kbps`,
+      );
+    },
+    meta: { class: { th: "w-24", td: "w-24" } },
+  },
+  {
+    id: "participants",
+    header: "Users",
+    cell: ({ row }) => {
+      const rec = row.original;
+      if (!rec.participants)
+        return h("span", { class: "text-gray-600 text-xs" }, "–");
+      const count = getParticipantCount(rec.participants);
+      return h(
+        "div",
+        { class: "flex items-center gap-1 text-xs text-gray-400" },
+        [
+          h(resolveComponent("UIcon"), {
+            name: "i-heroicons-users",
+            class: "text-[10px]",
+          }),
+          h("span", {}, `${count}`),
+        ],
+      );
+    },
+    meta: { class: { th: "w-20", td: "w-20" } },
+  },
+  {
+    id: "playback",
+    header: "Play",
+    cell: ({ row }) => {
+      const rec = row.original;
+      if (!rec.mixed_file_id)
+        return h("span", { class: "text-gray-600 text-[10px]" }, "No audio");
+      return h(
+        UButton,
+        {
+          color: "neutral",
+          variant: "ghost",
+          size: "xs",
+          icon: row.getIsExpanded()
+            ? "i-heroicons-chevron-up"
+            : "i-heroicons-play",
+          onClick: () => toggleExpand(row),
+        },
+        () => (row.getIsExpanded() ? "Hide" : "Play"),
+      );
+    },
+    meta: { class: { th: "w-24 text-center", td: "w-24 text-center" } },
+  },
+  {
+    id: "actions",
+    header: "",
+    enableHiding: false,
+    cell: ({ row }) => {
+      const rec = row.original;
+      return h("div", { class: "flex items-center justify-end gap-1" }, [
+        // Expand tracks (even if no mixed file)
+        !rec.mixed_file_id
+          ? h(UButton, {
+              color: "neutral",
+              variant: "ghost",
+              size: "xs",
+              icon: row.getIsExpanded()
+                ? "i-heroicons-chevron-up"
+                : "i-heroicons-chevron-down",
+              onClick: () => toggleExpand(row),
+            })
+          : null,
+        h(UButton, {
+          color: "error",
+          variant: "ghost",
+          size: "xs",
+          icon: "i-heroicons-trash",
+          loading: deletingId.value === rec.$id,
+          onClick: () => confirmDelete(rec),
+        }),
+      ]);
+    },
+    meta: { class: { th: "w-20 text-right", td: "w-20 text-right" } },
+  },
+];
+
 // ── Role / User Management ──
 
 function removeRole(roleId: string) {
@@ -662,22 +809,16 @@ const save = async () => {
   saving.value = false;
 };
 
-// ── Recordings CRUD ──
+// ── Recordings CRUD (server-side API routes) ──
 
 async function fetchRecordings() {
   loadingRecordings.value = true;
   try {
-    const { Query } = await import("appwrite");
-    const response = await databases.listDocuments(
-      "discord_bot",
-      "recordings",
-      [
-        Query.equal("guild_id", guildId),
-        Query.orderDesc("started_at"),
-        Query.limit(50),
-      ],
-    );
-    recordings.value = response.documents;
+    const data = await $fetch<Recording[]>("/api/recordings/list", {
+      params: { guild_id: guildId },
+    });
+    recordings.value = data;
+    currentPage.value = 1;
   } catch (err) {
     console.error("Error fetching recordings:", err);
   } finally {
@@ -685,32 +826,32 @@ async function fetchRecordings() {
   }
 }
 
-async function toggleExpand(recordingId: string) {
-  if (expandedRecording.value === recordingId) {
-    expandedRecording.value = null;
-    activeTracks.value = [];
+async function toggleExpand(row: any) {
+  if (row.getIsExpanded()) {
+    row.toggleExpanded(false);
+    expandedTracks.value = [];
     return;
   }
 
-  expandedRecording.value = recordingId;
+  // Collapse any other expanded row
+  row.toggleExpanded(true);
   loadingTracks.value = true;
+  expandedTracks.value = [];
+
   try {
-    const { Query } = await import("appwrite");
-    const response = await databases.listDocuments(
-      "discord_bot",
-      "recording_tracks",
-      [Query.equal("recording_id", recordingId), Query.limit(100)],
-    );
-    activeTracks.value = response.documents;
+    const data = await $fetch<any[]>("/api/recordings/tracks", {
+      params: { recording_id: row.original.$id },
+    });
+    expandedTracks.value = data;
   } catch (err) {
     console.error("Error fetching tracks:", err);
-    activeTracks.value = [];
+    expandedTracks.value = [];
   } finally {
     loadingTracks.value = false;
   }
 }
 
-function confirmDelete(rec: any) {
+function confirmDelete(rec: Recording) {
   recordingToDelete.value = rec;
   showDeleteConfirm.value = true;
 }
@@ -722,50 +863,16 @@ async function handleDelete() {
   deletingId.value = rec.$id;
 
   try {
-    const { Query } = await import("appwrite");
-    // 1. Delete tracks + their files
-    const tracksRes = await databases.listDocuments(
-      "discord_bot",
-      "recording_tracks",
-      [Query.equal("recording_id", rec.$id), Query.limit(100)],
-    );
+    await $fetch("/api/recordings/delete", {
+      method: "POST",
+      body: { recording_id: rec.$id, guild_id: guildId },
+    });
 
-    for (const track of tracksRes.documents) {
-      try {
-        await $fetch(`/api/recordings/delete-file`, {
-          method: "POST",
-          body: { fileId: track.file_id },
-        });
-      } catch {}
-      await databases.deleteDocument(
-        "discord_bot",
-        "recording_tracks",
-        track.$id,
-      );
-    }
-
-    // 2. Delete mixed file
-    if (rec.mixed_file_id) {
-      try {
-        await $fetch(`/api/recordings/delete-file`, {
-          method: "POST",
-          body: { fileId: rec.mixed_file_id },
-        });
-      } catch {}
-    }
-
-    // 3. Delete recording doc
-    await databases.deleteDocument("discord_bot", "recordings", rec.$id);
-
-    // 4. Remove from local state
+    // Remove from local state
     recordings.value = recordings.value.filter((r) => r.$id !== rec.$id);
     showDeleteConfirm.value = false;
     recordingToDelete.value = null;
-
-    if (expandedRecording.value === rec.$id) {
-      expandedRecording.value = null;
-      activeTracks.value = [];
-    }
+    expandedTracks.value = [];
   } catch (err) {
     console.error("Error deleting recording:", err);
   } finally {

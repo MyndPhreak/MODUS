@@ -17,6 +17,7 @@ export class AppwriteService {
   private recordingsCollectionId = "recordings";
   private recordingTracksCollectionId = "recording_tracks";
   private recordingsBucketId = "recordings";
+  private milestoneUsersCollectionId = "milestone_users";
   public storage: Storage;
 
   constructor() {
@@ -522,5 +523,110 @@ export class AppwriteService {
       [Query.equal("recording_id", recordingId), Query.limit(100)],
     );
     return response.documents;
+  }
+
+  // ── Milestone Tracking ──────────────────────────────────────────────────
+
+  async getMilestoneUser(guildId: string, userId: string): Promise<any | null> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.milestoneUsersCollectionId,
+        [
+          Query.equal("guild_id", guildId),
+          Query.equal("user_id", userId),
+          Query.limit(1),
+        ],
+      );
+      return response.total > 0 ? response.documents[0] : null;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error getting milestone user ${guildId}/${userId}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async createMilestoneUser(data: {
+    guild_id: string;
+    user_id: string;
+    username: string;
+    char_count: number;
+    last_milestone: number;
+    notification_pref: string;
+    opted_in: boolean;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.milestoneUsersCollectionId,
+      ID.unique(),
+      data,
+    );
+    return doc.$id;
+  }
+
+  async updateMilestoneUser(
+    docId: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    await this.databases.updateDocument(
+      this.databaseId,
+      this.milestoneUsersCollectionId,
+      docId,
+      data,
+    );
+  }
+
+  async getMilestoneLeaderboard(
+    guildId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ users: any[]; total: number }> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.milestoneUsersCollectionId,
+        [
+          Query.equal("guild_id", guildId),
+          Query.equal("opted_in", true),
+          Query.orderDesc("char_count"),
+          Query.limit(limit),
+          Query.offset(offset),
+        ],
+      );
+      return { users: response.documents, total: response.total };
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error getting milestone leaderboard for ${guildId}:`,
+        error,
+      );
+      return { users: [], total: 0 };
+    }
+  }
+
+  async getMilestoneUserRank(
+    guildId: string,
+    charCount: number,
+  ): Promise<number> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.milestoneUsersCollectionId,
+        [
+          Query.equal("guild_id", guildId),
+          Query.equal("opted_in", true),
+          Query.greaterThan("char_count", charCount),
+          Query.limit(1), // We only need total count
+        ],
+      );
+      return response.total + 1;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error getting milestone rank for ${guildId}:`,
+        error,
+      );
+      return 0;
+    }
   }
 }

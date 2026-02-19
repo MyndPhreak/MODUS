@@ -182,6 +182,37 @@ const collections: CollectionDef[] = [
       { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
     ],
   },
+  {
+    id: "milestone_users",
+    name: "Milestone Users",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "user_id", type: "string", size: 64, required: true },
+      { key: "username", type: "string", size: 256, required: true },
+      { key: "char_count", type: "integer", required: true },
+      { key: "last_milestone", type: "integer", required: true },
+      {
+        key: "notification_pref",
+        type: "enum",
+        enumValues: ["public", "private", "silent"],
+        required: true,
+      },
+      { key: "opted_in", type: "boolean", required: true },
+    ],
+    indexes: [
+      {
+        key: "idx_guild_user",
+        type: "unique",
+        attributes: ["guild_id", "user_id"],
+      },
+      {
+        key: "idx_guild_chars",
+        type: "key",
+        attributes: ["guild_id", "char_count"],
+        orders: ["ASC", "DESC"],
+      },
+    ],
+  },
 ];
 
 // ──────────────────────────────────────────────

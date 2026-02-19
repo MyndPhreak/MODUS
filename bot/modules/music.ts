@@ -331,6 +331,10 @@ const playCommand = new SlashCommandBuilder()
       .setAutocomplete(true),
   );
 
+const playqueueCommand = new SlashCommandBuilder()
+  .setName("playqueue")
+  .setDescription("Play all songs queued from the web dashboard");
+
 const skipCommand = new SlashCommandBuilder()
   .setName("skip")
   .setDescription("Skip the current track");
@@ -924,6 +928,111 @@ async function handleFilter(
   }
 }
 
+async function handlePlayQueue(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const member = requireVoiceChannel(interaction);
+  if (!member) return;
+
+  const settings = await getSettings(moduleManager, interaction.guildId!);
+  const player = useMainPlayer();
+
+  try {
+    const preQueueSettings =
+      await moduleManager.appwriteService.getModuleSettings(
+        interaction.guildId!,
+        "music",
+      );
+    const preQueue: any[] = Array.isArray(preQueueSettings?.preQueue)
+      ? preQueueSettings.preQueue
+      : [];
+
+    if (preQueue.length === 0) {
+      await interaction.editReply({
+        content:
+          "📭 No songs in the dashboard queue. Add songs from the web dashboard first.",
+      });
+      return;
+    }
+
+    await interaction.editReply({
+      content: `🎵 Loading **${preQueue.length}** songs from dashboard queue...`,
+    });
+
+    let loaded = 0;
+    let failed = 0;
+
+    for (const item of preQueue) {
+      try {
+        const trackUrl = item.url || item.title;
+        const isUrl = /^https?:\/\//i.test(trackUrl);
+        await player.play(member.voice.channel!, trackUrl, {
+          searchEngine: isUrl
+            ? QueryType.AUTO
+            : `ext:${YoutubeiExtractor.identifier}`,
+          nodeOptions: {
+            metadata: { channel: interaction.channel },
+            volume: settings.defaultVolume,
+            leaveOnEmpty: true,
+            leaveOnEmptyCooldown: 60000,
+            leaveOnEnd: true,
+            leaveOnEndCooldown: 60000,
+          },
+          requestedBy: interaction.user,
+        });
+        loaded++;
+      } catch (err) {
+        console.error(
+          `[Music] Failed to load pre-queue track: ${item.title}`,
+          err,
+        );
+        failed++;
+      }
+    }
+
+    // Clear the pre-queue after loading
+    await moduleManager.appwriteService.setModuleSettings(
+      interaction.guildId!,
+      "music",
+      { ...preQueueSettings, preQueue: [] },
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor(0x57f287)
+      .setTitle("📋 Dashboard Queue Loaded")
+      .setDescription(
+        `Loaded **${loaded}** track${loaded !== 1 ? "s" : ""}${
+          failed > 0 ? ` (${failed} failed)` : ""
+        } from the dashboard queue.`,
+      )
+      .setFooter({ text: "Queue has been cleared from the dashboard" });
+
+    await interaction.editReply({ embeds: [embed] });
+
+    // Auto-apply saved filters for new queues
+    if (settings.activeFilters && settings.activeFilters.length > 0) {
+      setTimeout(async () => {
+        try {
+          const activeQueue = player.queues.get(interaction.guildId!);
+          if (activeQueue) {
+            await activeQueue.filters.ffmpeg.toggle(
+              settings.activeFilters as any[],
+            );
+          }
+        } catch (err) {
+          console.error("[Music] Failed to auto-apply filters:", err);
+        }
+      }, 2000);
+    }
+  } catch (error: any) {
+    console.error("[Music] Dashboard queue error:", error);
+    await interaction.editReply({
+      content: `❌ Failed to load dashboard queue: ${error.message}`,
+    });
+  }
+}
+
 function formatViews(views: number | undefined): string {
   if (!views || views <= 0) return "";
   if (views >= 1_000_000_000)
@@ -955,6 +1064,7 @@ const musicModule: BotModule = {
   // Register all music commands as individual top-level commands
   commands: [
     playCommand.toJSON(),
+    playqueueCommand.toJSON(),
     skipCommand.toJSON(),
     stopCommand.toJSON(),
     pauseCommand.toJSON(),
@@ -1090,6 +1200,8 @@ const musicModule: BotModule = {
     switch (commandName) {
       case "play":
         return handlePlay(interaction, moduleManager);
+      case "playqueue":
+        return handlePlayQueue(interaction, moduleManager);
       case "skip":
         return handleSkip(interaction);
       case "stop":

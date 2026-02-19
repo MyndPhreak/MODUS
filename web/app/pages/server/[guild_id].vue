@@ -40,8 +40,10 @@ const basePath = `/server/${guildId}`;
 // Determine active tab from current route
 const activeTab = computed(() => {
   const path = route.path;
+  if (path.includes("/modules/recording")) return "recording";
   if (path.includes("/modules/music")) return "music";
   if (path.includes("/modules/moderation")) return "moderation";
+  if (path.includes("/modules/milestones")) return "milestones";
   if (path.includes("/modules")) return "modules";
   if (path.includes("/embeds")) return "embeds";
   if (path.includes("/welcome")) return "welcome";
@@ -69,6 +71,18 @@ const sidebarTabs = computed(() => [
     label: "Moderation",
     icon: "i-heroicons-shield-exclamation",
     to: `${basePath}/modules/moderation`,
+  },
+  {
+    id: "recording",
+    label: "Recording",
+    icon: "i-heroicons-microphone",
+    to: `${basePath}/modules/recording`,
+  },
+  {
+    id: "milestones",
+    label: "Milestones",
+    icon: "i-heroicons-trophy",
+    to: `${basePath}/modules/milestones`,
   },
   {
     id: "embeds",

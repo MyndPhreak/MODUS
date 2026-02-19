@@ -77,6 +77,44 @@ export default defineEventHandler(async (event) => {
     setCookie(event, `a_session_${projectId}`, session.secret, cookieOpts);
     setCookie(event, `a_user_${projectId}`, userId, cookieOpts);
 
+    // Persist the Discord OAuth provider token so downstream API endpoints
+    // can use it.  Appwrite's Admin SDK listSessions() does NOT expose
+    // providerAccessToken after creation, so we capture it here.
+    if (session.providerAccessToken) {
+      console.log(
+        `[Auth Callback] Saving Discord provider token (length=${session.providerAccessToken.length}, uid=${session.providerUid || "none"})`,
+      );
+
+      setCookie(
+        event,
+        `discord_token_${projectId}`,
+        session.providerAccessToken,
+        cookieOpts,
+      );
+
+      if (session.providerAccessTokenExpiry) {
+        setCookie(
+          event,
+          `discord_token_expiry_${projectId}`,
+          session.providerAccessTokenExpiry,
+          cookieOpts,
+        );
+      }
+
+      if (session.providerUid) {
+        setCookie(
+          event,
+          `discord_uid_${projectId}`,
+          session.providerUid,
+          cookieOpts,
+        );
+      }
+    } else {
+      console.warn(
+        "[Auth Callback] No providerAccessToken on session — guild list will fall back to Bot token",
+      );
+    }
+
     // Redirect to the client-side callback page to finalize store hydration
     return sendRedirect(event, `${baseUrl}/auth/callback`);
   } catch (error: any) {

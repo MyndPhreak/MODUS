@@ -1,30 +1,6 @@
 import { Client, Query, Users } from "node-appwrite";
 
 /**
- * Helper: find the best Discord/OAuth2 session — prefer the one with the
- * latest providerAccessTokenExpiry so we don't use a stale expired token.
- */
-function findBestDiscordSession(sessions: any[]) {
-  const oauthSessions = sessions.filter(
-    (s) => s.provider === "discord" || s.provider === "oauth2",
-  );
-
-  if (oauthSessions.length === 0) return null;
-  if (oauthSessions.length === 1) return oauthSessions[0];
-
-  // Sort by expiry descending — newest/freshest first
-  return oauthSessions.sort((a, b) => {
-    const expiryA = a.providerAccessTokenExpiry
-      ? new Date(a.providerAccessTokenExpiry).getTime()
-      : 0;
-    const expiryB = b.providerAccessTokenExpiry
-      ? new Date(b.providerAccessTokenExpiry).getTime()
-      : 0;
-    return expiryB - expiryA;
-  })[0];
-}
-
-/**
  * Fetch a Discord user's profile using the Bot token.
  * This always works regardless of OAuth token state.
  */
@@ -75,8 +51,8 @@ async function fetchBotGuilds(botToken: string): Promise<any[]> {
  * Server-side endpoint to fetch the current user's Discord profile and guilds.
  *
  * Strategy:
- * 1. Try to use the Discord OAuth providerAccessToken from the freshest session
- *    (gives us the user's full guild list including non-bot guilds)
+ * 1. Read the Discord OAuth token from the cookie (set during login callback)
+ *    — gives us the user's full guild list including non-bot guilds
  * 2. If the token is unavailable or expired, use the Bot token to fetch the
  *    user's profile (avatar, username, etc.) and the bot's guilds as a fallback
  */
@@ -95,48 +71,29 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(projectId)
-    .setKey(config.appwriteApiKey as string);
+  // Read Discord OAuth token from cookies (set during login callback)
+  const discordToken = getCookie(event, `discord_token_${projectId}`);
+  const discordExpiry = getCookie(event, `discord_token_expiry_${projectId}`);
+  const discordUidCookie = getCookie(event, `discord_uid_${projectId}`);
 
-  const users = new Users(client);
+  const isExpired = discordExpiry
+    ? new Date(discordExpiry).getTime() < Date.now()
+    : false;
+
+  console.log(
+    `[Discord Me API] Token cookie: present=${!!discordToken}, length=${discordToken?.length || 0}, uid=${discordUidCookie || "none"}, expired=${isExpired}`,
+  );
 
   try {
-    const [user, sessions] = await Promise.all([
-      users.get(userId),
-      users.listSessions(userId),
-    ]);
-
-    // Debug: Log all sessions and their providers
-    console.log(
-      `[Discord Me API] User: ${userId}, Total sessions: ${sessions.sessions.length}`,
-    );
-    sessions.sessions.forEach((s: any, i: number) => {
-      console.log(
-        `[Discord Me API]   Session ${i}: provider=${s.provider}, hasToken=${!!s.providerAccessToken}, tokenLen=${s.providerAccessToken?.length || 0}, expiry=${s.providerAccessTokenExpiry}`,
-      );
-    });
-
-    const discordSession = findBestDiscordSession(sessions.sessions);
-
-    const token = discordSession?.providerAccessToken;
-    const expiry = discordSession?.providerAccessTokenExpiry;
-    const isExpired = expiry ? new Date(expiry).getTime() < Date.now() : false;
-
-    console.log(
-      `[Discord Me API] Best session: provider=${discordSession?.provider}, Has token: ${!!token}, Token length: ${token?.length || 0}, Expired: ${isExpired}`,
-    );
-
-    // ── Strategy 1: Use the user's own OAuth access token ─────────────────
-    if (token && !isExpired) {
+    // ── Strategy 1: Use the user's OAuth token from cookie ─────────────
+    if (discordToken && !isExpired) {
       try {
         const [profile, guilds] = await Promise.all([
           $fetch("https://discord.com/api/users/@me", {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${discordToken}` },
           }),
           $fetch("https://discord.com/api/users/@me/guilds", {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${discordToken}` },
           }),
         ]);
 
@@ -151,15 +108,21 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // ── Strategy 2: Use the Bot token to fetch user profile ───────────────
-    // This always works as long as the bot token is valid
+    // ── Strategy 2: Bot token fallback ────────────────────────────────────
     console.log("[Discord Me API] Using Bot token fallback for user profile");
 
-    // Get the Discord user ID from the session or identity
-    let discordUid = discordSession?.providerUid;
+    // Try to resolve the Discord user ID from cookie or Appwrite identity
+    let discordUid = discordUidCookie;
 
     if (!discordUid) {
-      // Try identities API as last resort
+      // Fall back to Appwrite identities API
+      const client = new Client()
+        .setEndpoint(config.public.appwriteEndpoint as string)
+        .setProject(projectId)
+        .setKey(config.appwriteApiKey as string);
+
+      const users = new Users(client);
+
       const identities = await users.listIdentities([
         Query.equal("userId", [userId]),
       ]);
@@ -174,7 +137,7 @@ export default defineEventHandler(async (event) => {
 
     if (!discordUid) {
       console.error(
-        "[Discord Me API] No Discord UID found in session or identity",
+        "[Discord Me API] No Discord UID found in cookie or identity",
       );
       throw createError({
         statusCode: 404,
@@ -186,14 +149,11 @@ export default defineEventHandler(async (event) => {
       `[Discord Me API] Found Discord UID: ${discordUid}, fetching via Bot token...`,
     );
 
-    // Fetch user profile via Bot token — always returns avatar, banner, etc.
     let profile: any = null;
     let guilds: any[] = [];
 
     if (botToken) {
       profile = await fetchDiscordUserViaBot(botToken, discordUid);
-
-      // Fetch bot's guilds (these are the guilds the user can manage via the dashboard)
       guilds = await fetchBotGuilds(botToken);
 
       console.log(
@@ -206,6 +166,14 @@ export default defineEventHandler(async (event) => {
     }
 
     // Build profile from Bot API data or Appwrite fallback
+    const client = new Client()
+      .setEndpoint(config.public.appwriteEndpoint as string)
+      .setProject(projectId)
+      .setKey(config.appwriteApiKey as string);
+
+    const users = new Users(client);
+    const user = await users.get(userId);
+
     const finalProfile = profile
       ? {
           id: profile.id,

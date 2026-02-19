@@ -420,14 +420,15 @@ const addServer = async (guild: any) => {
   addingId.value = guild.id;
   try {
     await databases.createDocument("discord_bot", "servers", guild.id, {
+      guild_id: guild.id,
       name: guild.name,
-      ip: "0.0.0.0",
-      port: 0,
       status: false,
       ping: 0,
-      ownerId: userStore.user!.$id,
+      owner_id: userStore.user!.$id,
       last_checked: new Date().toISOString(),
-      icon: guild.icon || null,
+      icon: guild.icon
+        ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
+        : null,
     });
 
     toast.add({

@@ -189,9 +189,9 @@ function startUserRecording(
   });
 
   // Discord sends Opus packets — we need to decode them to PCM for our FFmpeg pipeline
-  // Use @discordjs/voice's built-in Opus decoder via prism-media
-  const { OpusDecodingStream } = require("prism-media").opus;
-  const decoder = new OpusDecodingStream({
+  // Use prism-media's Opus decoder to convert to raw PCM
+  const prism = require("prism-media");
+  const decoder = new prism.opus.Decoder({
     rate: 48000,
     channels: 2,
     frameSize: 960,
