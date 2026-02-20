@@ -9,7 +9,7 @@
     .neuron { fill: #fff; }
   </style>
   <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-    <feGaussianBlur stdDeviation="5" result="blur" />
+    <feGaussianBlur stdDeviation="0" result="blur" />
     <feMerge>
       <feMergeNode in="blur" />
       <feMergeNode in="SourceGraphic" />
@@ -35,27 +35,51 @@
 
 <!-- EVERYTHING BEHIND THE BRAIN (Top halves, y < 512) -->
 <g transform="rotate(30 512 512)" clip-path="url(#back-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="5s" begin="-1.2s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-1.2s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-1.2s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="5s" begin="-3.7s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-3.7s" repeatCount="indefinite" />
     </circle>
 </g>
 <g transform="rotate(90 512 512)" clip-path="url(#back-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="7s" begin="-3.1s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-3.1s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-3.1s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="7s" begin="-6.6s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-6.6s" repeatCount="indefinite" />
     </circle>
 </g>
 <g transform="rotate(150 512 512)" clip-path="url(#back-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="6s" begin="-2.4s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-2.4s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-2.4s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="6s" begin="-5.4s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-5.4s" repeatCount="indefinite" />
     </circle>
 </g>
 
@@ -66,27 +90,51 @@
 
 <!-- EVERYTHING IN FRONT OF THE BRAIN (Bottom halves, y >= 512) -->
 <g transform="rotate(30 512 512)" clip-path="url(#front-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="5s" begin="-1.2s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-1.2s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-1.2s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="5s" begin="-3.7s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="5s" begin="-3.7s" repeatCount="indefinite" />
     </circle>
 </g>
 <g transform="rotate(90 512 512)" clip-path="url(#front-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="7s" begin="-3.1s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-3.1s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-3.1s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="7s" begin="-6.6s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="7s" begin="-6.6s" repeatCount="indefinite" />
     </circle>
 </g>
 <g transform="rotate(150 512 512)" clip-path="url(#front-clip)">
+    <!-- Electron 1 -->
     <circle class="neuron" filter="url(#glow)">
       <animateMotion dur="6s" begin="-2.4s" repeatCount="indefinite">
         <mpath href="#orbit-path"/>
       </animateMotion>
-      <animate attributeName="r" values="12; 4; 12; 28; 12" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-2.4s" repeatCount="indefinite" />
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-2.4s" repeatCount="indefinite" />
+    </circle>
+    <!-- Electron 2 (Half-orbit offset) -->
+    <circle class="neuron" filter="url(#glow)">
+      <animateMotion dur="6s" begin="-5.4s" repeatCount="indefinite">
+        <mpath href="#orbit-path"/>
+      </animateMotion>
+      <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-5.4s" repeatCount="indefinite" />
     </circle>
 </g>
 
