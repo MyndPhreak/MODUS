@@ -1,11 +1,45 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
+import { Query } from "appwrite";
 
 const userStore = useUserStore();
 const { botHealthOnline, botLatency, healthChecking, lastHealthCheck } =
   useBotHealth();
 const { state: serverSidebar } = useServerSidebar();
+const { databases } = useAppwrite();
 const isMounted = ref(false);
+const route = useRoute();
+
+// Sidebar servers list
+const sidebarServers = ref<any[]>([]);
+
+const databaseId = "discord_bot";
+const serversCollectionId = "servers";
+
+async function fetchSidebarServers() {
+  if (!userStore.user) return;
+  try {
+    const response = await databases.listDocuments(
+      databaseId,
+      serversCollectionId,
+      [Query.equal("ownerId", userStore.user.$id)],
+    );
+    sidebarServers.value = response.documents;
+  } catch {
+    // silently ignore
+  }
+}
+
+// Fetch when user is ready
+watch(
+  () => userStore.initialized,
+  async (ready) => {
+    if (ready && userStore.isLoggedIn) {
+      await fetchSidebarServers();
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   isMounted.value = true;
@@ -13,38 +47,45 @@ onMounted(() => {
 
 const isBotAdmin = computed(() => userStore.isAdmin);
 
-const navigation = computed(() => {
-  const items = [
+const isServerContext = computed(() => !!serverSidebar.value);
+
+const userInitial = computed(() => userStore.userName.charAt(0).toUpperCase());
+
+// Active link helper for default nav
+function isActive(to: string) {
+  if (to === "/") return route.path === "/";
+  return route.path.startsWith(to);
+}
+
+function getGuildIconUrl(guildId: string, iconHash: string, size = 32) {
+  if (!iconHash) return null;
+  const ext = iconHash.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=${size}`;
+}
+
+async function handleLogout() {
+  await userStore.logout();
+}
+
+const mainNavLinks = computed(() => {
+  const links = [
     {
       label: "Dashboard",
       icon: "i-heroicons-home",
       to: "/",
     },
-    {
-      label: "Discover",
-      icon: "i-heroicons-magnifying-glass",
-      to: "/discover",
-    },
   ];
 
   if (isBotAdmin.value) {
-    items.push({
+    links.push({
       label: "Admin",
       icon: "i-heroicons-shield-check",
       to: "/admin",
     });
   }
 
-  return items;
+  return links;
 });
-
-const isServerContext = computed(() => !!serverSidebar.value);
-
-const userInitial = computed(() => userStore.userName.charAt(0).toUpperCase());
-
-async function handleLogout() {
-  await userStore.logout();
-}
 </script>
 
 <template>
@@ -80,7 +121,7 @@ async function handleLogout() {
           </div>
         </div>
 
-        <!-- Server context header: guild info + back -->
+        <!-- Server / Admin context header: guild info + back -->
         <div v-else class="border-b border-white/5 bg-[#050507]/20">
           <!-- Back to dashboard -->
           <NuxtLink
@@ -93,8 +134,32 @@ async function handleLogout() {
             />
             Back to Dashboard
           </NuxtLink>
-          <!-- Guild info -->
-          <div class="flex items-center gap-3 px-5 py-4">
+
+          <!-- Admin context header -->
+          <div
+            v-if="serverSidebar?.guild?.id === '__admin__'"
+            class="flex items-center gap-3 px-5 py-4"
+          >
+            <div
+              class="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-400/30 flex items-center justify-center"
+            >
+              <UIcon
+                name="i-heroicons-shield-check"
+                class="w-4 h-4 text-violet-300"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h2 class="text-sm font-bold text-white truncate">Bot Admin</h2>
+              <p
+                class="text-[9px] text-violet-400 uppercase tracking-wider font-semibold"
+              >
+                Admin Panel
+              </p>
+            </div>
+          </div>
+
+          <!-- Guild info (server context) -->
+          <div v-else class="flex items-center gap-3 px-5 py-4">
             <UAvatar
               v-if="serverSidebar?.guild?.icon"
               :src="`https://cdn.discordapp.com/icons/${serverSidebar.guild.id}/${serverSidebar.guild.icon}.png`"
@@ -121,19 +186,92 @@ async function handleLogout() {
       </template>
 
       <!-- Navigation -->
-      <nav class="flex-1 px-4 py-6 space-y-1">
+      <nav class="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
         <!-- Default navigation -->
         <template v-if="!isServerContext">
-          <UNavigationMenu
-            v-if="isMounted"
-            :items="navigation"
-            orientation="vertical"
-            class="w-full"
-            :ui="{
-              link: 'px-4 py-3 rounded-xl transition-all duration-200 text-sm font-semibold mb-1',
-              linkLeadingIcon: 'w-5 h-5',
-            }"
-          />
+          <!-- Section: Main -->
+          <p
+            class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
+          >
+            Main
+          </p>
+          <template v-for="link in mainNavLinks" :key="link.to">
+            <NuxtLink
+              :to="link.to"
+              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mb-1"
+              :class="
+                isActive(link.to)
+                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              "
+            >
+              <UIcon :name="link.icon" class="text-base shrink-0" />
+              <span>{{ link.label }}</span>
+            </NuxtLink>
+          </template>
+
+          <!-- Divider -->
+          <div class="my-3 mx-1 border-t border-white/5" />
+
+          <!-- Section: Servers -->
+          <p
+            class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
+          >
+            My Servers
+          </p>
+
+          <!-- Connected servers list -->
+          <template v-if="sidebarServers.length > 0">
+            <NuxtLink
+              v-for="server in sidebarServers"
+              :key="server.$id"
+              :to="`/server/${server.$id}/modules`"
+              class="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 mb-1 group"
+              :class="
+                route.path.startsWith(`/server/${server.$id}`)
+                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              "
+            >
+              <!-- Guild icon or fallback -->
+              <div class="relative shrink-0 w-5 h-5">
+                <img
+                  v-if="server.icon"
+                  :src="
+                    getGuildIconUrl(server.$id, server.icon, 32) || undefined
+                  "
+                  :alt="server.name"
+                  class="w-5 h-5 rounded-md object-cover ring-1 ring-white/10"
+                />
+                <div
+                  v-else
+                  class="w-5 h-5 rounded-md bg-gradient-to-br from-violet-600/40 to-indigo-600/40 border border-white/10 flex items-center justify-center"
+                >
+                  <span class="text-[8px] font-black text-white/60">{{
+                    server.name?.charAt(0)?.toUpperCase() || "?"
+                  }}</span>
+                </div>
+              </div>
+              <span class="truncate">{{ server.name }}</span>
+            </NuxtLink>
+          </template>
+          <p v-else class="px-3 py-1.5 text-xs text-gray-600 italic">
+            No servers yet
+          </p>
+
+          <!-- Add Server link -->
+          <NuxtLink
+            to="/discover"
+            class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mt-1"
+            :class="
+              isActive('/discover')
+                ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            "
+          >
+            <UIcon name="i-heroicons-plus-circle" class="text-base shrink-0" />
+            <span>Add Server</span>
+          </NuxtLink>
         </template>
 
         <!-- Server context navigation -->
@@ -156,7 +294,7 @@ async function handleLogout() {
               class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
               :class="
                 serverSidebar.activeTab === tab.id
-                  ? 'bg-primary-500/15 text-primary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               "
             >
@@ -178,7 +316,7 @@ async function handleLogout() {
               class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
               :class="
                 serverSidebar.activeTab === tab.id
-                  ? 'bg-primary-500/15 text-primary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
+                  ? 'bg-secondary-500/15 text-secondary-200 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
                   : tab.disabled
                     ? 'text-gray-600 cursor-not-allowed'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'

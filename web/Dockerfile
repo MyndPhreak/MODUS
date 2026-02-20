@@ -26,6 +26,9 @@ RUN pnpm run build
 # ── Stage 2: Production ──────────────────────────────────────────────────────
 FROM node:22-slim AS production
 
+# Install ffmpeg for ffprobe (used by upload-announce recording validation)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy the self-contained Nuxt server output

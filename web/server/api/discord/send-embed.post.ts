@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const body = await readBody(event);
 
-  const { guild_id, embed } = body || {};
+  const { guild_id, embed, content } = body || {};
   // channel_id may arrive as an object { label, value } from USelectMenu binding
   let channel_id = body?.channel_id;
   if (typeof channel_id === "object" && channel_id !== null) {
@@ -149,6 +149,13 @@ export default defineEventHandler(async (event) => {
   );
 
   try {
+    const messageBody: Record<string, any> = {
+      embeds: [sanitizedEmbed],
+    };
+    if (content && String(content).trim()) {
+      messageBody.content = String(content).trim().slice(0, 2000);
+    }
+
     const result = await $fetch(
       `https://discord.com/api/v10/channels/${channel_id}/messages`,
       {
@@ -157,9 +164,7 @@ export default defineEventHandler(async (event) => {
           Authorization: `Bot ${botToken}`,
           "Content-Type": "application/json",
         },
-        body: {
-          embeds: [sanitizedEmbed],
-        },
+        body: messageBody,
       },
     );
 

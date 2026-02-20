@@ -4,6 +4,53 @@ import { InputFile } from "node-appwrite/file";
 import { Client as AppwriteClient } from "appwrite";
 import WebSocket from "ws";
 
+// ── In-Memory TTL Cache ────────────────────────────────────────────
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+class TTLCache<T> {
+  private store = new Map<string, CacheEntry<T>>();
+  private readonly ttlMs: number;
+
+  constructor(ttlSeconds = 60) {
+    this.ttlMs = ttlSeconds * 1000;
+  }
+
+  get(key: string): T | undefined {
+    const entry = this.store.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return undefined;
+    }
+    return entry.data;
+  }
+
+  set(key: string, data: T): void {
+    this.store.set(key, { data, expiresAt: Date.now() + this.ttlMs });
+  }
+
+  invalidate(key: string): void {
+    this.store.delete(key);
+  }
+
+  /** Invalidate all entries whose key starts with the given prefix. */
+  invalidatePrefix(prefix: string): void {
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) this.store.delete(key);
+    }
+  }
+
+  get size(): number {
+    return this.store.size;
+  }
+}
+
+// ── Appwrite Service ──────────────────────────────────────────────
+
 export class AppwriteService {
   private client: Client;
   private realtimeClient: AppwriteClient;
@@ -20,7 +67,11 @@ export class AppwriteService {
   private milestoneUsersCollectionId = "milestone_users";
   private automodRulesCollectionId = "automod_rules";
   private aiUsageLogCollectionId = "ai_usage_log";
+  private tagsCollectionId = "tags";
   public storage: Storage;
+
+  // TTL cache for guild config lookups (60s default)
+  private configCache = new TTLCache<any>(60);
 
   constructor() {
     this.client = new Client()
@@ -69,6 +120,10 @@ export class AppwriteService {
   }
 
   async isModuleEnabled(guildId: string, moduleName: string): Promise<boolean> {
+    const cacheKey = `enabled:${guildId}:${moduleName.toLowerCase()}`;
+    const cached = this.configCache.get(cacheKey);
+    if (cached !== undefined) return cached as boolean;
+
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -79,17 +134,14 @@ export class AppwriteService {
         ],
       );
 
-      if (response.total > 0) {
-        return response.documents[0].enabled;
-      }
-
-      return true; // Default to enabled
+      const enabled = response.total > 0 ? response.documents[0].enabled : true;
+      this.configCache.set(cacheKey, enabled);
+      return enabled;
     } catch (error: any) {
       console.error(
         `[AppwriteService] Error checking module status for Guild:${guildId} Module:${moduleName}:`,
         error.message || error,
       );
-      // If it's a 404/Not Found or similar index error, defaulting to true is safer but we should know it happened
       return true;
     }
   }
@@ -125,6 +177,14 @@ export class AppwriteService {
           },
         );
       }
+
+      // Invalidate cache for this module
+      this.configCache.invalidate(
+        `enabled:${guildId}:${moduleName.toLowerCase()}`,
+      );
+      this.configCache.invalidate(
+        `settings:${guildId}:${moduleName.toLowerCase()}`,
+      );
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module status for ${guildId}/${moduleName}:`,
@@ -137,6 +197,10 @@ export class AppwriteService {
     guildId: string,
     moduleName: string,
   ): Promise<Record<string, any>> {
+    const cacheKey = `settings:${guildId}:${moduleName.toLowerCase()}`;
+    const cached = this.configCache.get(cacheKey);
+    if (cached !== undefined) return cached as Record<string, any>;
+
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -147,10 +211,12 @@ export class AppwriteService {
         ],
       );
 
+      let settings: Record<string, any> = {};
       if (response.total > 0 && response.documents[0].settings) {
-        return JSON.parse(response.documents[0].settings);
+        settings = JSON.parse(response.documents[0].settings);
       }
-      return {};
+      this.configCache.set(cacheKey, settings);
+      return settings;
     } catch (error) {
       console.error(
         `[AppwriteService] Error getting module settings for ${guildId}/${moduleName}:`,
@@ -197,11 +263,30 @@ export class AppwriteService {
           },
         );
       }
+
+      // Invalidate cache for this module
+      this.configCache.invalidate(
+        `settings:${guildId}:${moduleName.toLowerCase()}`,
+      );
+      this.configCache.invalidate(
+        `enabled:${guildId}:${moduleName.toLowerCase()}`,
+      );
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module settings for ${guildId}/${moduleName}:`,
         error,
       );
+    }
+  }
+
+  /** Force-invalidate cached settings for a guild (call after external dashboard changes). */
+  invalidateSettingsCache(guildId?: string): void {
+    if (guildId) {
+      this.configCache.invalidatePrefix(`enabled:${guildId}:`);
+      this.configCache.invalidatePrefix(`settings:${guildId}:`);
+    } else {
+      // Invalidate everything
+      this.configCache.invalidatePrefix("");
     }
   }
 
@@ -258,7 +343,9 @@ export class AppwriteService {
     serverId: string,
     guildId: string,
     status: boolean,
-    ping: number,
+    memberCount: number,
+    icon: string | null,
+    name: string,
     shardId: number,
   ) {
     try {
@@ -269,7 +356,9 @@ export class AppwriteService {
         {
           guild_id: guildId,
           status,
-          ping,
+          member_count: memberCount,
+          icon: icon,
+          name: name,
           shard_id: shardId,
           last_checked: new Date().toISOString(),
         },
@@ -884,6 +973,103 @@ export class AppwriteService {
         `[AppwriteService] Error setting premium status for ${guildId}:`,
         error,
       );
+    }
+  }
+
+  // ── Tags ─────────────────────────────────────────────────────────
+
+  async getTags(guildId: string): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tagsCollectionId,
+        [Query.equal("guild_id", guildId), Query.limit(100)],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching tags for ${guildId}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async getTagByName(guildId: string, name: string): Promise<any | null> {
+    const cacheKey = `tag:${guildId}:${name.toLowerCase()}`;
+    const cached = this.configCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tagsCollectionId,
+        [
+          Query.equal("guild_id", guildId),
+          Query.equal("name", name.toLowerCase()),
+          Query.limit(1),
+        ],
+      );
+      const tag = response.total > 0 ? response.documents[0] : null;
+      this.configCache.set(cacheKey, tag);
+      return tag;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching tag ${name} for ${guildId}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async createTag(data: {
+    guild_id: string;
+    name: string;
+    content?: string;
+    embed_data?: string;
+    allowed_roles?: string;
+    created_by?: string;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.tagsCollectionId,
+      ID.unique(),
+      {
+        ...data,
+        name: data.name.toLowerCase(),
+        updated_at: new Date().toISOString(),
+      },
+    );
+    this.configCache.invalidate(
+      `tag:${data.guild_id}:${data.name.toLowerCase()}`,
+    );
+    return doc.$id;
+  }
+
+  async updateTag(tagId: string, data: Record<string, any>): Promise<void> {
+    await this.databases.updateDocument(
+      this.databaseId,
+      this.tagsCollectionId,
+      tagId,
+      {
+        ...data,
+        updated_at: new Date().toISOString(),
+      },
+    );
+    // Invalidate tag cache for this guild
+    if (data.guild_id) {
+      this.configCache.invalidatePrefix(`tag:${data.guild_id}:`);
+    }
+  }
+
+  async deleteTag(tagId: string, guildId?: string): Promise<void> {
+    await this.databases.deleteDocument(
+      this.databaseId,
+      this.tagsCollectionId,
+      tagId,
+    );
+    if (guildId) {
+      this.configCache.invalidatePrefix(`tag:${guildId}:`);
     }
   }
 }

@@ -52,6 +52,7 @@ export function useServerSettings(guildId: string) {
       "recording",
       "milestones",
       "automod",
+      "logging",
     ].includes(moduleName.toLowerCase());
   };
 

@@ -204,7 +204,76 @@
         </div>
       </UCard>
 
-      <!-- ── Card 3: Rate Limiting & Limits ────────────────────────── -->
+      <!-- ── Card 3: Conversation Memory ──────────────────────────── -->
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-clock" class="w-5 h-5 text-cyan-400" />
+            <h2 class="font-semibold text-base">Conversation Memory</h2>
+          </div>
+        </template>
+
+        <div class="space-y-5">
+          <UFormField
+            label="Enable Context"
+            hint="When enabled, the bot remembers recent messages in each channel for more natural follow-up conversations."
+          >
+            <USwitch
+              v-model="settings.contextEnabled"
+              label="Remember conversation context"
+            />
+          </UFormField>
+
+          <UFormField
+            v-if="settings.contextEnabled"
+            label="Messages to Remember"
+            hint="How many recent messages to include as context per channel. More = better continuity but uses more tokens."
+          >
+            <div class="flex items-center gap-3">
+              <USlider
+                v-model="settings.contextMessageCount"
+                :min="1"
+                :max="20"
+                :step="1"
+                class="flex-1"
+              />
+              <span class="text-sm font-mono w-12 text-right">
+                {{ settings.contextMessageCount }} msg
+              </span>
+            </div>
+          </UFormField>
+
+          <UFormField
+            v-if="settings.contextEnabled"
+            label="Memory Duration (minutes)"
+            hint="Context messages older than this are forgotten. Keeps conversations fresh."
+          >
+            <div class="flex items-center gap-3">
+              <USlider
+                v-model="settings.contextTTLMinutes"
+                :min="1"
+                :max="60"
+                :step="1"
+                class="flex-1"
+              />
+              <span class="text-sm font-mono w-16 text-right">
+                {{ settings.contextTTLMinutes }} min
+              </span>
+            </div>
+          </UFormField>
+
+          <UAlert
+            v-if="settings.contextEnabled"
+            color="info"
+            variant="soft"
+            icon="i-heroicons-information-circle"
+            title="Token budget aware"
+            description="Context messages are automatically trimmed to fit within your Max Input Tokens limit. The new message always gets priority."
+          />
+        </div>
+      </UCard>
+
+      <!-- ── Card 4: Rate Limiting & Limits ────────────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
@@ -517,6 +586,9 @@ const settings = ref({
   rateLimitSeconds: 60,
   respondToDMs: false,
   toolUseEnabled: false,
+  contextEnabled: true,
+  contextMessageCount: 5,
+  contextTTLMinutes: 15,
 });
 
 const availableModels = ref<string[]>([

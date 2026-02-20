@@ -287,6 +287,27 @@ const collections: CollectionDef[] = [
       },
     ],
   },
+  {
+    id: "tags",
+    name: "Tags",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "name", type: "string", size: 128, required: true },
+      { key: "content", type: "string", size: 4096, required: false },
+      { key: "embed_data", type: "string", size: 16384, required: false },
+      { key: "allowed_roles", type: "string", size: 2048, required: false },
+      { key: "created_by", type: "string", size: 64, required: false },
+      { key: "updated_at", type: "string", size: 64, required: false },
+    ],
+    indexes: [
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+      {
+        key: "idx_guild_name",
+        type: "unique",
+        attributes: ["guild_id", "name"],
+      },
+    ],
+  },
 ];
 
 // ──────────────────────────────────────────────

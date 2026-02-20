@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events } from "discord.js";
+import { Client, GatewayIntentBits, Events, Partials } from "discord.js";
 import { Player } from "discord-player";
 import { DefaultExtractors } from "@discord-player/extractor";
 import { YoutubeiExtractor } from "discord-player-youtubei";
@@ -16,6 +16,7 @@ import { registerWelcomeEvents } from "./modules/welcome";
 import { registerMilestoneEvents } from "./modules/milestones";
 import { registerAutoModEvents } from "./modules/automod";
 import { registerAIEvents } from "./modules/ai";
+import { registerLoggingEvents } from "./modules/logging";
 import { registerMusicAPI } from "./MusicAPI";
 
 dotenv.config();
@@ -27,7 +28,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildModeration,
   ],
+  partials: [Partials.Message, Partials.Channel, Partials.GuildMember],
 });
 
 // Initialize discord-player
@@ -135,6 +139,7 @@ client.once("ready", async () => {
   registerMilestoneEvents(moduleManager);
   registerAutoModEvents(moduleManager);
   registerAIEvents(moduleManager);
+  registerLoggingEvents(moduleManager);
   serverStatusService.start();
 
   let botVersion = process.env.npm_package_version || "1.0.0";

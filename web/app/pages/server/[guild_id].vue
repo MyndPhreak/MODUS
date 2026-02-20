@@ -44,10 +44,12 @@ const activeTab = computed(() => {
   if (path.includes("/modules/music")) return "music";
   if (path.includes("/modules/moderation")) return "moderation";
   if (path.includes("/modules/automod")) return "automod";
+  if (path.includes("/modules/logging")) return "logging";
   if (path.includes("/modules/milestones")) return "milestones";
   if (path.includes("/modules/ai")) return "ai";
   if (path.includes("/modules")) return "modules";
   if (path.includes("/embeds")) return "embeds";
+  if (path.includes("/tags")) return "tags";
   if (path.includes("/welcome")) return "welcome";
   if (path.includes("/logs")) return "logs";
   return "modules";
@@ -81,6 +83,12 @@ const sidebarTabs = computed(() => [
     to: `${basePath}/modules/automod`,
   },
   {
+    id: "logging",
+    label: "Audit Logging",
+    icon: "i-heroicons-clipboard-document-list",
+    to: `${basePath}/modules/logging`,
+  },
+  {
     id: "ai",
     label: "AI Assistant",
     icon: "i-heroicons-cpu-chip",
@@ -104,6 +112,12 @@ const sidebarTabs = computed(() => [
     icon: "i-heroicons-paint-brush",
     to: `${basePath}/embeds`,
     separator: true,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    icon: "i-heroicons-tag",
+    to: `${basePath}/tags`,
   },
   {
     id: "welcome",

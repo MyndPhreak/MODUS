@@ -423,12 +423,9 @@ const addServer = async (guild: any) => {
       guild_id: guild.id,
       name: guild.name,
       status: false,
-      ping: 0,
       owner_id: userStore.user!.$id,
       last_checked: new Date().toISOString(),
-      icon: guild.icon
-        ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
-        : null,
+      icon: guild.icon || null,
     });
 
     toast.add({

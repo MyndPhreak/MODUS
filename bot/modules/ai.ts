@@ -48,6 +48,11 @@ export interface AIModuleSettings {
   // Toggles
   respondToDMs?: boolean;
   toolUseEnabled?: boolean;
+
+  // Context & Memory (Phase 3)
+  contextEnabled?: boolean; // Enable conversation context (default: true)
+  contextMessageCount?: number; // Max messages to remember per channel (default: 5)
+  contextTTLMinutes?: number; // How long to remember context (default: 15)
 }
 
 interface ToolCall {
@@ -60,6 +65,92 @@ interface LLMResponse {
   tool_call?: ToolCall; // set when the model chose a tool instead of text
   input_tokens: number;
   output_tokens: number;
+}
+
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface ConversationEntry {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number; // Date.now()
+}
+
+// ── Per-Channel Conversation Context Buffer ────────────────────────
+// Key: channelId → array of recent exchanges (user + assistant).
+// Pruned by TTL and max count before each call.
+
+const channelContext = new Map<string, ConversationEntry[]>();
+
+function pruneContext(
+  channelId: string,
+  maxCount: number,
+  ttlMinutes: number,
+): ConversationEntry[] {
+  const entries = channelContext.get(channelId);
+  if (!entries || entries.length === 0) return [];
+
+  const cutoff = Date.now() - ttlMinutes * 60 * 1000;
+
+  // Drop entries older than the TTL
+  const fresh = entries.filter((e) => e.timestamp >= cutoff);
+
+  // Keep only the last N entries
+  const trimmed = fresh.slice(-maxCount);
+
+  // Update the map
+  if (trimmed.length === 0) {
+    channelContext.delete(channelId);
+  } else {
+    channelContext.set(channelId, trimmed);
+  }
+
+  return trimmed;
+}
+
+function pushContext(
+  channelId: string,
+  role: "user" | "assistant",
+  content: string,
+) {
+  if (!channelContext.has(channelId)) {
+    channelContext.set(channelId, []);
+  }
+  channelContext.get(channelId)!.push({
+    role,
+    content,
+    timestamp: Date.now(),
+  });
+}
+
+/** Rough token estimate: ~4 chars per token. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Build the context messages that fit within the remaining token budget.
+ * Returns an array of ChatMessage entries (oldest first) that fit.
+ */
+function buildContextMessages(
+  entries: ConversationEntry[],
+  remainingTokenBudget: number,
+): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  let tokensUsed = 0;
+
+  // Walk backwards from most recent, collect entries that fit
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    const entryTokens = estimateTokens(entry.content);
+    if (tokensUsed + entryTokens > remainingTokenBudget) break;
+    result.unshift({ role: entry.role, content: entry.content });
+    tokensUsed += entryTokens;
+  }
+
+  return result;
 }
 
 // ── Cost Estimation ────────────────────────────────────────────────
@@ -238,12 +329,15 @@ async function callLLM(
   provider: AIProvider,
   apiKey: string,
   model: string,
-  systemPrompt: string,
-  userMessage: string,
+  messages: ChatMessage[],
   maxOutputTokens: number,
   baseUrl?: string,
   toolsEnabled?: boolean,
 ): Promise<LLMResponse> {
+  // Separate out system prompt from conversation messages
+  const systemMsg = messages.find((m) => m.role === "system");
+  const systemPrompt = systemMsg?.content ?? "";
+  const conversationMessages = messages.filter((m) => m.role !== "system");
   // ── Anthropic path ──────────────────────────────────────────────
   if (provider === "Anthropic Claude") {
     const anthropic = new Anthropic({ apiKey });
@@ -252,7 +346,10 @@ async function callLLM(
       model,
       max_tokens: maxOutputTokens,
       system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
+      messages: conversationMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
       ...(toolsEnabled ? { tools: ANTHROPIC_TOOLS } : {}),
     };
 
@@ -296,8 +393,11 @@ async function callLLM(
     model,
     max_tokens: maxOutputTokens,
     messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
+      { role: "system" as const, content: systemPrompt },
+      ...conversationMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
     ],
     ...(toolsEnabled ? { tools: OPENAI_TOOLS, tool_choice: "auto" } : {}),
   });
@@ -487,6 +587,9 @@ const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
   rateLimitSeconds: 60,
   respondToDMs: false,
   toolUseEnabled: false,
+  contextEnabled: true,
+  contextMessageCount: 5,
+  contextTTLMinutes: 15,
 };
 
 // ── Module Definition ──────────────────────────────────────────────
@@ -705,17 +808,56 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         effectiveSystemPrompt += TOOL_USE_SYSTEM_PROMPT_APPENDIX;
       }
 
+      // ─ Build messages array with conversation context ────────────
+      const channelId = message.channel.id;
+      const llmMessages: ChatMessage[] = [
+        { role: "system", content: effectiveSystemPrompt },
+      ];
+
+      // Add context messages if enabled
+      if (settings.contextEnabled) {
+        const contextEntries = pruneContext(
+          channelId,
+          settings.contextMessageCount,
+          settings.contextTTLMinutes,
+        );
+
+        if (contextEntries.length > 0) {
+          // Reserve tokens for the new user message, leave the rest for context
+          const newMsgTokens = estimateTokens(trimmedMessage);
+          const systemTokens = estimateTokens(effectiveSystemPrompt);
+          const remainingBudget = Math.max(
+            0,
+            settings.maxInputTokens - newMsgTokens - systemTokens,
+          );
+
+          const contextMessages = buildContextMessages(
+            contextEntries,
+            remainingBudget,
+          );
+
+          if (contextMessages.length > 0) {
+            llmMessages.push(...contextMessages);
+            console.log(
+              `[AI] Including ${contextMessages.length} context messages for channel ${channelId}`,
+            );
+          }
+        }
+      }
+
+      // Add the new user message
+      llmMessages.push({ role: "user", content: trimmedMessage });
+
       // ─ Call the LLM ─────────────────────────────────────────────
       console.log(
-        `[AI] Calling LLM: provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}`,
+        `[AI] Calling LLM: provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}, messages=${llmMessages.length}`,
       );
 
       const result = await callLLM(
         settings.aiProvider,
         apiKey,
         settings.aiModel,
-        effectiveSystemPrompt,
-        trimmedMessage,
+        llmMessages,
         settings.maxOutputTokens,
         settings.aiBaseUrl || undefined,
         settings.toolUseEnabled,
@@ -753,6 +895,13 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       }
 
       await message.reply(reply);
+
+      // ─ Push to context buffer ────────────────────────────────────
+      if (settings.contextEnabled) {
+        const channelId = message.channel.id;
+        pushContext(channelId, "user", trimmedMessage);
+        pushContext(channelId, "assistant", reply);
+      }
 
       // ─ Log usage ─────────────────────────────────────────────────
       const totalTokens = result.input_tokens + result.output_tokens;

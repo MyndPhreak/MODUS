@@ -1,4 +1,3 @@
-import net from "net";
 import { Client } from "discord.js";
 import { AppwriteService } from "./AppwriteService";
 
@@ -34,16 +33,20 @@ export class ServerStatusService {
 
     for (const server of servers) {
       try {
-        const startTime = Date.now();
-        const isOnline = await this.pingServer(server.ip, server.port);
-        const ping = isOnline ? Date.now() - startTime : 0;
+        const guild = this.client.guilds.cache.get(server.$id);
+        const isOnline = !!guild;
+        const memberCount = guild?.memberCount ?? 0;
+        const icon = guild?.icon ?? null;
+        const name = guild?.name ?? server.name;
 
         const shardId = this.client.shard?.ids[0] ?? 0;
         await this.appwriteService.updateServerStatus(
           server.$id,
           server.guild_id,
           isOnline,
-          ping,
+          memberCount,
+          icon,
+          name,
           shardId,
         );
       } catch (error) {
@@ -53,29 +56,5 @@ export class ServerStatusService {
         );
       }
     }
-  }
-
-  private pingServer(ip: string, port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const socket = new net.Socket();
-      socket.setTimeout(5000); // 5 second timeout
-
-      socket.on("connect", () => {
-        socket.destroy();
-        resolve(true);
-      });
-
-      socket.on("timeout", () => {
-        socket.destroy();
-        resolve(false);
-      });
-
-      socket.on("error", () => {
-        socket.destroy();
-        resolve(false);
-      });
-
-      socket.connect(port, ip);
-    });
   }
 }
