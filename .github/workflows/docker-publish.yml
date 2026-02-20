@@ -2,8 +2,9 @@
 # MODUS — Build & Publish Docker Images to GHCR
 #
 # Triggers:
-#   1. On release published  → builds :latest + :1.2.0 + :1.2 + :1
-#   2. On manual dispatch    → builds :latest
+#   1. Called by release-please after creating a release (workflow_call)
+#   2. On release published (manual/external releases)
+#   3. On manual dispatch
 #
 # Publishes:
 #   ghcr.io/<owner>/modus-bot:<tag>
@@ -13,6 +14,12 @@
 name: Build & Publish Docker Images
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Semver version (e.g. 1.2.0)"
+        required: false
+        type: string
   release:
     types: [published]
   workflow_dispatch: # Allow manual trigger from GitHub UI
@@ -45,14 +52,16 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-bot
           tags: |
-            # Always tag :latest on default branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            # Always tag :latest
+            type=raw,value=latest
             # Short SHA for traceability
             type=sha,prefix=
             # Semver tags from release events (v1.2.0 → 1.2.0, 1.2, 1)
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            # Semver tags from workflow_call input
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Build and push Bot image
         uses: docker/build-push-action@v5
@@ -87,11 +96,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=sha,prefix=
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Build and push Web image
         uses: docker/build-push-action@v5
