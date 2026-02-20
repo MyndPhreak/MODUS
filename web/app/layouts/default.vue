@@ -63,7 +63,7 @@ async function handleLogout() {
         >
           <div class="relative flex-shrink-0">
             <img
-              src="/modus2.svg"
+              src="/modus2-animated.svg"
               alt="MODUS Logo"
               class="relative w-16 rounded-xl"
             />

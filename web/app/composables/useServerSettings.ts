@@ -46,9 +46,13 @@ export function useServerSettings(guildId: string) {
   };
 
   const hasModuleSettings = (moduleName: string): boolean => {
-    return ["music", "moderation", "recording", "milestones"].includes(
-      moduleName.toLowerCase(),
-    );
+    return [
+      "music",
+      "moderation",
+      "recording",
+      "milestones",
+      "automod",
+    ].includes(moduleName.toLowerCase());
   };
 
   const toggleModule = async (moduleName: string, enabled: boolean) => {

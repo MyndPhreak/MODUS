@@ -4,6 +4,9 @@ import {
   AutocompleteInteraction,
   EmbedBuilder,
   GuildMember,
+  VoiceBasedChannel,
+  User,
+  TextBasedChannel,
 } from "discord.js";
 import {
   useMainPlayer,
@@ -1327,5 +1330,208 @@ const musicModule: BotModule = {
     }
   },
 };
+
+// ─── AI Tool Action Exports ───────────────────────────────────────────────
+// Interaction-free functions called by the AI module's tool router.
+// They bypass ChatInputCommandInteraction entirely and return a plain result
+// so the AI can compose a natural-language reply from the outcome.
+
+export interface MusicActionResult {
+  ok: boolean;
+  message: string;
+}
+
+/** Play a track by search query or URL. The caller must supply the author's voice channel. */
+export async function musicPlay(
+  guildId: string,
+  voiceChannel: VoiceBasedChannel,
+  query: string,
+  requestedBy: User,
+  moduleManager: ModuleManager,
+  notifyChannel?: TextBasedChannel,
+): Promise<MusicActionResult> {
+  try {
+    const settings = await getSettings(moduleManager, guildId);
+    const player = useMainPlayer();
+
+    const isUrl = /^https?:\/\//i.test(query);
+    const result = await player.play(voiceChannel, query, {
+      searchEngine: isUrl
+        ? QueryType.AUTO
+        : `ext:${YoutubeiExtractor.identifier}`,
+      nodeOptions: {
+        metadata: { channel: notifyChannel ?? null },
+        volume: settings.defaultVolume,
+        bufferingTimeout: 15_000,
+        selfDeaf: true,
+        leaveOnEmpty: true,
+        leaveOnEmptyCooldown: 60000,
+        leaveOnEnd: true,
+        leaveOnEndCooldown: 60000,
+      },
+      requestedBy,
+    });
+
+    const queue = player.queues.get(guildId);
+    if (queue && queue.tracks.size > settings.maxQueueSize) {
+      return {
+        ok: false,
+        message: `Queue limit reached (${settings.maxQueueSize} tracks). Remove some tracks first.`,
+      };
+    }
+
+    const track = result.track;
+    const queued = queue && queue.tracks.size > 0;
+    const verb = queued ? "Added to queue" : "Now playing";
+    return {
+      ok: true,
+      message: `🎵 ${verb}: **${track.title}** by ${track.author || "Unknown"} (${track.duration || "Live"})`,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      message: `Could not play: ${err?.message ?? "Unknown error"}`,
+    };
+  }
+}
+
+/** Skip the current track. */
+export async function musicSkip(guildId: string): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue || !queue.currentTrack) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
+  const title = queue.currentTrack.title;
+  queue.node.skip();
+  return { ok: true, message: `⏭️ Skipped **${title}**.` };
+}
+
+/** Stop playback and clear the queue. */
+export async function musicStop(
+  guildId: string,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
+  try {
+    const settings = await getSettings(moduleManager, guildId);
+    if (settings.updateNickname) updateBotNickname(queue);
+  } catch {}
+  queue.delete();
+  try {
+    player.queues.delete(guildId);
+  } catch {}
+  return { ok: true, message: "⏹️ Stopped playback and cleared the queue." };
+}
+
+/** Pause the current track. */
+export async function musicPause(guildId: string): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue) return { ok: false, message: "Nothing is currently playing." };
+  if (queue.node.isPaused()) return { ok: false, message: "Already paused." };
+  queue.node.pause();
+  return { ok: true, message: "⏸️ Paused." };
+}
+
+/** Resume a paused track. */
+export async function musicResume(guildId: string): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue) return { ok: false, message: "Nothing is currently playing." };
+  if (!queue.node.isPaused())
+    return { ok: false, message: "Not currently paused." };
+  queue.node.resume();
+  return { ok: true, message: "▶️ Resumed." };
+}
+
+/** Set the playback volume (1–100). */
+export async function musicSetVolume(
+  guildId: string,
+  level: number,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue) return { ok: false, message: "Nothing is currently playing." };
+
+  const clamped = Math.max(1, Math.min(100, Math.round(level)));
+  queue.node.setVolume(clamped);
+
+  try {
+    const settings = await getSettings(moduleManager, guildId);
+    settings.defaultVolume = clamped;
+    await moduleManager.appwriteService.setModuleSettings(
+      guildId,
+      "music",
+      settings,
+    );
+  } catch {}
+
+  return { ok: true, message: `🔊 Volume set to **${clamped}%**.` };
+}
+
+/** Return a text summary of the current queue. */
+export async function musicGetQueue(
+  guildId: string,
+): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue || (!queue.isPlaying() && queue.tracks.size === 0)) {
+    return { ok: true, message: "📭 The queue is empty." };
+  }
+
+  const current = queue.currentTrack;
+  const tracks = queue.tracks.toArray().slice(0, 5); // cap at 5 for brevity
+  const lines: string[] = [];
+
+  if (current)
+    lines.push(`**Now Playing:** ${current.title} — \`${current.duration}\``);
+  tracks.forEach((t, i) =>
+    lines.push(`**${i + 1}.** ${t.title} — \`${t.duration}\``),
+  );
+
+  const remaining = queue.tracks.size - tracks.length;
+  if (remaining > 0)
+    lines.push(`…and ${remaining} more track${remaining !== 1 ? "s" : ""}.`);
+
+  return { ok: true, message: lines.join("\n") };
+}
+
+/** Return now-playing info as a short text summary. */
+export async function musicGetNowPlaying(
+  guildId: string,
+): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue || !queue.currentTrack) {
+    return { ok: true, message: "Nothing is currently playing." };
+  }
+  const t = queue.currentTrack;
+  return {
+    ok: true,
+    message: `🎵 **${t.title}** by ${t.author || "Unknown"} — \`${t.duration}\` | Volume: ${queue.node.volume}%`,
+  };
+}
+
+/** Shuffle the queue. */
+export async function musicShuffle(
+  guildId: string,
+): Promise<MusicActionResult> {
+  const player = useMainPlayer();
+  const queue = player.queues.get(guildId);
+  if (!queue || queue.tracks.size < 2) {
+    return { ok: false, message: "Not enough tracks in the queue to shuffle." };
+  }
+  queue.tracks.shuffle();
+  return {
+    ok: true,
+    message: `🔀 Queue shuffled! (${queue.tracks.size} tracks)`,
+  };
+}
 
 export default musicModule;

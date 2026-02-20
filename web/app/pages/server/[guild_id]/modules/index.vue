@@ -205,6 +205,16 @@ const moduleStyle = (name: string) => {
       bgClass: "bg-amber-500/10 border border-amber-500/20",
       iconClass: "text-amber-400",
     },
+    automod: {
+      icon: "i-heroicons-funnel",
+      bgClass: "bg-orange-500/10 border border-orange-500/20",
+      iconClass: "text-orange-400",
+    },
+    ai: {
+      icon: "i-heroicons-cpu-chip",
+      bgClass: "bg-violet-500/10 border border-violet-500/20",
+      iconClass: "text-violet-400",
+    },
   };
   return (
     styles[name.toLowerCase()] || {

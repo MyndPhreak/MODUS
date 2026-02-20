@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@nuxt/ui": "latest",
     "@pinia/nuxt": "^0.11.3",
     "@tailwindcss/vite": "latest",
@@ -19,6 +20,7 @@
     "lucide-vue-next": "latest",
     "node-appwrite": "^14.1.0",
     "nuxt": "^4.2.1",
+    "openai": "^6.22.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "tailwindcss": "latest",

@@ -5,11 +5,11 @@
     .cls-1{fill:#92d4dc;}
     .cls-2{fill:#fff;}
     .cls-3{fill:#294255;}
-    .orbit { stroke: rgba(146, 212, 220, 0.4); stroke-width: 2; fill: none; stroke-dasharray: 4 8; }
-    .neuron { fill: #fff; }
+    .orbit { stroke: rgba(0,0,0,0); stroke-width: 2; fill: none; stroke-dasharray: 4 8; }
+    .neuron { fill: #ffffff88; }
   </style>
   <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-    <feGaussianBlur stdDeviation="0" result="blur" />
+    <feGaussianBlur stdDeviation="10" result="blur" />
     <feMerge>
       <feMergeNode in="blur" />
       <feMergeNode in="SourceGraphic" />
@@ -26,8 +26,8 @@
   </clipPath>
 </defs>
 
-<!-- Orbit Paths drawn behind the brain, naturally masked by the brain layer -->
-<g class="orbit">
+<!-- Orbit Paths drawn behind the brain (Top halves) -->
+<g class="orbit" clip-path="url(#back-clip)">
   <use href="#orbit-path" transform="rotate(30 512 512)" />
   <use href="#orbit-path" transform="rotate(90 512 512)" />
   <use href="#orbit-path" transform="rotate(150 512 512)" />
@@ -136,6 +136,13 @@
       </animateMotion>
       <animate attributeName="r" values="18; 6; 18; 42; 18" keyTimes="0; 0.25; 0.5; 0.75; 1" dur="6s" begin="-5.4s" repeatCount="indefinite" />
     </circle>
+</g>
+
+<!-- Orbit Paths drawn in front of the brain (Bottom halves) -->
+<g class="orbit" clip-path="url(#front-clip)">
+  <use href="#orbit-path" transform="rotate(30 512 512)" />
+  <use href="#orbit-path" transform="rotate(90 512 512)" />
+  <use href="#orbit-path" transform="rotate(150 512 512)" />
 </g>
 
 </svg>

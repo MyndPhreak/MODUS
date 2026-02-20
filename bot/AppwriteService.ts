@@ -18,6 +18,8 @@ export class AppwriteService {
   private recordingTracksCollectionId = "recording_tracks";
   private recordingsBucketId = "recordings";
   private milestoneUsersCollectionId = "milestone_users";
+  private automodRulesCollectionId = "automod_rules";
+  private aiUsageLogCollectionId = "ai_usage_log";
   public storage: Storage;
 
   constructor() {
@@ -627,6 +629,261 @@ export class AppwriteService {
         error,
       );
       return 0;
+    }
+  }
+
+  // ── AutoMod Rules ──────────────────────────────────────────────────────
+
+  async getAutoModRules(guildId: string, trigger?: string): Promise<any[]> {
+    try {
+      const queries = [Query.equal("guild_id", guildId), Query.limit(100)];
+      if (trigger) {
+        queries.push(Query.equal("trigger", trigger));
+      }
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.automodRulesCollectionId,
+        queries,
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching automod rules for ${guildId}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async getEnabledAutoModRules(
+    guildId: string,
+    trigger: string,
+  ): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.automodRulesCollectionId,
+        [
+          Query.equal("guild_id", guildId),
+          Query.equal("enabled", true),
+          Query.equal("trigger", trigger),
+          Query.limit(100),
+        ],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching enabled automod rules for ${guildId}/${trigger}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async createAutoModRule(data: {
+    guild_id: string;
+    name: string;
+    enabled: boolean;
+    priority?: number;
+    trigger: string;
+    conditions: string;
+    actions: string;
+    exempt_roles?: string;
+    exempt_channels?: string;
+    cooldown?: number;
+    created_by?: string;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.automodRulesCollectionId,
+      ID.unique(),
+      {
+        ...data,
+        updated_at: new Date().toISOString(),
+      },
+    );
+    return doc.$id;
+  }
+
+  async updateAutoModRule(
+    ruleId: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    await this.databases.updateDocument(
+      this.databaseId,
+      this.automodRulesCollectionId,
+      ruleId,
+      {
+        ...data,
+        updated_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  async deleteAutoModRule(ruleId: string): Promise<void> {
+    await this.databases.deleteDocument(
+      this.databaseId,
+      this.automodRulesCollectionId,
+      ruleId,
+    );
+  }
+
+  // ── Global AI Config (admin-set fallback) ────────────────────────
+  // Stored as guild_configs { guildId: "__global__", moduleName: "ai" }
+
+  async getGlobalAIConfig(): Promise<Record<string, any> | null> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.guildConfigsCollectionId,
+        [
+          Query.equal("guildId", "__global__"),
+          Query.equal("moduleName", "ai"),
+          Query.limit(1),
+        ],
+      );
+      if (response.total > 0 && response.documents[0].settings) {
+        return JSON.parse(response.documents[0].settings);
+      }
+      return null;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching global AI config:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async setGlobalAIConfig(config: Record<string, any>): Promise<void> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.guildConfigsCollectionId,
+        [
+          Query.equal("guildId", "__global__"),
+          Query.equal("moduleName", "ai"),
+          Query.limit(1),
+        ],
+      );
+      if (response.total > 0) {
+        await this.databases.updateDocument(
+          this.databaseId,
+          this.guildConfigsCollectionId,
+          response.documents[0].$id,
+          { settings: JSON.stringify(config) },
+        );
+      } else {
+        await this.databases.createDocument(
+          this.databaseId,
+          this.guildConfigsCollectionId,
+          ID.unique(),
+          {
+            guildId: "__global__",
+            moduleName: "ai",
+            enabled: true,
+            settings: JSON.stringify(config),
+          },
+        );
+      }
+    } catch (error) {
+      console.error(`[AppwriteService] Error saving global AI config:`, error);
+    }
+  }
+
+  // ── AI Usage Logging ─────────────────────────────────────────────
+
+  async logAIUsage(data: {
+    guildId: string;
+    userId: string;
+    provider: string;
+    model: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    estimated_cost?: number;
+    action?: string;
+    key_source: "guild" | "shared";
+  }): Promise<void> {
+    try {
+      await this.databases.createDocument(
+        this.databaseId,
+        this.aiUsageLogCollectionId,
+        ID.unique(),
+        {
+          ...data,
+          action: data.action ?? "chat",
+          timestamp: new Date().toISOString(),
+        },
+      );
+    } catch (error) {
+      console.error(`[AppwriteService] Error logging AI usage:`, error);
+    }
+  }
+
+  async getAIUsageLogs(guildId: string, limit = 50): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.aiUsageLogCollectionId,
+        [
+          Query.equal("guildId", guildId),
+          Query.orderDesc("timestamp"),
+          Query.limit(limit),
+        ],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching AI usage logs for ${guildId}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  // ── Premium Guild Management ─────────────────────────────────
+
+  async isGuildPremium(guildId: string): Promise<boolean> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.serversCollectionId,
+        [Query.equal("guild_id", guildId), Query.limit(1)],
+      );
+      if (response.total > 0) {
+        return response.documents[0].premium === true;
+      }
+      return false;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error checking premium status for ${guildId}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  async setGuildPremium(guildId: string, premium: boolean): Promise<void> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.serversCollectionId,
+        [Query.equal("guild_id", guildId), Query.limit(1)],
+      );
+      if (response.total > 0) {
+        await this.databases.updateDocument(
+          this.databaseId,
+          this.serversCollectionId,
+          response.documents[0].$id,
+          { premium },
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error setting premium status for ${guildId}:`,
+        error,
+      );
     }
   }
 }

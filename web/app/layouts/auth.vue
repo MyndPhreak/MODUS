@@ -19,7 +19,11 @@
     <div class="w-full max-w-md p-6 z-10">
       <div class="flex flex-col items-center mb-10">
         <div class="relative -mb-6">
-          <img src="/modus2.svg" alt="MODUS Logo" class="w-40 logo-glow" />
+          <img
+            src="/modus2-animated.svg"
+            alt="MODUS Logo"
+            class="w-40 logo-glow"
+          />
         </div>
         <h1 class="text-3xl font-black text-white tracking-tighter mt-2">
           MODUS

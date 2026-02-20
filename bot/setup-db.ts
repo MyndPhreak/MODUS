@@ -75,6 +75,7 @@ const collections: CollectionDef[] = [
       { key: "is_public", type: "boolean", required: false, default: false },
       { key: "description", type: "string", size: 1024, required: false },
       { key: "invite_link", type: "string", size: 512, required: false },
+      { key: "premium", type: "boolean", required: false, default: false },
     ],
     indexes: [
       { key: "idx_guild_id", type: "unique", attributes: ["guild_id"] },
@@ -209,6 +210,79 @@ const collections: CollectionDef[] = [
         key: "idx_guild_chars",
         type: "key",
         attributes: ["guild_id", "char_count"],
+        orders: ["ASC", "DESC"],
+      },
+    ],
+  },
+  {
+    id: "automod_rules",
+    name: "AutoMod Rules",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "name", type: "string", size: 256, required: true },
+      { key: "enabled", type: "boolean", required: false, default: true },
+      { key: "priority", type: "integer", required: false },
+      { key: "trigger", type: "string", size: 64, required: true },
+      // JSON-serialised condition tree and actions array
+      { key: "conditions", type: "string", size: 16384, required: true },
+      { key: "actions", type: "string", size: 8192, required: true },
+      // Optional filters
+      { key: "exempt_roles", type: "string", size: 2048, required: false },
+      { key: "exempt_channels", type: "string", size: 2048, required: false },
+      { key: "cooldown", type: "integer", required: false },
+      // Metadata
+      { key: "created_by", type: "string", size: 64, required: false },
+      { key: "updated_at", type: "string", size: 64, required: false },
+    ],
+    indexes: [
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+      {
+        key: "idx_guild_enabled",
+        type: "key",
+        attributes: ["guild_id", "enabled"],
+      },
+      {
+        key: "idx_guild_trigger",
+        type: "key",
+        attributes: ["guild_id", "trigger"],
+      },
+    ],
+  },
+  {
+    id: "ai_usage_log",
+    name: "AI Usage Log",
+    attributes: [
+      { key: "guildId", type: "string", size: 64, required: true },
+      { key: "userId", type: "string", size: 64, required: true },
+      { key: "provider", type: "string", size: 64, required: true },
+      { key: "model", type: "string", size: 128, required: true },
+      { key: "input_tokens", type: "integer", required: false },
+      { key: "output_tokens", type: "integer", required: false },
+      { key: "total_tokens", type: "integer", required: false },
+      { key: "estimated_cost", type: "float", required: false },
+      {
+        key: "action",
+        type: "string",
+        size: 32,
+        required: false,
+        default: "chat",
+      },
+      { key: "key_source", type: "string", size: 16, required: false },
+      { key: "timestamp", type: "string", size: 64, required: true },
+    ],
+    indexes: [
+      { key: "idx_guildId", type: "key", attributes: ["guildId"] },
+      { key: "idx_userId", type: "key", attributes: ["userId"] },
+      {
+        key: "idx_timestamp",
+        type: "key",
+        attributes: ["timestamp"],
+        orders: ["DESC"],
+      },
+      {
+        key: "idx_guild_timestamp",
+        type: "key",
+        attributes: ["guildId", "timestamp"],
         orders: ["ASC", "DESC"],
       },
     ],

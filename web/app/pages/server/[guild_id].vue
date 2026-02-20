@@ -43,7 +43,9 @@ const activeTab = computed(() => {
   if (path.includes("/modules/recording")) return "recording";
   if (path.includes("/modules/music")) return "music";
   if (path.includes("/modules/moderation")) return "moderation";
+  if (path.includes("/modules/automod")) return "automod";
   if (path.includes("/modules/milestones")) return "milestones";
+  if (path.includes("/modules/ai")) return "ai";
   if (path.includes("/modules")) return "modules";
   if (path.includes("/embeds")) return "embeds";
   if (path.includes("/welcome")) return "welcome";
@@ -71,6 +73,18 @@ const sidebarTabs = computed(() => [
     label: "Moderation",
     icon: "i-heroicons-shield-exclamation",
     to: `${basePath}/modules/moderation`,
+  },
+  {
+    id: "automod",
+    label: "AutoMod",
+    icon: "i-heroicons-funnel",
+    to: `${basePath}/modules/automod`,
+  },
+  {
+    id: "ai",
+    label: "AI Assistant",
+    icon: "i-heroicons-cpu-chip",
+    to: `${basePath}/modules/ai`,
   },
   {
     id: "recording",

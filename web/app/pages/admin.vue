@@ -97,6 +97,233 @@
         </p>
       </section>
 
+      <!-- Global AI Settings -->
+      <section>
+        <div class="flex items-center gap-3 mb-4">
+          <div
+            class="p-2 rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20"
+          >
+            <UIcon
+              name="i-heroicons-cpu-chip"
+              class="w-5 h-5 text-violet-400"
+            />
+          </div>
+          <div>
+            <h2 class="text-2xl font-semibold">Global AI Settings</h2>
+            <p class="text-sm text-gray-500">
+              Default provider &amp; key used by all Premium guilds that haven't
+              configured their own. Falls back to
+              <code class="text-xs bg-gray-800 px-1 rounded">.env</code> if not
+              set here.
+            </p>
+          </div>
+        </div>
+
+        <UCard>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <UFormField label="Default Provider">
+              <USelectMenu
+                v-model="globalAI.aiProvider"
+                :items="aiProviderOptions"
+                value-key="value"
+                placeholder="Select provider..."
+                :search-input="false"
+              />
+            </UFormField>
+
+            <UFormField label="API Key">
+              <UInput
+                v-model="globalAI.aiApiKey"
+                type="password"
+                placeholder="sk-... or your provider key"
+                icon="i-heroicons-lock-closed"
+                autocomplete="off"
+              />
+            </UFormField>
+
+            <UFormField label="Default Model">
+              <div class="flex gap-2">
+                <USelectMenu
+                  v-model="globalAI.aiModel"
+                  :items="globalAIModels"
+                  :loading="globalAIModelsLoading"
+                  :disabled="globalAIModelsLoading"
+                  :search-input="{ placeholder: 'Search models...' }"
+                  placeholder="Select or type a model..."
+                  class="flex-1"
+                />
+                <UButton
+                  icon="i-heroicons-arrow-path"
+                  variant="ghost"
+                  :loading="globalAIModelsLoading"
+                  :disabled="!globalAI.aiApiKey"
+                  title="Fetch available models"
+                  @click="fetchGlobalAIModels"
+                />
+              </div>
+              <p
+                v-if="globalAIModelsWarning"
+                class="text-xs text-amber-400 mt-1"
+              >
+                {{ globalAIModelsWarning }}
+              </p>
+            </UFormField>
+
+            <UFormField label="Base URL">
+              <UInput
+                v-model="globalAI.aiBaseUrl"
+                placeholder="http://localhost:11434/v1 (optional — Ollama/LM Studio only)"
+                icon="i-heroicons-globe-alt"
+              />
+            </UFormField>
+          </div>
+
+          <div
+            class="mt-4 pt-4 border-t border-gray-800 flex flex-wrap items-center gap-3"
+          >
+            <span class="text-xs text-gray-500">Get an API key:</span>
+            <a
+              v-for="link in aiProviderLinks"
+              :key="link.name"
+              :href="link.url"
+              target="_blank"
+              class="text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 transition-colors"
+              >{{ link.name }}</a
+            >
+          </div>
+
+          <template #footer>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-gray-500">
+                <UIcon
+                  name="i-heroicons-information-circle"
+                  class="inline w-3.5 h-3.5 mb-0.5"
+                />
+                Stored in Appwrite — never exposed to guild admins.
+              </p>
+              <UButton
+                icon="i-heroicons-check"
+                :loading="savingGlobalAI"
+                @click="saveGlobalAI"
+              >
+                Save Settings
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </section>
+
+      <!-- Registered Servers -->
+      <section>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-semibold">Registered Servers</h2>
+            <p class="text-sm text-gray-500">
+              Manage premium status for all servers using the bot. Premium
+              unlocks hosted AI features.
+            </p>
+          </div>
+          <UButton
+            icon="i-heroicons-arrow-path"
+            variant="ghost"
+            @click="fetchServers"
+            :loading="serversLoading"
+          />
+        </div>
+
+        <div
+          v-if="servers.length === 0 && !serversLoading"
+          class="text-center py-10 bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
+        >
+          <p class="text-gray-500">No servers registered yet.</p>
+        </div>
+
+        <div
+          v-else
+          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        >
+          <UCard v-for="server in servers" :key="server.$id" class="relative">
+            <template #header>
+              <div class="flex items-center gap-3">
+                <img
+                  v-if="server.icon"
+                  :src="`https://cdn.discordapp.com/icons/${server.guild_id}/${server.icon}.webp?size=64`"
+                  class="w-10 h-10 rounded-xl object-cover"
+                  :alt="server.name"
+                />
+                <div
+                  v-else
+                  class="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center"
+                >
+                  <UIcon
+                    name="i-heroicons-server"
+                    class="w-5 h-5 text-gray-400"
+                  />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold truncate">{{ server.name }}</p>
+                  <p class="text-xs text-gray-500 font-mono truncate">
+                    {{ server.guild_id }}
+                  </p>
+                </div>
+                <UBadge
+                  :color="server.status ? 'success' : 'neutral'"
+                  variant="soft"
+                  size="xs"
+                >
+                  {{ server.status ? "Online" : "Offline" }}
+                </UBadge>
+              </div>
+            </template>
+
+            <div class="space-y-2 text-sm text-gray-500">
+              <div class="flex justify-between">
+                <span>Members</span>
+                <span class="text-gray-300">{{
+                  server.member_count?.toLocaleString() ?? "—"
+                }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Shard</span>
+                <span class="text-gray-300">{{ server.shard_id ?? "—" }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Ping</span>
+                <span class="text-gray-300">{{
+                  server.ping ? `${server.ping}ms` : "—"
+                }}</span>
+              </div>
+            </div>
+
+            <template #footer>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <UIcon
+                    name="i-heroicons-star"
+                    class="w-4 h-4 text-amber-400"
+                  />
+                  <span class="text-sm font-medium">Premium</span>
+                  <UBadge
+                    v-if="server.premium"
+                    color="warning"
+                    variant="soft"
+                    size="xs"
+                  >
+                    Active
+                  </UBadge>
+                </div>
+                <USwitch
+                  :model-value="server.premium === true"
+                  @update:model-value="(v) => togglePremium(server, v)"
+                  :loading="updatingPremium === server.$id"
+                  color="warning"
+                />
+              </div>
+            </template>
+          </UCard>
+        </div>
+      </section>
+
       <!-- Live Bot Logs — Enhanced -->
       <section>
         <div class="flex items-center justify-between mb-4">
@@ -251,6 +478,45 @@ const botLogs = ref<any[]>([]);
 const logSubscription = ref<(() => void) | null>(null);
 const logsRefreshing = ref(false);
 
+// Servers / Premium
+const servers = ref<any[]>([]);
+const serversLoading = ref(false);
+const updatingPremium = ref<string | null>(null);
+
+// Global AI config
+const globalAI = ref({
+  aiProvider: "Groq",
+  aiApiKey: "",
+  aiModel: "llama-3.3-70b-versatile",
+  aiBaseUrl: "",
+});
+const savingGlobalAI = ref(false);
+const globalAIModels = ref<string[]>([
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "mixtral-8x7b-32768",
+]);
+const globalAIModelsLoading = ref(false);
+const globalAIModelsWarning = ref("");
+
+const aiProviderOptions = [
+  { label: "Groq (Free · Recommended)", value: "Groq" },
+  { label: "OpenAI", value: "OpenAI" },
+  { label: "Google Gemini", value: "Google Gemini" },
+  { label: "Anthropic Claude", value: "Anthropic Claude" },
+  {
+    label: "OpenAI Compatible (Ollama, LM Studio…)",
+    value: "OpenAI Compatible",
+  },
+];
+
+const aiProviderLinks = [
+  { name: "Groq", url: "https://console.groq.com" },
+  { name: "OpenAI", url: "https://platform.openai.com/api-keys" },
+  { name: "Google Gemini", url: "https://aistudio.google.com/apikey" },
+  { name: "Anthropic", url: "https://console.anthropic.com" },
+];
+
 // Admin log filters
 const adminLogScope = ref("all");
 const adminLogLevel = ref("all");
@@ -318,6 +584,154 @@ const fetchModules = async () => {
   }
 };
 
+const fetchServers = async () => {
+  serversLoading.value = true;
+  try {
+    const response = await databases.listDocuments(databaseId, "servers", [
+      Query.orderDesc("name"),
+      Query.limit(100),
+    ]);
+    servers.value = response.documents;
+  } catch (error) {
+    console.error("Error fetching servers:", error);
+  } finally {
+    serversLoading.value = false;
+  }
+};
+
+const loadGlobalAI = async () => {
+  try {
+    const response = await databases.listDocuments(
+      databaseId,
+      "guild_configs",
+      [
+        Query.equal("guildId", "__global__"),
+        Query.equal("moduleName", "ai"),
+        Query.limit(1),
+      ],
+    );
+    if (response.total > 0 && response.documents[0]!.settings) {
+      const saved = JSON.parse(response.documents[0]!.settings);
+      globalAI.value = { ...globalAI.value, ...saved };
+      // Fetch models once we have a key
+      if (globalAI.value.aiApiKey) await fetchGlobalAIModels();
+    }
+  } catch (error) {
+    console.error("Error loading global AI config:", error);
+  }
+};
+
+const fetchGlobalAIModels = async () => {
+  globalAIModelsLoading.value = true;
+  globalAIModelsWarning.value = "";
+  try {
+    const res = await $fetch<{ models: string[]; warning?: string }>(
+      "/api/ai/models",
+      {
+        method: "POST",
+        body: {
+          provider: globalAI.value.aiProvider,
+          apiKey: globalAI.value.aiApiKey || "__validate_only__",
+          baseUrl: globalAI.value.aiBaseUrl || undefined,
+        },
+      },
+    );
+    globalAIModels.value = res.models;
+    if (res.warning) globalAIModelsWarning.value = res.warning;
+    // If saved model is no longer in list, keep it anyway (manually typed)
+  } catch (err) {
+    globalAIModelsWarning.value =
+      "Could not fetch models — check your API key.";
+  } finally {
+    globalAIModelsLoading.value = false;
+  }
+};
+
+// Auto-fetch when provider or a valid key changes
+watch(
+  [() => globalAI.value.aiProvider, () => globalAI.value.aiApiKey],
+  ([_provider, key]) => {
+    if (key && key.length > 10) fetchGlobalAIModels();
+  },
+);
+
+// Also re-fetch on provider change regardless of key (returns fallback list)
+watch(
+  () => globalAI.value.aiProvider,
+  () => fetchGlobalAIModels(),
+);
+
+const saveGlobalAI = async () => {
+  savingGlobalAI.value = true;
+  try {
+    // Check for existing doc
+    const response = await databases.listDocuments(
+      databaseId,
+      "guild_configs",
+      [
+        Query.equal("guildId", "__global__"),
+        Query.equal("moduleName", "ai"),
+        Query.limit(1),
+      ],
+    );
+    if (response.total > 0) {
+      await databases.updateDocument(
+        databaseId,
+        "guild_configs",
+        response.documents[0]!.$id,
+        {
+          settings: JSON.stringify(globalAI.value),
+        },
+      );
+    } else {
+      await databases.createDocument(databaseId, "guild_configs", "unique()", {
+        guildId: "__global__",
+        moduleName: "ai",
+        enabled: true,
+        settings: JSON.stringify(globalAI.value),
+      });
+    }
+    toast.add({
+      title: "Saved",
+      description: "Global AI settings updated.",
+      color: "success",
+    });
+  } catch (error) {
+    console.error("Error saving global AI config:", error);
+    toast.add({
+      title: "Error",
+      description: "Failed to save global AI settings.",
+      color: "error",
+    });
+  } finally {
+    savingGlobalAI.value = false;
+  }
+};
+
+const togglePremium = async (server: any, premium: boolean) => {
+  updatingPremium.value = server.$id;
+  try {
+    await databases.updateDocument(databaseId, "servers", server.$id, {
+      premium,
+    });
+    server.premium = premium;
+    toast.add({
+      title: premium ? "Premium Enabled" : "Premium Removed",
+      description: `${server.name} is now ${premium ? "premium" : "standard"}.`,
+      color: premium ? "warning" : "neutral",
+    });
+  } catch (error) {
+    console.error("Error toggling premium:", error);
+    toast.add({
+      title: "Error",
+      description: "Failed to update premium status.",
+      color: "error",
+    });
+  } finally {
+    updatingPremium.value = null;
+  }
+};
+
 const toggleModule = async (module: any) => {
   updating.value = module.$id;
   try {
@@ -350,8 +764,12 @@ onMounted(async () => {
     }
 
     if (isBotAdmin.value) {
-      await fetchModules();
-      await fetchInitialLogs();
+      await Promise.all([
+        fetchModules(),
+        fetchInitialLogs(),
+        fetchServers(),
+        loadGlobalAI(),
+      ]);
       setupRealtimeLogs();
     }
   } catch (error) {

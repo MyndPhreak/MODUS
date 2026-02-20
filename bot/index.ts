@@ -14,6 +14,8 @@ import { Logger } from "./Logger";
 import { createYtDlpStreamFunction } from "./lib/ytdlp-stream";
 import { registerWelcomeEvents } from "./modules/welcome";
 import { registerMilestoneEvents } from "./modules/milestones";
+import { registerAutoModEvents } from "./modules/automod";
+import { registerAIEvents } from "./modules/ai";
 import { registerMusicAPI } from "./MusicAPI";
 
 dotenv.config();
@@ -131,6 +133,8 @@ client.once("ready", async () => {
   await moduleManager.loadModules();
   registerWelcomeEvents(moduleManager);
   registerMilestoneEvents(moduleManager);
+  registerAutoModEvents(moduleManager);
+  registerAIEvents(moduleManager);
   serverStatusService.start();
 
   let botVersion = process.env.npm_package_version || "1.0.0";
