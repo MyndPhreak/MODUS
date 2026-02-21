@@ -21,24 +21,35 @@ async function fetchSidebarServers() {
   try {
     const userId = userStore.user.$id;
 
-    // Query servers the user owns OR is listed as an admin on
-    const [ownerRes, adminRes] = await Promise.all([
-      databases.listDocuments(databaseId, serversCollectionId, [
-        Query.equal("owner_id", userId),
-      ]),
-      databases
-        .listDocuments(databaseId, serversCollectionId, [
-          Query.contains("admin_user_ids", [userId]),
-        ])
-        .catch(() => ({ documents: [] })),
-    ]);
+    // Primary: servers the user owns
+    let ownerDocs: any[] = [];
+    try {
+      const res = await databases.listDocuments(
+        databaseId,
+        serversCollectionId,
+        [Query.equal("owner_id", userId)],
+      );
+      ownerDocs = res.documents;
+    } catch (e) {
+      console.warn("[Sidebar] owner_id query failed:", e);
+    }
+
+    // Secondary: servers the user is listed as admin on
+    let adminDocs: any[] = [];
+    try {
+      const res = await databases.listDocuments(
+        databaseId,
+        serversCollectionId,
+        [Query.contains("admin_user_ids", [userId])],
+      );
+      adminDocs = res.documents;
+    } catch {
+      // admin_user_ids attribute may not exist on all docs yet
+    }
 
     // Merge and deduplicate
     const seen = new Set<string>();
-    sidebarServers.value = [
-      ...ownerRes.documents,
-      ...adminRes.documents,
-    ].filter((doc) => {
+    sidebarServers.value = [...ownerDocs, ...adminDocs].filter((doc) => {
       if (seen.has(doc.$id)) return false;
       seen.add(doc.$id);
       return true;

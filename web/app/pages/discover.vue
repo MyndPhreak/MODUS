@@ -453,20 +453,23 @@ const fetchGuilds = async () => {
       discordGuilds = userStore.userGuilds;
     }
 
-    // Load all existing servers for cross-referencing managed state
-    const appwriteServers = await databases.listDocuments(
-      "discord_bot",
-      "servers",
-      [Query.limit(500)],
-    );
-
     guilds.value = Array.isArray(discordGuilds) ? discordGuilds : [];
     if (!Array.isArray(discordGuilds) || discordGuilds.length === 0) {
       error.value =
         "No servers found. Please try logging in again to refresh your Discord connection.";
     }
 
-    existingServers.value = appwriteServers.documents;
+    // Load existing servers separately — this should succeed even if Discord API failed
+    try {
+      const appwriteServers = await databases.listDocuments(
+        "discord_bot",
+        "servers",
+        [Query.limit(500)],
+      );
+      existingServers.value = appwriteServers.documents;
+    } catch (dbErr) {
+      console.warn("[Discover] Failed to load existing servers:", dbErr);
+    }
   } catch (err: any) {
     console.error("Fetch error:", err);
     error.value = err.message || "An error occurred while fetching servers.";
