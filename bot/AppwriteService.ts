@@ -597,6 +597,8 @@ export class AppwriteService {
     username: string;
     file_id: string;
     file_size?: number;
+    start_offset?: number;
+    segments?: string;
   }): Promise<string> {
     const doc = await this.databases.createDocument(
       this.databaseId,

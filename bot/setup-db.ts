@@ -186,6 +186,8 @@ const collections: CollectionDef[] = [
       { key: "username", type: "string", size: 256, required: true },
       { key: "file_id", type: "string", size: 128, required: true },
       { key: "file_size", type: "integer", required: false },
+      { key: "start_offset", type: "integer", required: false },
+      { key: "segments", type: "string", size: 16384, required: false },
     ],
     indexes: [
       {

@@ -48,6 +48,12 @@ interface UserRecordingStream {
   ffmpegProcess: ChildProcess;
   tempFilePath: string;
   username: string;
+  startOffset: number; // ms from session start when first audio arrived (-1 = none yet)
+  // Speech segment tracking
+  segments: { t: number; d: number }[]; // completed segments: t=timeline start ms, d=duration ms
+  _segStart: number; // current segment start (timeline ms), -1 if silent
+  _segPackets: number; // opus packets in current segment (each = 20ms audio)
+  _segTimer: NodeJS.Timeout | null; // silence debounce
 }
 
 const DEFAULT_SETTINGS = {
@@ -338,13 +344,44 @@ function startUserRecording(
     frameSize: 960,
   });
 
-  // Diagnostic: track data flow
+  // Track data flow, capture temporal offset, and build speech segments
+  const SILENCE_THRESHOLD_MS = 300;
   let opusPacketCount = 0;
   opusStream.on("data", () => {
     opusPacketCount++;
-    if (opusPacketCount === 1) {
-      console.log(`[Recording] First opus packet received for ${username}`);
+    const stream = session.userStreams.get(userId);
+    if (!stream) return;
+
+    const timelineMs = Date.now() - session.startedAt.getTime();
+
+    // Capture start_offset from first packet
+    if (opusPacketCount === 1 && stream.startOffset < 0) {
+      stream.startOffset = timelineMs;
+      console.log(
+        `[Recording] First opus packet for ${username} — offset: ${timelineMs}ms`,
+      );
     }
+
+    // ── Speech segment tracking ──
+    if (stream._segStart < 0) {
+      // New speech segment starting
+      stream._segStart = timelineMs;
+      stream._segPackets = 0;
+    }
+    stream._segPackets++;
+
+    // Reset silence debounce
+    if (stream._segTimer) clearTimeout(stream._segTimer);
+    stream._segTimer = setTimeout(() => {
+      if (stream._segStart >= 0) {
+        stream.segments.push({
+          t: stream._segStart,
+          d: stream._segPackets * 20, // each opus packet = 20ms
+        });
+        stream._segStart = -1;
+        stream._segPackets = 0;
+      }
+    }, SILENCE_THRESHOLD_MS);
   });
 
   opusStream.pipe(decoder).pipe(ffmpeg.stdin!);
@@ -374,6 +411,11 @@ function startUserRecording(
     ffmpegProcess: ffmpeg,
     tempFilePath: tempFile,
     username,
+    startOffset: -1,
+    segments: [],
+    _segStart: -1,
+    _segPackets: 0,
+    _segTimer: null,
   });
 
   console.log(`[Recording] Started recording user: ${username} (${userId})`);
@@ -399,6 +441,16 @@ async function stopRecording(
   const closePromises: Promise<void>[] = [];
 
   for (const [userId, stream] of session.userStreams) {
+    // Finalize any in-progress speech segment before closing
+    if (stream._segTimer) clearTimeout(stream._segTimer);
+    if (stream._segStart >= 0) {
+      stream.segments.push({
+        t: stream._segStart,
+        d: stream._segPackets * 20,
+      });
+      stream._segStart = -1;
+    }
+
     closePromises.push(
       new Promise<void>((resolve) => {
         // Close the FFmpeg stdin to signal EOF
@@ -465,6 +517,8 @@ async function stopRecording(
         username: stream.username,
         file_id: fileId,
         file_size: stats.size,
+        start_offset: stream.startOffset >= 0 ? stream.startOffset : 0,
+        segments: JSON.stringify(stream.segments),
       });
 
       participants.push(userId);
@@ -544,14 +598,30 @@ async function generateMixedTrack(
 
   if (tempFiles.length === 0) return undefined;
 
-  // Use FFmpeg to mix all tracks
+  // Use FFmpeg to mix all tracks with proper time-alignment via adelay
   const mixedPath = path.join(
     tempDir,
     `mixed_${session.guildId}_${Date.now()}.ogg`,
   );
 
   const inputArgs = tempFiles.flatMap((f) => ["-i", f]);
-  const filterComplex = `amix=inputs=${tempFiles.length}:duration=longest:normalize=0`;
+
+  // Build a filter graph that delays each input by its start_offset before mixing
+  const filterParts: string[] = [];
+  const mixLabels: string[] = [];
+  for (let i = 0; i < tracks.length; i++) {
+    const delayMs = (tracks[i] as any).start_offset || 0;
+    if (delayMs > 0) {
+      filterParts.push(`[${i}]adelay=${delayMs}|${delayMs}[d${i}]`);
+      mixLabels.push(`[d${i}]`);
+    } else {
+      mixLabels.push(`[${i}]`);
+    }
+  }
+  const mixInput = mixLabels.join("");
+  const amix = `${mixInput}amix=inputs=${tracks.length}:duration=longest:normalize=0`;
+  const filterComplex =
+    filterParts.length > 0 ? `${filterParts.join(";")};${amix}` : amix;
 
   return new Promise<string | undefined>((resolve) => {
     const ffmpeg = spawn(
