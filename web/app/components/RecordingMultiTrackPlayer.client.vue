@@ -101,6 +101,24 @@
           <div class="mtp-track-id">
             <span class="mtp-track-dot" />
             <span class="mtp-track-name">{{ t.username }}</span>
+            <span
+              v-if="t.segments.length > 1"
+              class="mtp-track-offset"
+              :title="t.segments.length + ' speech segments'"
+            >
+              {{ t.segments.length }} clips
+            </span>
+            <span
+              v-else-if="t.startOffsetSec > 0"
+              class="mtp-track-offset"
+              :title="
+                'Audio starts at ' +
+                fmtTime(t.startOffsetSec) +
+                ' in the timeline'
+              "
+            >
+              +{{ fmtTime(t.startOffsetSec) }}
+            </span>
           </div>
 
           <div class="mtp-track-ctrls">
@@ -162,10 +180,22 @@
         </div>
 
         <!-- Waveform -->
-        <div class="mtp-wave-wrap">
+        <div class="mtp-wave-wrap" @click="onCanvasClick(i, $event)">
+          <!-- Hidden WaveSurfer container (audio only) -->
           <div
             :ref="(el) => waveEls.set(i, el as HTMLElement)"
-            class="mtp-wave-el"
+            class="mtp-wave-hidden"
+          />
+          <!-- Custom segmented waveform canvas -->
+          <canvas
+            :ref="(el) => canvasEls.set(i, el as HTMLCanvasElement)"
+            class="mtp-canvas"
+          />
+          <!-- Playhead cursor -->
+          <div
+            v-if="t.loaded"
+            class="mtp-playhead"
+            :style="{ left: seekPct + '%' }"
           />
           <div v-if="!t.loaded && !t.error" class="mtp-wave-skeleton">
             <div class="mtp-wave-shimmer" />
@@ -184,7 +214,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
+import {
+  ref,
+  reactive,
+  computed,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+} from "vue";
 
 // ── Props ────────────────────────────────────────────────────────────────
 interface TrackProp {
@@ -193,12 +231,15 @@ interface TrackProp {
   username: string;
   file_id: string;
   file_size?: number;
+  start_offset?: number; // ms from recording start
+  segments?: string; // JSON: {t:number, d:number}[]
 }
 
 const props = defineProps<{
   tracks: TrackProp[];
   mixedFileId?: string;
   recordingTitle?: string;
+  recordingDuration?: number; // seconds — total recording duration
 }>();
 
 // ── Palette ──────────────────────────────────────────────────────────────
@@ -213,13 +254,19 @@ const COLORS = [
   { c: "#f97316", dim: "#f9731660", bg: "#f9731612" },
 ];
 
-// ── Track state ──────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────
+interface Segment {
+  t: number; // timeline start in ms
+  d: number; // duration in ms
+}
 interface TrackState {
   id: string;
   userId: string;
   username: string;
   fileId: string;
   fileSize: number;
+  startOffsetSec: number;
+  segments: Segment[]; // speech cue points
   color: string;
   colorDim: string;
   colorBg: string;
@@ -229,27 +276,94 @@ interface TrackState {
   effectiveMuted: boolean;
   loaded: boolean;
   error: boolean;
-  duration: number;
+  duration: number; // audio clip duration (seconds)
   ws: any;
+  peaks: Float32Array | null;
 }
 
+// ── State ────────────────────────────────────────────────────────────────
 const state = ref<TrackState[]>([]);
 const waveEls = reactive(new Map<number, HTMLElement>());
+const canvasEls = reactive(new Map<number, HTMLCanvasElement>());
 const seekRef = ref<HTMLElement>();
 
 const isPlaying = ref(false);
-const currentTime = ref(0);
+const currentTime = ref(0); // timeline position (seconds)
 const dlTrackId = ref<string | null>(null);
 const downloadingAll = ref(false);
 const downloadingMixed = ref(false);
 
 let animFrame: number | null = null;
-let WS: any = null; // wavesurfer constructor
+let WS: any = null;
+let playStartWall = 0; // Date.now() when playback started
+let playStartPos = 0; // timeline pos when playback started
+
+// ── Helpers: parse segments from prop ────────────────────────────────────
+function parseSegments(
+  raw?: string,
+  fallbackOffsetMs?: number,
+  fallbackDurationSec?: number,
+): Segment[] {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {}
+  }
+  // Fallback: treat the entire audio as one segment
+  return [{ t: fallbackOffsetMs ?? 0, d: (fallbackDurationSec ?? 0) * 1000 }];
+}
+
+// ── Segment-aware timeline mapping ───────────────────────────────────────
+// Convert audio file position (sec) → recording timeline position (sec)
+function audioToTimeline(track: TrackState, audioSec: number): number {
+  let acc = 0;
+  for (const seg of track.segments) {
+    const segDur = seg.d / 1000;
+    if (audioSec <= acc + segDur) {
+      return seg.t / 1000 + (audioSec - acc);
+    }
+    acc += segDur;
+  }
+  // Past last segment
+  const last = track.segments[track.segments.length - 1];
+  return last ? (last.t + last.d) / 1000 : 0;
+}
+
+// Convert recording timeline position (sec) → audio file position (sec), or null if in a gap
+function timelineToAudio(
+  track: TrackState,
+  timelineSec: number,
+): number | null {
+  let acc = 0;
+  for (const seg of track.segments) {
+    const segStartSec = seg.t / 1000;
+    const segEndSec = (seg.t + seg.d) / 1000;
+    if (timelineSec >= segStartSec && timelineSec < segEndSec) {
+      return acc + (timelineSec - segStartSec);
+    }
+    acc += seg.d / 1000;
+  }
+  return null; // in a gap
+}
 
 // ── Computed ─────────────────────────────────────────────────────────────
 const masterDuration = computed(() => {
+  // Prefer the actual recording duration if available
+  if (props.recordingDuration && props.recordingDuration > 0) {
+    return props.recordingDuration;
+  }
   if (state.value.length === 0) return 0;
-  return Math.max(...state.value.map((t) => t.duration || 0), 0.01);
+  // Fallback: use max segment end across all tracks
+  let maxEnd = 0.01;
+  for (const t of state.value) {
+    for (const s of t.segments) {
+      maxEnd = Math.max(maxEnd, (s.t + s.d) / 1000);
+    }
+    // Also account for start_offset + audio duration as a fallback
+    maxEnd = Math.max(maxEnd, t.startOffsetSec + (t.duration || 0));
+  }
+  return maxEnd;
 });
 
 const seekPct = computed(() => {
@@ -281,6 +395,8 @@ onMounted(async () => {
       username: t.username,
       fileId: t.file_id,
       fileSize: t.file_size ?? 0,
+      startOffsetSec: (t.start_offset ?? 0) / 1000,
+      segments: parseSegments(t.segments, t.start_offset),
       color: pal.c,
       colorDim: pal.dim,
       colorBg: pal.bg,
@@ -292,10 +408,10 @@ onMounted(async () => {
       error: false,
       duration: 0,
       ws: null,
+      peaks: null,
     };
   });
 
-  // Wait a tick for DOM refs to populate
   await new Promise((r) => setTimeout(r, 60));
 
   for (let i = 0; i < state.value.length; i++) {
@@ -310,48 +426,36 @@ onMounted(async () => {
       const ws = WS.create({
         container: el,
         url: `/api/recordings/stream?file_id=${t.fileId}`,
-        waveColor: t.colorDim,
-        progressColor: t.color,
-        cursorColor: "rgba(255,255,255,0.4)",
-        cursorWidth: 1,
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        height: 56,
+        waveColor: "transparent",
+        progressColor: "transparent",
+        cursorColor: "transparent",
+        cursorWidth: 0,
+        height: 1,
+        interact: false,
         normalize: true,
-        hideScrollbar: true,
       });
 
       ws.on("ready", () => {
         t.loaded = true;
         t.duration = ws.getDuration();
+        // Update segments fallback if they were placeholder
+        if (t.segments.length === 1 && t.segments[0].d === 0) {
+          t.segments = parseSegments(
+            undefined,
+            t.startOffsetSec * 1000,
+            t.duration,
+          );
+        }
+        // Extract peaks for custom rendering
+        const decoded = ws.getDecodedData();
+        if (decoded) {
+          t.peaks = decoded.getChannelData(0);
+        }
+        nextTick(() => renderCanvas(i));
       });
 
       ws.on("error", () => {
         t.error = true;
-      });
-
-      ws.on("finish", () => {
-        // If all tracks finished, stop
-        const allFinished = state.value.every(
-          (s) => !s.ws || s.ws.getCurrentTime() >= s.duration - 0.1,
-        );
-        if (allFinished) {
-          isPlaying.value = false;
-          stopTimeLoop();
-        }
-      });
-
-      ws.on("interaction", (newTime: number) => {
-        // User clicked on this waveform → sync all others
-        const progress = t.duration > 0 ? Math.min(1, newTime / t.duration) : 0;
-        for (let j = 0; j < state.value.length; j++) {
-          const other = state.value[j];
-          if (j !== i && other && other.ws && other.loaded) {
-            other.ws.seekTo(progress);
-          }
-        }
-        currentTime.value = newTime;
       });
 
       t.ws = ws;
@@ -370,6 +474,93 @@ onBeforeUnmount(() => {
   }
 });
 
+// Re-render canvases when window resizes
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      for (let i = 0; i < state.value.length; i++) {
+        if (state.value[i]?.loaded) renderCanvas(i);
+      }
+    }, 200);
+  });
+}
+
+// ── Canvas rendering ─────────────────────────────────────────────────────
+function renderCanvas(idx: number) {
+  const track = state.value[idx];
+  const canvas = canvasEls.get(idx);
+  if (!track || !canvas || !track.peaks) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (width === 0) return;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const totalDur = masterDuration.value;
+  if (totalDur <= 0) return;
+
+  const peaks = track.peaks;
+  const audioDur = track.duration;
+  if (audioDur <= 0) return;
+
+  const midY = height / 2;
+  const barW = 2;
+  const barGap = 1;
+  const barStep = barW + barGap;
+
+  let audioAccSec = 0; // accumulated audio position
+
+  for (const seg of track.segments) {
+    const segStartSec = seg.t / 1000;
+    const segDurSec = seg.d / 1000;
+
+    // Pixel range for this segment on the timeline
+    const xStart = (segStartSec / totalDur) * width;
+    const xEnd = ((segStartSec + segDurSec) / totalDur) * width;
+    const segPixelWidth = xEnd - xStart;
+
+    // Range of peaks for this segment's audio
+    const peakStart = Math.floor((audioAccSec / audioDur) * peaks.length);
+    const peakEnd = Math.floor(
+      ((audioAccSec + segDurSec) / audioDur) * peaks.length,
+    );
+    const segPeakCount = peakEnd - peakStart;
+
+    // Draw bars
+    const numBars = Math.max(1, Math.floor(segPixelWidth / barStep));
+    const samplesPerBar = Math.max(1, Math.floor(segPeakCount / numBars));
+
+    for (let b = 0; b < numBars; b++) {
+      const sStart = peakStart + b * samplesPerBar;
+      const sEnd = Math.min(sStart + samplesPerBar, peakEnd);
+      let maxPeak = 0;
+      for (let s = sStart; s < sEnd; s++) {
+        maxPeak = Math.max(maxPeak, Math.abs(peaks[s] || 0));
+      }
+
+      const barH = Math.max(1, maxPeak * midY * 0.9);
+      const x = xStart + b * barStep;
+
+      ctx.fillStyle = track.colorDim;
+      ctx.beginPath();
+      ctx.roundRect(x, midY - barH, barW, barH * 2, 1);
+      ctx.fill();
+    }
+
+    audioAccSec += segDurSec;
+  }
+}
+
 // ── Playback ─────────────────────────────────────────────────────────────
 function togglePlayPause() {
   if (isPlaying.value) {
@@ -380,8 +571,24 @@ function togglePlayPause() {
 }
 
 function playAll() {
+  playFromTime(currentTime.value);
+}
+
+function playFromTime(timelinePos: number) {
+  playStartWall = Date.now();
+  playStartPos = timelinePos;
+
+  // Start any tracks that are active at this timeline position
   for (const t of state.value) {
-    if (t.ws && t.loaded) t.ws.play();
+    if (!t.ws || !t.loaded) continue;
+    const audioPos = timelineToAudio(t, timelinePos);
+    if (audioPos !== null && audioPos < t.duration) {
+      const progress = t.duration > 0 ? Math.min(1, audioPos / t.duration) : 0;
+      t.ws.seekTo(progress);
+      t.ws.play();
+    } else {
+      t.ws.pause();
+    }
   }
   isPlaying.value = true;
   startTimeLoop();
@@ -404,27 +611,94 @@ function stopAll() {
   stopTimeLoop();
 }
 
-function seekAllTo(progress: number) {
-  const p = Math.max(0, Math.min(1, progress));
+function seekAllToTime(timelineSec: number) {
+  const pos = Math.max(0, Math.min(timelineSec, masterDuration.value));
+  const wasPlaying = isPlaying.value;
+
+  // Pause everything first
   for (const t of state.value) {
-    if (t.ws && t.loaded) t.ws.seekTo(p);
+    if (t.ws && t.loaded) t.ws.pause();
   }
-  currentTime.value = p * masterDuration.value;
+  isPlaying.value = false;
+  stopTimeLoop();
+
+  // Seek each track
+  for (const track of state.value) {
+    if (!track.ws || !track.loaded) continue;
+    const audioPos = timelineToAudio(track, pos);
+    if (audioPos !== null) {
+      const progress =
+        track.duration > 0 ? Math.min(1, audioPos / track.duration) : 0;
+      track.ws.seekTo(progress);
+    } else {
+      track.ws.seekTo(0);
+    }
+  }
+
+  currentTime.value = pos;
+
+  if (wasPlaying) {
+    playFromTime(pos);
+  }
 }
 
 function onSeekClick(e: MouseEvent) {
   if (!seekRef.value) return;
   const rect = seekRef.value.getBoundingClientRect();
-  const progress = (e.clientX - rect.left) / rect.width;
-  seekAllTo(progress);
+  const progress = Math.max(
+    0,
+    Math.min(1, (e.clientX - rect.left) / rect.width),
+  );
+  seekAllToTime(progress * masterDuration.value);
+}
+
+function onCanvasClick(idx: number, e: MouseEvent) {
+  const canvas = canvasEls.get(idx);
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const progress = Math.max(
+    0,
+    Math.min(1, (e.clientX - rect.left) / rect.width),
+  );
+  seekAllToTime(progress * masterDuration.value);
 }
 
 // ── Time loop ────────────────────────────────────────────────────────────
 function startTimeLoop() {
   const tick = () => {
-    const first = state.value.find((t) => t.ws && t.loaded);
-    if (first) currentTime.value = first.ws.getCurrentTime();
-    if (isPlaying.value) animFrame = requestAnimationFrame(tick);
+    if (!isPlaying.value) return;
+
+    // Wall-clock driven timeline
+    const elapsed = (Date.now() - playStartWall) / 1000;
+    const timelinePos = playStartPos + elapsed;
+    currentTime.value = Math.min(timelinePos, masterDuration.value);
+
+    // Chase each track: play/pause based on whether we're in a segment
+    for (const t of state.value) {
+      if (!t.ws || !t.loaded) continue;
+      const audioPos = timelineToAudio(t, currentTime.value);
+      if (audioPos !== null && audioPos < t.duration) {
+        if (!t.ws.isPlaying()) {
+          const progress =
+            t.duration > 0 ? Math.min(1, audioPos / t.duration) : 0;
+          t.ws.seekTo(progress);
+          t.ws.play();
+        }
+      } else {
+        if (t.ws.isPlaying()) {
+          t.ws.pause();
+        }
+      }
+    }
+
+    // Check if past the end
+    if (currentTime.value >= masterDuration.value - 0.1) {
+      pauseAll();
+      currentTime.value = masterDuration.value;
+      return;
+    }
+
+    animFrame = requestAnimationFrame(tick);
   };
   animFrame = requestAnimationFrame(tick);
 }
@@ -507,14 +781,12 @@ async function dlZip() {
     const zip = new JSZip();
     const folder = zip.folder(props.recordingTitle || "recording")!;
 
-    // Add individual tracks
     for (const t of state.value) {
       const res = await fetch(`/api/recordings/stream?file_id=${t.fileId}`);
       const blob = await res.blob();
       folder.file(`${t.username}.ogg`, blob);
     }
 
-    // Add mixed file if available
     if (props.mixedFileId) {
       const res = await fetch(
         `/api/recordings/stream?file_id=${props.mixedFileId}`,
@@ -783,6 +1055,18 @@ function fmtSize(bytes: number): string {
   text-overflow: ellipsis;
 }
 
+.mtp-track-offset {
+  font-size: 9px;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: -0.3px;
+}
+
 .mtp-track-size {
   font-size: 10px;
   font-family: "JetBrains Mono", "SF Mono", monospace;
@@ -884,10 +1168,44 @@ function fmtSize(bytes: number): string {
   overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
   min-height: 56px;
+  cursor: pointer;
 }
 
-.mtp-wave-el {
+.mtp-wave-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mtp-canvas {
   width: 100%;
+  height: 56px;
+  display: block;
+}
+
+.mtp-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  transition: left 0.05s linear;
+  z-index: 2;
+}
+.mtp-playhead::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
 }
 
 .mtp-wave-skeleton {

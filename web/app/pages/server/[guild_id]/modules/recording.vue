@@ -526,6 +526,7 @@
                 :recording-title="
                   row.original.title || row.original.channel_name
                 "
+                :recording-duration="row.original.duration || 0"
               />
 
               <!-- Only mixed, no individual tracks -->
