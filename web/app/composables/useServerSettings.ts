@@ -297,12 +297,19 @@ export function useServerSettings(guildId: string) {
           "servers",
           guildId,
         );
-        if (serverDoc.ownerId === userStore.user?.$id) {
+        const userId = userStore.user?.$id;
+        const isOwner = serverDoc.owner_id === userId;
+        const isAdmin =
+          Array.isArray(serverDoc.admin_user_ids) &&
+          userId &&
+          serverDoc.admin_user_ids.includes(userId);
+
+        if (isOwner || isAdmin) {
           state.value.guild = {
             id: serverDoc.$id,
             name: serverDoc.name,
             icon: null,
-            owner: true,
+            owner: isOwner,
             permissions: "8",
           };
           return;

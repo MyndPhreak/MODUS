@@ -529,12 +529,29 @@ const fetchServers = async () => {
   if (!userStore.user) return;
   serversLoading.value = true;
   try {
-    const response = await databases.listDocuments(
-      databaseId,
-      serversCollectionId,
-      [Query.equal("ownerId", userStore.user.$id)],
+    const userId = userStore.user.$id;
+
+    // Query servers the user owns OR is listed as an admin on
+    const [ownerRes, adminRes] = await Promise.all([
+      databases.listDocuments(databaseId, serversCollectionId, [
+        Query.equal("owner_id", userId),
+      ]),
+      databases
+        .listDocuments(databaseId, serversCollectionId, [
+          Query.contains("admin_user_ids", [userId]),
+        ])
+        .catch(() => ({ documents: [] })),
+    ]);
+
+    // Merge and deduplicate
+    const seen = new Set();
+    servers.value = [...ownerRes.documents, ...adminRes.documents].filter(
+      (doc) => {
+        if (seen.has(doc.$id)) return false;
+        seen.add(doc.$id);
+        return true;
+      },
     );
-    servers.value = response.documents;
 
     // Backfill missing icons from Discord guild data
     const discordGuilds = userStore.userGuilds || [];

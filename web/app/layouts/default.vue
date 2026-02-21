@@ -19,12 +19,30 @@ const serversCollectionId = "servers";
 async function fetchSidebarServers() {
   if (!userStore.user) return;
   try {
-    const response = await databases.listDocuments(
-      databaseId,
-      serversCollectionId,
-      [Query.equal("ownerId", userStore.user.$id)],
-    );
-    sidebarServers.value = response.documents;
+    const userId = userStore.user.$id;
+
+    // Query servers the user owns OR is listed as an admin on
+    const [ownerRes, adminRes] = await Promise.all([
+      databases.listDocuments(databaseId, serversCollectionId, [
+        Query.equal("owner_id", userId),
+      ]),
+      databases
+        .listDocuments(databaseId, serversCollectionId, [
+          Query.contains("admin_user_ids", [userId]),
+        ])
+        .catch(() => ({ documents: [] })),
+    ]);
+
+    // Merge and deduplicate
+    const seen = new Set<string>();
+    sidebarServers.value = [
+      ...ownerRes.documents,
+      ...adminRes.documents,
+    ].filter((doc) => {
+      if (seen.has(doc.$id)) return false;
+      seen.add(doc.$id);
+      return true;
+    });
   } catch {
     // silently ignore
   }

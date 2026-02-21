@@ -137,29 +137,68 @@
               class="rounded-lg text-[10px] uppercase font-black tracking-widest px-2 py-0.5"
               >Admin</UBadge
             >
+            <!-- Show "Managed" badge if server exists in system but user isn't linked yet -->
+            <UBadge
+              v-if="isInSystem(guild.id) && !isUserManaging(guild.id)"
+              color="info"
+              variant="subtle"
+              class="rounded-lg text-[10px] uppercase font-black tracking-widest px-2 py-0.5"
+              >Managed by Others</UBadge
+            >
           </div>
         </div>
 
         <template #footer>
           <div class="flex gap-2">
+            <!-- State 1: User is already managing this server -->
             <UButton
+              v-if="isUserManaging(guild.id)"
               class="flex-1"
-              :loading="addingId === guild.id"
-              :disabled="isAlreadyAdded(guild.id)"
-              @click="addServer(guild)"
+              disabled
               size="lg"
+              color="neutral"
+              variant="soft"
               :class="[
                 'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all',
               ]"
-              :color="isAlreadyAdded(guild.id) ? 'neutral' : 'primary'"
-              :variant="isAlreadyAdded(guild.id) ? 'soft' : 'solid'"
             >
-              {{
-                isAlreadyAdded(guild.id) ? "Already Managed" : "Connect Server"
-              }}
+              Already Managing
             </UButton>
+
+            <!-- State 2: Server exists in system, user has Discord admin but isn't linked -->
             <UButton
-              v-if="isAlreadyAdded(guild.id)"
+              v-else-if="isInSystem(guild.id)"
+              class="flex-1"
+              :loading="addingId === guild.id"
+              @click="joinServer(guild)"
+              size="lg"
+              color="success"
+              variant="solid"
+              :class="[
+                'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all',
+              ]"
+            >
+              Join as Admin
+            </UButton>
+
+            <!-- State 3: Server not in system at all — connect it -->
+            <UButton
+              v-else
+              class="flex-1"
+              :loading="addingId === guild.id"
+              @click="addServer(guild)"
+              size="lg"
+              color="primary"
+              variant="solid"
+              :class="[
+                'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all',
+              ]"
+            >
+              Connect Server
+            </UButton>
+
+            <UButton
+              v-if="isUserManaging(guild.id)"
               size="lg"
               color="success"
               variant="soft"
@@ -277,6 +316,8 @@
 </template>
 
 <script setup lang="ts">
+import { Query } from "appwrite";
+
 const userStore = useUserStore();
 const { databases } = useAppwrite();
 const toast = useToast();
@@ -308,7 +349,7 @@ const botPermissionsList = [
 ];
 
 const adminGuilds = computed(() => {
-  return guilds.value.filter((guild) => {
+  return guilds.value.filter((guild: any) => {
     const permissions = BigInt(guild.permissions);
     return (
       (permissions & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION)
@@ -316,8 +357,24 @@ const adminGuilds = computed(() => {
   });
 });
 
-const isAlreadyAdded = (guildId: string) => {
-  return existingServers.value.some((s) => s.$id === guildId);
+/** Check if a server exists in the system at all (added by anyone) */
+const isInSystem = (guildId: string) => {
+  return existingServers.value.some((s: any) => s.$id === guildId);
+};
+
+/** Check if the current user is managing this server (owner or in admin_user_ids) */
+const isUserManaging = (guildId: string) => {
+  const server = existingServers.value.find((s: any) => s.$id === guildId);
+  if (!server) return false;
+  const userId = userStore.user?.$id;
+  if (!userId) return false;
+
+  const isOwner = server.owner_id === userId;
+  const isAdmin =
+    Array.isArray(server.admin_user_ids) &&
+    server.admin_user_ids.includes(userId);
+
+  return isOwner || isAdmin;
 };
 
 /** Build the Discord OAuth2 bot invite URL with guild pre-selected */
@@ -396,9 +453,11 @@ const fetchGuilds = async () => {
       discordGuilds = userStore.userGuilds;
     }
 
+    // Load all existing servers for cross-referencing managed state
     const appwriteServers = await databases.listDocuments(
       "discord_bot",
       "servers",
+      [Query.limit(500)],
     );
 
     guilds.value = Array.isArray(discordGuilds) ? discordGuilds : [];
@@ -416,6 +475,7 @@ const fetchGuilds = async () => {
   }
 };
 
+/** Add a new server to the system (first admin to connect it) */
 const addServer = async (guild: any) => {
   addingId.value = guild.id;
   try {
@@ -424,6 +484,7 @@ const addServer = async (guild: any) => {
       name: guild.name,
       status: false,
       owner_id: userStore.user!.$id,
+      admin_user_ids: [userStore.user!.$id],
       last_checked: new Date().toISOString(),
       icon: guild.icon || null,
     });
@@ -434,9 +495,11 @@ const addServer = async (guild: any) => {
       color: "success",
     });
 
+    // Refresh the server list
     const appwriteServers = await databases.listDocuments(
       "discord_bot",
       "servers",
+      [Query.limit(500)],
     );
     existingServers.value = appwriteServers.documents;
 
@@ -446,6 +509,48 @@ const addServer = async (guild: any) => {
     toast.add({
       title: "Error",
       description: err.message || "Failed to add server.",
+      color: "error",
+    });
+  } finally {
+    addingId.value = null;
+  }
+};
+
+/** Join an existing server as an additional admin */
+const joinServer = async (guild: any) => {
+  addingId.value = guild.id;
+  try {
+    const server = existingServers.value.find((s: any) => s.$id === guild.id);
+    if (!server) return;
+
+    const currentAdmins: string[] = Array.isArray(server.admin_user_ids)
+      ? server.admin_user_ids
+      : [];
+    const userId = userStore.user!.$id;
+
+    if (!currentAdmins.includes(userId)) {
+      await databases.updateDocument("discord_bot", "servers", guild.id, {
+        admin_user_ids: [...currentAdmins, userId],
+      });
+    }
+
+    toast.add({
+      title: "Joined Server",
+      description: `You're now managing ${guild.name}. Settings are synced.`,
+      color: "success",
+    });
+
+    // Refresh the server list
+    const appwriteServers = await databases.listDocuments(
+      "discord_bot",
+      "servers",
+      [Query.limit(500)],
+    );
+    existingServers.value = appwriteServers.documents;
+  } catch (err: any) {
+    toast.add({
+      title: "Error",
+      description: err.message || "Failed to join server.",
       color: "error",
     });
   } finally {
