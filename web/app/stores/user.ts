@@ -300,20 +300,24 @@ export const useUserStore = defineStore("user", {
       const config = useRuntimeConfig();
       const pid = config.public.appwriteProjectId;
 
-      const sessionCookie = useCookie(`a_session_${pid}`);
+      const cookieOpts = { path: "/" };
+      const sessionCookie = useCookie(`a_session_${pid}`, cookieOpts);
       sessionCookie.value = null;
 
-      const userCookie = useCookie(`a_user_${pid}`);
+      const userCookie = useCookie(`a_user_${pid}`, cookieOpts);
       userCookie.value = null;
 
       // Clear Discord OAuth cookies set during login callback
-      const discordToken = useCookie(`discord_token_${pid}`);
+      const discordToken = useCookie(`discord_token_${pid}`, cookieOpts);
       discordToken.value = null;
 
-      const discordExpiry = useCookie(`discord_token_expiry_${pid}`);
+      const discordExpiry = useCookie(
+        `discord_token_expiry_${pid}`,
+        cookieOpts,
+      );
       discordExpiry.value = null;
 
-      const discordUid = useCookie(`discord_uid_${pid}`);
+      const discordUid = useCookie(`discord_uid_${pid}`, cookieOpts);
       discordUid.value = null;
     },
 

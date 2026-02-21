@@ -550,7 +550,7 @@ const fetchServers = async () => {
       const res = await databases.listDocuments(
         databaseId,
         serversCollectionId,
-        [Query.contains("admin_user_ids", [userId])],
+        [Query.contains("admin_user_ids", userId)],
       );
       adminDocs = res.documents;
     } catch {
