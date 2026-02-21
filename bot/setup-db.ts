@@ -76,9 +76,22 @@ const collections: CollectionDef[] = [
       { key: "description", type: "string", size: 1024, required: false },
       { key: "invite_link", type: "string", size: 512, required: false },
       { key: "premium", type: "boolean", required: false, default: false },
+      {
+        key: "admin_user_ids",
+        type: "string",
+        size: 64,
+        required: false,
+        array: true,
+      },
     ],
     indexes: [
       { key: "idx_guild_id", type: "unique", attributes: ["guild_id"] },
+      { key: "idx_owner_id", type: "key", attributes: ["owner_id"] },
+      {
+        key: "idx_admin_user_ids",
+        type: "key",
+        attributes: ["admin_user_ids"],
+      },
     ],
   },
   {
