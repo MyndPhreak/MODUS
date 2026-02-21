@@ -150,14 +150,15 @@ export default defineEventHandler(async (event) => {
     );
 
     let profile: any = null;
-    let guilds: any[] = [];
+    // IMPORTANT: Do NOT fetch bot guilds as a fallback for user guilds.
+    // Bot guilds lack user-specific permission data and would leak across users.
+    const guilds: any[] = [];
 
     if (botToken) {
       profile = await fetchDiscordUserViaBot(botToken, discordUid);
-      guilds = await fetchBotGuilds(botToken);
 
       console.log(
-        `[Discord Me API] Bot token result — profile avatar: ${profile?.avatar}, bot guilds: ${guilds.length}`,
+        `[Discord Me API] Bot token result — profile avatar: ${profile?.avatar}, guilds: [] (bot guilds intentionally excluded)`,
       );
     } else {
       console.warn(

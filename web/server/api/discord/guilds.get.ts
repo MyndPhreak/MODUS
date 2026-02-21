@@ -56,32 +56,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── Strategy 2: Fallback — Bot token (only returns bot's guilds) ──────
-  if (botToken) {
-    console.log("[Guilds API] Fetching guilds via Bot token fallback...");
-    try {
-      const botGuilds = await $fetch<any[]>(
-        "https://discord.com/api/v10/users/@me/guilds",
-        {
-          headers: {
-            Authorization: `Bot ${botToken}`,
-          },
-        },
-      );
-      console.log(
-        `[Guilds API] Bot token returned ${botGuilds?.length || 0} guilds`,
-      );
-      return botGuilds || [];
-    } catch (botError: any) {
-      console.warn(
-        `[Guilds API] Bot token guild fetch failed:`,
-        botError.status || botError.statusCode || botError.message,
-      );
-    }
-  } else {
-    console.warn("[Guilds API] No bot token configured, cannot fetch guilds");
-  }
-
-  // If all methods fail, return empty array
+  // ── No valid user token — return empty ─────────────────────────────────
+  // IMPORTANT: Do NOT fall back to Bot token here. The Bot token returns
+  // the bot's own guilds, not the user's guilds. Those guilds lack
+  // user-specific permission flags and would be leaked across all users.
+  console.warn(
+    "[Guilds API] No valid Discord OAuth token — returning empty guilds list",
+  );
   return [];
 });
