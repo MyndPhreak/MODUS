@@ -143,7 +143,7 @@
               color="info"
               variant="subtle"
               class="rounded-lg text-[10px] uppercase font-black tracking-widest px-2 py-0.5"
-              >Managed by Others</UBadge
+              >Managed</UBadge
             >
           </div>
         </div>
@@ -169,15 +169,17 @@
             <UButton
               v-else-if="isInSystem(guild.id)"
               class="flex-1"
-              disabled
+              :loading="joiningId === guild.id"
+              @click="joinServer(guild)"
               size="lg"
               color="info"
               variant="soft"
               :class="[
-                'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all',
+                'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all hover:scale-[1.02]',
               ]"
             >
-              Managed by Another Admin
+              <UIcon name="i-heroicons-user-plus" class="w-4 h-4 mr-1" />
+              Join as Admin
             </UButton>
 
             <!-- State 3: Server not in system at all — connect it -->
@@ -325,6 +327,7 @@ const error = ref<string | null>(null);
 const guilds = ref<any[]>([]);
 const existingServers = ref<any[]>([]);
 const addingId = ref<string | null>(null);
+const joiningId = ref<string | null>(null);
 
 // Bot invite modal state
 const inviteModalOpen = ref(false);
@@ -434,19 +437,23 @@ const fetchGuilds = async () => {
 
     let discordGuilds: any[] = [];
 
-    // Try the server API first (uses API key to access Discord provider token)
-    try {
-      const response = await fetch("/api/discord/guilds");
-      if (response.ok) {
-        discordGuilds = await response.json();
-      }
-    } catch {
-      // Server API failed, will try fallback
+    // Primary source: guilds already fetched by fetchUserSession() via /api/discord/me
+    // This avoids a redundant Discord API call.
+    if (userStore.userGuilds.length > 0) {
+      discordGuilds = userStore.userGuilds;
     }
 
-    // Fallback to user store's cached guilds
-    if (!discordGuilds || discordGuilds.length === 0) {
-      discordGuilds = userStore.userGuilds;
+    // Fallback: hit the dedicated guilds endpoint if the store is empty
+    // (e.g., the /me endpoint failed to return guilds)
+    if (!discordGuilds.length) {
+      try {
+        const response = await fetch("/api/discord/guilds");
+        if (response.ok) {
+          discordGuilds = await response.json();
+        }
+      } catch {
+        // Server API failed, no guilds available
+      }
     }
 
     guilds.value = Array.isArray(discordGuilds) ? discordGuilds : [];
@@ -526,6 +533,52 @@ const addServer = async (guild: any) => {
 
 const refreshLogin = () => {
   userStore.loginWithDiscord();
+};
+
+/** Join an existing server as an additional admin */
+const joinServer = async (guild: any) => {
+  joiningId.value = guild.id;
+  try {
+    const response = await fetch("/api/servers/join", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guild_id: guild.id }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.statusMessage || `Failed to join server (${response.status})`,
+      );
+    }
+
+    toast.add({
+      title: "Joined Server",
+      description: `You are now an admin of ${guild.name} on the dashboard.`,
+      color: "success",
+    });
+
+    // Refresh the existing servers list so the button state updates
+    if (adminGuilds.value.length > 0) {
+      const guildIds = adminGuilds.value.map((g: any) => g.id).join(",");
+      const refreshResponse = await fetch(
+        `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildIds)}`,
+        { credentials: "include" },
+      );
+      if (refreshResponse.ok) {
+        existingServers.value = await refreshResponse.json();
+      }
+    }
+  } catch (err: any) {
+    toast.add({
+      title: "Error",
+      description: err.message || "Failed to join server.",
+      color: "error",
+    });
+  } finally {
+    joiningId.value = null;
+  }
 };
 
 onMounted(() => {

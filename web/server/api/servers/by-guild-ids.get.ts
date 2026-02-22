@@ -55,13 +55,15 @@ export default defineEventHandler(async (event) => {
       allDocs = allDocs.concat(result.documents);
     }
 
-    // Only return the fields the client needs (don't leak admin_user_ids etc.)
+    // Return fields the client needs, including admin_user_ids so Discover
+    // can determine whether the current user is already managing the server.
     return allDocs.map((doc: any) => ({
       $id: doc.$id,
       guild_id: doc.guild_id,
       name: doc.name,
       icon: doc.icon,
       owner_id: doc.owner_id,
+      admin_user_ids: doc.admin_user_ids || [],
     }));
   } catch (err: any) {
     console.error("[By Guild IDs API] Error:", err.message || err);
