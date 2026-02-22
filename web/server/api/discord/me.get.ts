@@ -103,7 +103,79 @@ export default defineEventHandler(async (event) => {
         return { profile, guilds };
       } catch (discordError: any) {
         console.warn(
-          `[Discord Me API] Discord OAuth API call failed (${discordError.status || discordError.statusCode}), falling back to Bot token`,
+          `[Discord Me API] Discord OAuth API call failed (${discordError.status || discordError.statusCode}), falling back`,
+        );
+      }
+    }
+
+    // ── Strategy 1.5: Appwrite Identity store token fallback ─────────────
+    // When using createOAuth2Token + createSession (server-side flow),
+    // the session may not include providerAccessToken, but Appwrite
+    // still stores it in its Identity records.
+    if (!discordToken || isExpired) {
+      console.log(
+        "[Discord Me API] Cookie token unavailable, trying Appwrite Identity store...",
+      );
+      try {
+        const idClient = new Client()
+          .setEndpoint(config.public.appwriteEndpoint as string)
+          .setProject(projectId)
+          .setKey(config.appwriteApiKey as string);
+
+        const idUsers = new Users(idClient);
+        const identities = await idUsers.listIdentities([
+          Query.equal("userId", [userId]),
+        ]);
+
+        const discordIdentity = identities.identities.find(
+          (i) => i.provider === "discord" || i.provider === "oauth2",
+        );
+
+        if (discordIdentity?.providerAccessToken) {
+          const identityExpired = discordIdentity.providerAccessTokenExpiry
+            ? new Date(discordIdentity.providerAccessTokenExpiry).getTime() <
+              Date.now()
+            : false;
+
+          if (!identityExpired) {
+            const identityToken = discordIdentity.providerAccessToken;
+            console.log(
+              `[Discord Me API] Got token from Identity store (length=${identityToken.length}), fetching profile+guilds...`,
+            );
+
+            try {
+              const [profile, guilds] = await Promise.all([
+                $fetch("https://discord.com/api/users/@me", {
+                  headers: { Authorization: `Bearer ${identityToken}` },
+                }),
+                $fetch("https://discord.com/api/users/@me/guilds", {
+                  headers: { Authorization: `Bearer ${identityToken}` },
+                }),
+              ]);
+
+              console.log(
+                `[Discord Me API] Identity token succeeded — avatar: ${(profile as any)?.avatar}, guilds: ${(guilds as any[])?.length}`,
+              );
+              return { profile, guilds };
+            } catch (identityFetchErr: any) {
+              console.warn(
+                `[Discord Me API] Identity token Discord fetch failed (${identityFetchErr.status || identityFetchErr.statusCode}), falling back to Bot token`,
+              );
+            }
+          } else {
+            console.warn(
+              "[Discord Me API] Identity store token is also expired",
+            );
+          }
+        } else {
+          console.warn(
+            "[Discord Me API] No providerAccessToken in Appwrite Identity",
+          );
+        }
+      } catch (idErr: any) {
+        console.warn(
+          "[Discord Me API] Failed to query Appwrite Identity:",
+          idErr.message,
         );
       }
     }
