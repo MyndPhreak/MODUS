@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.0...modus-v1.6.1) (2026-02-22)
+
+
+### 🐛 Bug Fixes
+
+* **auth:** add handler to properly fetch user providerAccessToken ([b2dc586](https://github.com/MyndPhreak/MODUS/commit/b2dc586bcbb520b82c8668b9c10335ebbb934065))
+
 ## [1.6.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.5.0...modus-v1.6.0) (2026-02-22)
 
 
