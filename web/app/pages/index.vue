@@ -422,11 +422,9 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import { Query } from "appwrite";
 
 const userStore = useUserStore();
 const { databases } = useAppwrite();
-const serversCollectionId = "servers";
 const botStatusCollectionId = "bot_status";
 
 const modules = ref([]);
@@ -529,41 +527,15 @@ const fetchServers = async () => {
   if (!userStore.user) return;
   serversLoading.value = true;
   try {
-    const userId = userStore.user.$id;
-
-    // Primary: servers the user owns
-    let ownerDocs = [];
-    try {
-      const res = await databases.listDocuments(
-        databaseId,
-        serversCollectionId,
-        [Query.equal("owner_id", userId)],
-      );
-      ownerDocs = res.documents;
-    } catch (e) {
-      console.warn("[Dashboard] owner_id query failed:", e);
-    }
-
-    // Secondary: servers the user is listed as admin on
-    let adminDocs = [];
-    try {
-      const res = await databases.listDocuments(
-        databaseId,
-        serversCollectionId,
-        [Query.contains("admin_user_ids", userId)],
-      );
-      adminDocs = res.documents;
-    } catch {
-      // admin_user_ids attribute may not exist on all docs yet
-    }
-
-    // Merge and deduplicate
-    const seen = new Set();
-    servers.value = [...ownerDocs, ...adminDocs].filter((doc) => {
-      if (seen.has(doc.$id)) return false;
-      seen.add(doc.$id);
-      return true;
+    // Use server-side API — bypasses Appwrite collection permissions,
+    // guarantees only this user's servers are returned
+    const response = await fetch("/api/servers/my-servers", {
+      credentials: "include",
     });
+    if (!response.ok) {
+      throw new Error(`Server API returned ${response.status}`);
+    }
+    servers.value = await response.json();
 
     // Backfill missing icons from Discord guild data
     const discordGuilds = userStore.userGuilds || [];
@@ -574,8 +546,8 @@ const fetchServers = async () => {
           if (guild?.icon) {
             try {
               await databases.updateDocument(
-                databaseId,
-                serversCollectionId,
+                "discord_bot",
+                "servers",
                 server.$id,
                 { icon: guild.icon },
               );

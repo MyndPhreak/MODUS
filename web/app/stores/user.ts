@@ -249,7 +249,7 @@ export const useUserStore = defineStore("user", {
                         owner: g.owner,
                         permissions: g.permissions,
                       }))
-                    : this.discord?.guilds || [], // Preserve existing guilds if new data has none
+                    : [], // Clear stale or leaked guilds. If token expired, forces re-sync rather than preserving old leaked bot guilds.
               };
 
               // Log admin check info

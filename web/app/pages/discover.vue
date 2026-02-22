@@ -169,16 +169,15 @@
             <UButton
               v-else-if="isInSystem(guild.id)"
               class="flex-1"
-              :loading="addingId === guild.id"
-              @click="joinServer(guild)"
+              disabled
               size="lg"
-              color="success"
-              variant="solid"
+              color="info"
+              variant="soft"
               :class="[
                 'rounded-xl font-black uppercase tracking-widest text-[11px] transition-all',
               ]"
             >
-              Join as Admin
+              Managed by Another Admin
             </UButton>
 
             <!-- State 3: Server not in system at all — connect it -->
@@ -316,10 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { Query } from "appwrite";
-
 const userStore = useUserStore();
-const { databases } = useAppwrite();
 const toast = useToast();
 const router = useRouter();
 const config = useRuntimeConfig();
@@ -461,12 +457,16 @@ const fetchGuilds = async () => {
 
     // Load existing servers separately — this should succeed even if Discord API failed
     try {
-      const appwriteServers = await databases.listDocuments(
-        "discord_bot",
-        "servers",
-        [Query.limit(500)],
-      );
-      existingServers.value = appwriteServers.documents;
+      if (adminGuilds.value.length > 0) {
+        const guildIds = adminGuilds.value.map((g: any) => g.id).join(",");
+        const response = await fetch(
+          `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildIds)}`,
+          { credentials: "include" },
+        );
+        if (response.ok) {
+          existingServers.value = await response.json();
+        }
+      }
     } catch (dbErr) {
       console.warn("[Discover] Failed to load existing servers:", dbErr);
     }
@@ -482,14 +482,15 @@ const fetchGuilds = async () => {
 const addServer = async (guild: any) => {
   addingId.value = guild.id;
   try {
-    await databases.createDocument("discord_bot", "servers", guild.id, {
-      guild_id: guild.id,
-      name: guild.name,
-      status: false,
-      owner_id: userStore.user!.$id,
-      admin_user_ids: [userStore.user!.$id],
-      last_checked: new Date().toISOString(),
-      icon: guild.icon || null,
+    await fetch("/api/servers/add", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        guild_id: guild.id,
+        name: guild.name,
+        icon: guild.icon || null,
+      }),
     });
 
     toast.add({
@@ -498,13 +499,17 @@ const addServer = async (guild: any) => {
       color: "success",
     });
 
-    // Refresh the server list
-    const appwriteServers = await databases.listDocuments(
-      "discord_bot",
-      "servers",
-      [Query.limit(500)],
-    );
-    existingServers.value = appwriteServers.documents;
+    // Refresh the existing servers list via server API
+    if (adminGuilds.value.length > 0) {
+      const guildIds = adminGuilds.value.map((g: any) => g.id).join(",");
+      const response = await fetch(
+        `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildIds)}`,
+        { credentials: "include" },
+      );
+      if (response.ok) {
+        existingServers.value = await response.json();
+      }
+    }
 
     // Automatically prompt to invite the bot after adding the server
     openBotInvite(guild);
@@ -512,48 +517,6 @@ const addServer = async (guild: any) => {
     toast.add({
       title: "Error",
       description: err.message || "Failed to add server.",
-      color: "error",
-    });
-  } finally {
-    addingId.value = null;
-  }
-};
-
-/** Join an existing server as an additional admin */
-const joinServer = async (guild: any) => {
-  addingId.value = guild.id;
-  try {
-    const server = existingServers.value.find((s: any) => s.$id === guild.id);
-    if (!server) return;
-
-    const currentAdmins: string[] = Array.isArray(server.admin_user_ids)
-      ? server.admin_user_ids
-      : [];
-    const userId = userStore.user!.$id;
-
-    if (!currentAdmins.includes(userId)) {
-      await databases.updateDocument("discord_bot", "servers", guild.id, {
-        admin_user_ids: [...currentAdmins, userId],
-      });
-    }
-
-    toast.add({
-      title: "Joined Server",
-      description: `You're now managing ${guild.name}. Settings are synced.`,
-      color: "success",
-    });
-
-    // Refresh the server list
-    const appwriteServers = await databases.listDocuments(
-      "discord_bot",
-      "servers",
-      [Query.limit(500)],
-    );
-    existingServers.value = appwriteServers.documents;
-  } catch (err: any) {
-    toast.add({
-      title: "Error",
-      description: err.message || "Failed to join server.",
       color: "error",
     });
   } finally {

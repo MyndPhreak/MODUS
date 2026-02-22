@@ -1,59 +1,24 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
-import { Query } from "appwrite";
 
 const userStore = useUserStore();
 const { botHealthOnline, botLatency, healthChecking, lastHealthCheck } =
   useBotHealth();
 const { state: serverSidebar } = useServerSidebar();
-const { databases } = useAppwrite();
 const isMounted = ref(false);
 const route = useRoute();
 
 // Sidebar servers list
 const sidebarServers = ref<any[]>([]);
 
-const databaseId = "discord_bot";
-const serversCollectionId = "servers";
-
 async function fetchSidebarServers() {
   if (!userStore.user) return;
   try {
-    const userId = userStore.user.$id;
-
-    // Primary: servers the user owns
-    let ownerDocs: any[] = [];
-    try {
-      const res = await databases.listDocuments(
-        databaseId,
-        serversCollectionId,
-        [Query.equal("owner_id", userId)],
-      );
-      ownerDocs = res.documents;
-    } catch (e) {
-      console.warn("[Sidebar] owner_id query failed:", e);
-    }
-
-    // Secondary: servers the user is listed as admin on
-    let adminDocs: any[] = [];
-    try {
-      const res = await databases.listDocuments(
-        databaseId,
-        serversCollectionId,
-        [Query.contains("admin_user_ids", [userId])],
-      );
-      adminDocs = res.documents;
-    } catch {
-      // admin_user_ids attribute may not exist on all docs yet
-    }
-
-    // Merge and deduplicate
-    const seen = new Set<string>();
-    sidebarServers.value = [...ownerDocs, ...adminDocs].filter((doc) => {
-      if (seen.has(doc.$id)) return false;
-      seen.add(doc.$id);
-      return true;
+    const response = await fetch("/api/servers/my-servers", {
+      credentials: "include",
     });
+    if (!response.ok) return;
+    sidebarServers.value = await response.json();
   } catch {
     // silently ignore
   }
