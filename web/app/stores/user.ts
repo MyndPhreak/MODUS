@@ -18,6 +18,10 @@ export interface DiscordProfile {
   guilds: DiscordGuild[];
 }
 
+// Module-level deduplication: prevents concurrent fetchUserSession calls
+// from triggering duplicate /api/discord/me requests.
+let _pendingSessionFetch: Promise<void> | null = null;
+
 export const useUserStore = defineStore("user", {
   state: () => ({
     user: null as Models.User<any> | null,
@@ -127,10 +131,22 @@ export const useUserStore = defineStore("user", {
     /**
      * Fetch and validate the current session from Appwrite.
      * If the session is a Discord OAuth session, also fetch Discord profile + guilds.
+     * Deduplicates concurrent calls — if a fetch is already in-flight, callers
+     * share the same promise to avoid duplicate Discord API requests (429s).
      */
     async fetchUserSession() {
       if (import.meta.server) return;
+      if (_pendingSessionFetch) return _pendingSessionFetch;
+      _pendingSessionFetch = this._fetchUserSessionImpl();
+      try {
+        await _pendingSessionFetch;
+      } finally {
+        _pendingSessionFetch = null;
+      }
+    },
 
+    /** Internal implementation — do not call directly. */
+    async _fetchUserSessionImpl() {
       const { account, client } = this.getAppwrite();
       const config = useRuntimeConfig();
 
