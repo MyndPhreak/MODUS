@@ -1,4 +1,4 @@
-import { Client, Account, Users } from "node-appwrite";
+import { Client, Account, Users, Query } from "node-appwrite";
 
 /**
  * Server-side OAuth callback handler.
@@ -78,40 +78,75 @@ export default defineEventHandler(async (event) => {
     setCookie(event, `a_user_${projectId}`, userId, cookieOpts);
 
     // Persist the Discord OAuth provider token so downstream API endpoints
-    // can use it.  Appwrite's Admin SDK listSessions() does NOT expose
-    // providerAccessToken after creation, so we capture it here.
-    if (session.providerAccessToken) {
+    // can use it without hitting the Identity store on every request.
+    let discordAccessToken = session.providerAccessToken || null;
+    let discordTokenExpiry = session.providerAccessTokenExpiry || null;
+    let discordUid = session.providerUid || null;
+
+    // The server-side createOAuth2Token + createSession flow often doesn't
+    // populate providerAccessToken on the session object. Fall back to
+    // Appwrite's Identity store which reliably persists the OAuth token.
+    if (!discordAccessToken) {
       console.log(
-        `[Auth Callback] Saving Discord provider token (length=${session.providerAccessToken.length}, uid=${session.providerUid || "none"})`,
+        "[Auth Callback] No providerAccessToken on session — checking Identity store...",
+      );
+      try {
+        const users = new Users(client);
+        const identities = await users.listIdentities([
+          Query.equal("userId", [userId]),
+        ]);
+        const discordIdentity = identities.identities.find(
+          (i) => i.provider === "discord" || i.provider === "oauth2",
+        );
+
+        if (discordIdentity?.providerAccessToken) {
+          discordAccessToken = discordIdentity.providerAccessToken;
+          discordTokenExpiry =
+            discordIdentity.providerAccessTokenExpiry || null;
+          discordUid = discordUid || discordIdentity.providerUid || null;
+          console.log(
+            `[Auth Callback] Got Discord token from Identity store (length=${discordAccessToken.length}, uid=${discordUid || "none"})`,
+          );
+        } else {
+          console.warn(
+            "[Auth Callback] No providerAccessToken in Identity store either",
+          );
+        }
+      } catch (identityErr: any) {
+        console.warn(
+          "[Auth Callback] Failed to query Identity store:",
+          identityErr.message,
+        );
+      }
+    }
+
+    if (discordAccessToken) {
+      console.log(
+        `[Auth Callback] Saving Discord provider token cookie (length=${discordAccessToken.length}, uid=${discordUid || "none"})`,
       );
 
       setCookie(
         event,
         `discord_token_${projectId}`,
-        session.providerAccessToken,
+        discordAccessToken,
         cookieOpts,
       );
 
-      if (session.providerAccessTokenExpiry) {
+      if (discordTokenExpiry) {
         setCookie(
           event,
           `discord_token_expiry_${projectId}`,
-          session.providerAccessTokenExpiry,
+          discordTokenExpiry,
           cookieOpts,
         );
       }
 
-      if (session.providerUid) {
-        setCookie(
-          event,
-          `discord_uid_${projectId}`,
-          session.providerUid,
-          cookieOpts,
-        );
+      if (discordUid) {
+        setCookie(event, `discord_uid_${projectId}`, discordUid, cookieOpts);
       }
     } else {
       console.warn(
-        "[Auth Callback] No providerAccessToken on session — guild list will fall back to Bot token",
+        "[Auth Callback] No Discord token available from session or Identity — guilds will rely on Identity fallback per-request",
       );
     }
 
