@@ -323,6 +323,30 @@ const collections: CollectionDef[] = [
       },
     ],
   },
+  {
+    id: "temp_voice_channels",
+    name: "Temp Voice Channels",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "channel_id", type: "string", size: 64, required: true },
+      { key: "owner_id", type: "string", size: 64, required: true },
+      { key: "lobby_channel_id", type: "string", size: 64, required: true },
+      { key: "created_at", type: "string", size: 64, required: true },
+    ],
+    indexes: [
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+      {
+        key: "idx_channel_id",
+        type: "unique",
+        attributes: ["channel_id"],
+      },
+      {
+        key: "idx_guild_owner",
+        type: "key",
+        attributes: ["guild_id", "owner_id"],
+      },
+    ],
+  },
 ];
 
 // ──────────────────────────────────────────────

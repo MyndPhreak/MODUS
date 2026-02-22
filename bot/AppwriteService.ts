@@ -68,6 +68,7 @@ export class AppwriteService {
   private automodRulesCollectionId = "automod_rules";
   private aiUsageLogCollectionId = "ai_usage_log";
   private tagsCollectionId = "tags";
+  private tempVoiceChannelsCollectionId = "temp_voice_channels";
   public storage: Storage;
 
   // TTL cache for guild config lookups (60s default)
@@ -1072,6 +1073,108 @@ export class AppwriteService {
     );
     if (guildId) {
       this.configCache.invalidatePrefix(`tag:${guildId}:`);
+    }
+  }
+
+  // ── Temp Voice Channels ──────────────────────────────────────────────
+
+  async createTempChannel(data: {
+    guild_id: string;
+    channel_id: string;
+    owner_id: string;
+    lobby_channel_id: string;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.tempVoiceChannelsCollectionId,
+      ID.unique(),
+      {
+        ...data,
+        created_at: new Date().toISOString(),
+      },
+    );
+    return doc.$id;
+  }
+
+  async deleteTempChannel(channelId: string): Promise<void> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tempVoiceChannelsCollectionId,
+        [Query.equal("channel_id", channelId), Query.limit(1)],
+      );
+      if (response.total > 0) {
+        await this.databases.deleteDocument(
+          this.databaseId,
+          this.tempVoiceChannelsCollectionId,
+          response.documents[0].$id,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error deleting temp channel ${channelId}:`,
+        error,
+      );
+    }
+  }
+
+  async getTempChannels(guildId: string): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tempVoiceChannelsCollectionId,
+        [Query.equal("guild_id", guildId), Query.limit(500)],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching temp channels for ${guildId}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async getAllTempChannels(): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tempVoiceChannelsCollectionId,
+        [Query.limit(500)],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching all temp channels:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async updateTempChannelOwner(
+    channelId: string,
+    newOwnerId: string,
+  ): Promise<void> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.tempVoiceChannelsCollectionId,
+        [Query.equal("channel_id", channelId), Query.limit(1)],
+      );
+      if (response.total > 0) {
+        await this.databases.updateDocument(
+          this.databaseId,
+          this.tempVoiceChannelsCollectionId,
+          response.documents[0].$id,
+          { owner_id: newOwnerId },
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error updating temp channel owner for ${channelId}:`,
+        error,
+      );
     }
   }
 }

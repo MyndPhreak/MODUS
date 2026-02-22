@@ -17,6 +17,7 @@ import { registerMilestoneEvents } from "./modules/milestones";
 import { registerAutoModEvents } from "./modules/automod";
 import { registerAIEvents } from "./modules/ai";
 import { registerLoggingEvents } from "./modules/logging";
+import { registerTempVoiceEvents } from "./modules/tempvoice";
 import { registerMusicAPI } from "./MusicAPI";
 
 dotenv.config();
@@ -140,6 +141,7 @@ client.once("ready", async () => {
   registerAutoModEvents(moduleManager);
   registerAIEvents(moduleManager);
   registerLoggingEvents(moduleManager);
+  await registerTempVoiceEvents(moduleManager);
   serverStatusService.start();
 
   let botVersion = process.env.npm_package_version || "1.0.0";
