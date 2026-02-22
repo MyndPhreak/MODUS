@@ -26,35 +26,15 @@ async function fetchDiscordUserViaBot(
 }
 
 /**
- * Fetch the guilds the bot is in using the Bot token.
- * Returns all guilds the bot has joined.
- */
-async function fetchBotGuilds(botToken: string): Promise<any[]> {
-  try {
-    const guilds = await $fetch<any[]>(
-      "https://discord.com/api/v10/users/@me/guilds",
-      {
-        headers: { Authorization: `Bot ${botToken}` },
-      },
-    );
-    return guilds || [];
-  } catch (err: any) {
-    console.warn(
-      `[Discord Me API] Bot guilds fetch failed:`,
-      err.status || err.statusCode || err.message,
-    );
-    return [];
-  }
-}
-
-/**
  * Server-side endpoint to fetch the current user's Discord profile and guilds.
  *
  * Strategy:
  * 1. Read the Discord OAuth token from the cookie (set during login callback)
  *    — gives us the user's full guild list including non-bot guilds
- * 2. If the token is unavailable or expired, use the Bot token to fetch the
- *    user's profile (avatar, username, etc.) and the bot's guilds as a fallback
+ * 2. If the token is unavailable or expired, check Appwrite Identity store
+ * 3. If the Identity store token is also expired, attempt to refresh via
+ *    Appwrite's updateSession() which uses the stored refresh_token
+ * 4. If all OAuth paths fail, use the Bot token for profile (no guilds)
  */
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -105,13 +85,38 @@ export default defineEventHandler(async (event) => {
         console.warn(
           `[Discord Me API] Discord OAuth API call failed (${discordError.status || discordError.statusCode}), falling back`,
         );
+
+        // If Discord rejected the token (401), try refreshing
+        if (discordError.status === 401 || discordError.statusCode === 401) {
+          console.log(
+            "[Discord Me API] Token rejected by Discord, attempting refresh...",
+          );
+          const refreshed = await refreshDiscordToken(event, config);
+          if (refreshed) {
+            try {
+              const [profile, guilds] = await Promise.all([
+                $fetch("https://discord.com/api/users/@me", {
+                  headers: { Authorization: `Bearer ${refreshed.token}` },
+                }),
+                $fetch("https://discord.com/api/users/@me/guilds", {
+                  headers: { Authorization: `Bearer ${refreshed.token}` },
+                }),
+              ]);
+              console.log(
+                `[Discord Me API] Retry after refresh succeeded — avatar: ${(profile as any)?.avatar}, guilds: ${(guilds as any[])?.length}`,
+              );
+              return { profile, guilds };
+            } catch (retryErr: any) {
+              console.warn(
+                `[Discord Me API] Retry after refresh also failed (${retryErr.status || retryErr.statusCode})`,
+              );
+            }
+          }
+        }
       }
     }
 
-    // ── Strategy 1.5: Appwrite Identity store token fallback ─────────────
-    // When using createOAuth2Token + createSession (server-side flow),
-    // the session may not include providerAccessToken, but Appwrite
-    // still stores it in its Identity records.
+    // ── Strategy 2: Appwrite Identity store token fallback ─────────────
     if (!discordToken || isExpired) {
       console.log(
         "[Discord Me API] Cookie token unavailable, trying Appwrite Identity store...",
@@ -159,13 +164,39 @@ export default defineEventHandler(async (event) => {
               return { profile, guilds };
             } catch (identityFetchErr: any) {
               console.warn(
-                `[Discord Me API] Identity token Discord fetch failed (${identityFetchErr.status || identityFetchErr.statusCode}), falling back to Bot token`,
+                `[Discord Me API] Identity token Discord fetch failed (${identityFetchErr.status || identityFetchErr.statusCode}), falling back`,
               );
             }
           } else {
             console.warn(
               "[Discord Me API] Identity store token is also expired",
             );
+
+            // ── Strategy 3: Refresh the expired token ──────────────────
+            console.log(
+              "[Discord Me API] Attempting to refresh expired Discord token...",
+            );
+            const refreshed = await refreshDiscordToken(event, config);
+            if (refreshed) {
+              try {
+                const [profile, guilds] = await Promise.all([
+                  $fetch("https://discord.com/api/users/@me", {
+                    headers: { Authorization: `Bearer ${refreshed.token}` },
+                  }),
+                  $fetch("https://discord.com/api/users/@me/guilds", {
+                    headers: { Authorization: `Bearer ${refreshed.token}` },
+                  }),
+                ]);
+                console.log(
+                  `[Discord Me API] Refresh succeeded — avatar: ${(profile as any)?.avatar}, guilds: ${(guilds as any[])?.length}`,
+                );
+                return { profile, guilds };
+              } catch (refreshFetchErr: any) {
+                console.warn(
+                  `[Discord Me API] Refresh token Discord fetch failed (${refreshFetchErr.status || refreshFetchErr.statusCode}), continuing to bot fallback`,
+                );
+              }
+            }
           }
         } else {
           console.warn(
@@ -180,14 +211,13 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // ── Strategy 2: Bot token fallback ────────────────────────────────────
+    // ── Strategy 4: Bot token fallback (profile only, no guilds) ────────
     console.log("[Discord Me API] Using Bot token fallback for user profile");
 
     // Try to resolve the Discord user ID from cookie or Appwrite identity
     let discordUid = discordUidCookie;
 
     if (!discordUid) {
-      // Fall back to Appwrite identities API
       const client = new Client()
         .setEndpoint(config.public.appwriteEndpoint as string)
         .setProject(projectId)

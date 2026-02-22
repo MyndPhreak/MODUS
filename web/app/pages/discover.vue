@@ -32,25 +32,45 @@
 
     <div
       v-else-if="error"
-      class="glass-card border-red-500/20 rounded-3xl p-10 text-center max-w-2xl mx-auto"
+      class="glass-card rounded-3xl p-10 text-center max-w-2xl mx-auto"
+      :class="tokenExpired ? 'border-amber-500/20' : 'border-red-500/20'"
     >
       <div
-        class="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6"
+        class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
+        :class="tokenExpired ? 'bg-amber-500/10' : 'bg-red-500/10'"
       >
         <UIcon
-          name="i-heroicons-exclamation-triangle"
-          class="w-8 h-8 text-red-500"
+          :name="
+            tokenExpired
+              ? 'i-heroicons-arrow-path'
+              : 'i-heroicons-exclamation-triangle'
+          "
+          class="w-8 h-8"
+          :class="tokenExpired ? 'text-amber-500' : 'text-red-500'"
         />
       </div>
-      <h3 class="text-xl font-bold text-white mb-2">Failed to load servers</h3>
+      <h3 class="text-xl font-bold text-white mb-2">
+        {{
+          tokenExpired ? "Discord Connection Expired" : "Failed to load servers"
+        }}
+      </h3>
       <p class="text-gray-400 mb-8">{{ error }}</p>
-      <UButton
-        color="neutral"
-        variant="solid"
-        class="rounded-xl px-8"
-        @click="fetchGuilds"
-        >Try Again</UButton
-      >
+      <div class="flex flex-col items-center gap-3">
+        <UButton
+          v-if="tokenExpired"
+          class="rounded-2xl px-10 py-3 bg-gradient-to-r from-purple-600 to-pink-600 font-bold"
+          @click="refreshLogin"
+        >
+          Refresh Discord Connection
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="solid"
+          class="rounded-xl px-8"
+          @click="fetchGuilds"
+          >Try Again</UButton
+        >
+      </div>
     </div>
 
     <div
@@ -324,6 +344,7 @@ const config = useRuntimeConfig();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
+const tokenExpired = ref(false);
 const guilds = ref<any[]>([]);
 const existingServers = ref<any[]>([]);
 const addingId = ref<string | null>(null);
@@ -425,6 +446,7 @@ const openDiscordInvite = () => {
 const fetchGuilds = async () => {
   loading.value = true;
   error.value = null;
+  tokenExpired.value = false;
   try {
     if (!userStore.isLoggedIn) {
       await userStore.fetchUserSession();
@@ -450,6 +472,16 @@ const fetchGuilds = async () => {
         const response = await fetch("/api/discord/guilds");
         if (response.ok) {
           discordGuilds = await response.json();
+        } else if (response.status === 401) {
+          // Server signals that the Discord token is expired and
+          // could not be refreshed — user needs to re-authenticate
+          const body = await response.json().catch(() => ({}));
+          if (body?.data?.code === "discord_token_expired") {
+            tokenExpired.value = true;
+            error.value =
+              "Your Discord connection has expired. Please re-authenticate to refresh your server list.";
+            return;
+          }
         }
       } catch {
         // Server API failed, no guilds available

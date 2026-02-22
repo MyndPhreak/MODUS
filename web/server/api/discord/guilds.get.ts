@@ -6,7 +6,10 @@ import { Client, Query, Users } from "node-appwrite";
  * Strategy:
  * 1. Read the Discord OAuth token from the cookie (set during login callback)
  * 2. If cookie is missing/expired, read the token from Appwrite's Identity store
- * 3. If we have a valid token from either source, fetch guilds from Discord
+ * 3. If the Identity store token is also expired, attempt to refresh it via
+ *    Appwrite's updateSession() which uses the stored refresh_token
+ * 4. If we have a valid token from any source, fetch guilds from Discord
+ * 5. If all sources fail, return 401 with discord_token_expired error
  *
  * IMPORTANT: We never fall back to the Bot token for guilds — bot guilds lack
  * user-specific permission flags and would be leaked across all users.
@@ -38,9 +41,6 @@ export default defineEventHandler(async (event) => {
   );
 
   // ── Strategy 2: Fallback to Appwrite Identity store ───────────────────
-  // When using createOAuth2Token + createSession (server-side flow),
-  // the session object may not include providerAccessToken. Appwrite
-  // still stores the token in its Identity records — retrieve it there.
   if ((!discordToken || tokenExpired) && userId) {
     console.log(
       "[Guilds API] Cookie token unavailable, trying Appwrite Identity store...",
@@ -74,6 +74,19 @@ export default defineEventHandler(async (event) => {
           );
         } else {
           console.warn("[Guilds API] Identity store token is also expired");
+
+          // ── Strategy 3: Refresh the expired token via Appwrite ────────
+          console.log(
+            "[Guilds API] Attempting to refresh expired Discord token...",
+          );
+          const refreshed = await refreshDiscordToken(event, config);
+          if (refreshed) {
+            discordToken = refreshed.token;
+            tokenExpired = false;
+            console.log(
+              `[Guilds API] Token refreshed successfully (length=${refreshed.token.length})`,
+            );
+          }
         }
       } else {
         console.warn(
@@ -107,12 +120,49 @@ export default defineEventHandler(async (event) => {
       console.warn(
         `[Guilds API] OAuth token request failed (${discordError.status || discordError.statusCode})`,
       );
+
+      // If the token was rejected by Discord (401), try one last refresh
+      if (
+        (discordError.status === 401 || discordError.statusCode === 401) &&
+        userId
+      ) {
+        console.log(
+          "[Guilds API] Token rejected by Discord, attempting refresh...",
+        );
+        const refreshed = await refreshDiscordToken(event, config);
+        if (refreshed) {
+          try {
+            const retryResponse = await $fetch(
+              "https://discord.com/api/users/@me/guilds",
+              {
+                headers: { Authorization: `Bearer ${refreshed.token}` },
+              },
+            );
+            console.log(
+              `[Guilds API] Retry after refresh succeeded — ${(retryResponse as any[])?.length || 0} guilds`,
+            );
+            return retryResponse;
+          } catch (retryErr: any) {
+            console.warn(
+              `[Guilds API] Retry after refresh also failed (${retryErr.status || retryErr.statusCode})`,
+            );
+          }
+        }
+      }
     }
   }
 
   // ── No valid token available ──────────────────────────────────────────
   console.warn(
-    "[Guilds API] No valid Discord OAuth token — returning empty guilds list",
+    "[Guilds API] No valid Discord OAuth token — user needs to re-authenticate",
   );
-  return [];
+  throw createError({
+    statusCode: 401,
+    statusMessage: "discord_token_expired",
+    data: {
+      code: "discord_token_expired",
+      message:
+        "Your Discord connection has expired. Please re-authenticate with Discord to refresh your server list.",
+    },
+  });
 });
