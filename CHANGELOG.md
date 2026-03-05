@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.1...modus-v1.6.2) (2026-03-05)
+
+
+### 🐛 Bug Fixes
+
+* **bot:** resolve Spotify playback hangs via yt-dlp bridge and discord-player update ([1646953](https://github.com/MyndPhreak/MODUS/commit/164695317c70981f0f67bb0f5a54eb5c05e74c47))
+
 ## [1.6.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.0...modus-v1.6.1) (2026-02-22)
 
 
