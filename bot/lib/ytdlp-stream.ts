@@ -41,8 +41,8 @@ function extractVideoId(url: string): string | null {
 }
 
 /**
- * Uses yt-dlp to resolve the direct audio stream URL for a video.
- * This is fast (~1-2s) since it doesn't download anything.
+ * Uses yt-dlp to resolve the direct audio stream URL for a known YouTube video ID.
+ * Fast (~1-2s) since it doesn't download anything.
  */
 function getDirectAudioUrl(videoId: string): Promise<string> {
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -54,9 +54,14 @@ function getDirectAudioUrl(videoId: string): Promise<string> {
         "--no-warnings",
         "--no-check-certificates",
         "--format",
-        "bestaudio[ext=webm]/bestaudio/best",
+        // Format 140 = m4a/AAC 128k — MPEG-4 container probes instantly.
+        // Avoid webm/opus: FFmpeg must scan the entire Matroska header before
+        // it can start streaming, which triggers discord-voip's ~5 s probe
+        // timeout under YouTube CDN throttling on server IPs.
+        "140/bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best",
         "--get-url", // Just print the direct URL, don't download
         "--no-cache-dir",
+        "--no-playlist", // Never expand playlists — we pass single video IDs
         "--quiet",
         videoUrl,
       ],
@@ -89,26 +94,109 @@ function getDirectAudioUrl(videoId: string): Promise<string> {
 }
 
 /**
+ * Uses yt-dlp to search YouTube for a text query and return the direct
+ * audio URL of the first result. Used to bridge Spotify/Apple Music tracks
+ * to YouTube audio.
+ */
+function searchYouTubeForAudio(searchQuery: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "yt-dlp",
+      [
+        "--no-warnings",
+        "--no-check-certificates",
+        "--format",
+        "140/bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best",
+        "--get-url",
+        "--no-cache-dir",
+        "--no-playlist",
+        "--quiet",
+        "--default-search",
+        "ytsearch1", // Search YouTube, take the first result only
+        searchQuery,
+      ],
+      { timeout: 20000 }, // slightly longer timeout for search
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(
+            "[YT-DLP] YouTube search failed:",
+            stderr?.trim() || error.message,
+          );
+          reject(new Error(`yt-dlp search failed: ${error.message}`));
+          return;
+        }
+
+        // yt-dlp may return multiple lines; take the first non-empty one
+        const directUrl = stdout.split("\n").find((l) => l.trim()) || "";
+        if (!directUrl) {
+          reject(new Error("yt-dlp search returned empty URL"));
+          return;
+        }
+
+        console.log(
+          `[YT-DLP] Bridged "${searchQuery}" → URL (length: ${directUrl.length} chars)`,
+        );
+        resolve(directUrl);
+      },
+    );
+  });
+}
+
+/**
  * A createStream function compatible with discord-player-youtubei's options.
  * Pass this directly as the `createStream` option when registering the extractor.
  *
- * Returns the resolved direct URL as a string. discord-player's internal FFmpeg
- * pipeline will handle fetching and transcoding with its own reconnect flags.
- * This avoids double-FFmpeg piping which caused EPIPE errors.
+ * The Youtubei extractor passes a Track object with a .url property, but the
+ * Spotify extractor passes a raw URL string — we handle both.
  */
 export async function createYtDlpStreamFunction(
-  query: { url: string },
+  query: { url: string } | string,
   _extractor: unknown,
 ): Promise<string | Readable> {
-  const videoId = extractVideoId(query.url);
+  const url = typeof query === "string" ? query : query.url;
+  const videoId = extractVideoId(url);
   if (!videoId) {
-    throw new Error(`[YT-DLP] Could not extract video ID from: ${query.url}`);
+    throw new Error(`[YT-DLP] Could not extract video ID from: ${url}`);
   }
 
   console.log("[YT-DLP] Streaming video:", videoId);
+  return getDirectAudioUrl(videoId);
+}
 
-  // Resolve direct URL via yt-dlp, then return the URL string.
-  // discord-player's FFmpeg will fetch it directly with reconnect + buffering.
-  const directUrl = await getDirectAudioUrl(videoId);
-  return directUrl;
+/**
+ * A createStream function for the SpotifyExtractor.
+ *
+ * SpotifyExtractor cannot stream audio directly — it only resolves metadata.
+ * When it needs to stream a track, this function bridges by searching YouTube
+ * for "Artist - Title" via yt-dlp and returning the first result's direct
+ * audio URL.
+ *
+ * SpotifyExtractor calls: createStream(extractor, trackUrl)
+ * The Track object with title/author is available on the extractor context.
+ *
+ * Usage in index.ts:
+ *   import { SpotifyExtractor } from "@discord-player/extractor";
+ *   import { createSpotifyBridgeStreamFunction } from "./lib/ytdlp-stream";
+ *
+ *   player.extractors.register(SpotifyExtractor, {
+ *     createStream: createSpotifyBridgeStreamFunction,
+ *   });
+ */
+export async function createSpotifyBridgeStreamFunction(
+  _extractor: unknown,
+  trackUrl: string,
+  track?: {
+    title?: string;
+    author?: string;
+    raw?: { title?: string; artist?: string };
+  },
+): Promise<string | Readable> {
+  // Build the best possible YouTube search query from available metadata
+  const title = track?.title || track?.raw?.title || "Unknown Title";
+  const artist = track?.author || track?.raw?.artist || "";
+
+  const searchQuery = artist ? `${artist} - ${title}` : title;
+  console.log(`[YT-DLP] Bridging Spotify track: "${searchQuery}"`);
+
+  return searchYouTubeForAudio(searchQuery);
 }

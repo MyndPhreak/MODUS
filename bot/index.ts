@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Events, Partials } from "discord.js";
 import { Player } from "discord-player";
-import { DefaultExtractors } from "@discord-player/extractor";
+import { DefaultExtractors, SpotifyExtractor } from "@discord-player/extractor";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import http from "http";
 import path from "path";
@@ -11,7 +11,10 @@ import { ModuleManager } from "./ModuleManager";
 import { AppwriteService } from "./AppwriteService";
 import { ServerStatusService } from "./ServerStatusService";
 import { Logger } from "./Logger";
-import { createYtDlpStreamFunction } from "./lib/ytdlp-stream";
+import {
+  createYtDlpStreamFunction,
+  createSpotifyBridgeStreamFunction,
+} from "./lib/ytdlp-stream";
 import { registerWelcomeEvents } from "./modules/welcome";
 import { registerMilestoneEvents } from "./modules/milestones";
 import { registerAutoModEvents } from "./modules/automod";
@@ -36,7 +39,10 @@ const client = new Client({
 });
 
 // Initialize discord-player
-const player = new Player(client);
+const player = new Player(client, {
+  probeTimeout: 20000,
+  connectionTimeout: 20000,
+});
 
 // Load default extractors + YouTube extractor (removed from defaults in v7)
 // Load extractors before login
@@ -50,6 +56,10 @@ async function loadExtractors() {
       },
       // Use yt-dlp for streaming — bypasses YouTube's 30-second throttle
       createStream: createYtDlpStreamFunction,
+    } as any);
+
+    await player.extractors.register(SpotifyExtractor, {
+      createStream: createSpotifyBridgeStreamFunction,
     } as any);
     console.log(
       "[Music] All extractors loaded:",
