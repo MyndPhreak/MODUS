@@ -11,8 +11,10 @@ RUN corepack enable && corepack prepare pnpm@10.9.0 --activate
 
 WORKDIR /app
 
-# Copy dependency manifests first (Docker layer caching)
+# Copy dependency manifests + patches first (Docker layer caching)
+# patches/ must be present before pnpm install because pnpm hashes patch files
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 
 # Install ALL dependencies (including devDependencies for TypeScript build)
 RUN pnpm install --frozen-lockfile
@@ -47,8 +49,10 @@ RUN corepack enable && corepack prepare pnpm@10.9.0 --activate
 
 WORKDIR /app
 
-# Copy dependency manifests
+# Copy dependency manifests + patches
+# patches/ must be present before pnpm install because pnpm hashes patch files
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 
 # Install production dependencies only (no devDependencies)
 # --ignore-scripts: youtubei.js postinstall runs `npm install` which isn't
