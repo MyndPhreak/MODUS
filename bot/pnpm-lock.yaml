@@ -7,13 +7,18 @@ settings:
 overrides:
   youtubei.js: https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main
 
+patchedDependencies:
+  '@discordjs/voice':
+    hash: 8258a89c1263dc638b2c2e14529f2285ec4ae98997aad8dbda039c46cc7840ca
+    path: patches/@discordjs__voice.patch
+
 importers:
 
   .:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.78.0
-        version: 0.78.0
+        version: 0.78.0(zod@4.3.6)
       '@discord-player/extractor':
         specifier: ^7.2.0
         version: 7.2.0
@@ -22,7 +27,7 @@ importers:
         version: 0.10.0
       '@discordjs/voice':
         specifier: ^0.19.0
-        version: 0.19.0(@discordjs/opus@0.10.0)(ffmpeg-static@5.3.0)(opusscript@0.1.1)
+        version: 0.19.0(patch_hash=8258a89c1263dc638b2c2e14529f2285ec4ae98997aad8dbda039c46cc7840ca)(@discordjs/opus@0.10.0)(ffmpeg-static@5.3.0)(opusscript@0.1.1)
       '@napi-rs/canvas':
         specifier: ^0.1.92
         version: 0.1.92
@@ -58,7 +63,7 @@ importers:
         version: 20.3.0
       openai:
         specifier: ^6.22.0
-        version: 6.22.0(ws@8.18.3)
+        version: 6.22.0(ws@8.18.3)(zod@4.3.6)
       opusscript:
         specifier: ^0.1.1
         version: 0.1.1
@@ -74,6 +79,9 @@ importers:
       youtubei.js:
         specifier: https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main
         version: https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -1955,11 +1963,16 @@ packages:
     resolution: {tarball: https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main}
     version: 16.0.1
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
 snapshots:
 
-  '@anthropic-ai/sdk@0.78.0':
+  '@anthropic-ai/sdk@0.78.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.3.6
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
@@ -2082,7 +2095,7 @@ snapshots:
     dependencies:
       discord-api-types: 0.38.34
 
-  '@discordjs/voice@0.19.0(@discordjs/opus@0.10.0)(ffmpeg-static@5.3.0)(opusscript@0.1.1)':
+  '@discordjs/voice@0.19.0(patch_hash=8258a89c1263dc638b2c2e14529f2285ec4ae98997aad8dbda039c46cc7840ca)(@discordjs/opus@0.10.0)(ffmpeg-static@5.3.0)(opusscript@0.1.1)':
     dependencies:
       '@types/ws': 8.18.1
       discord-api-types: 0.38.34
@@ -3207,9 +3220,10 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  openai@6.22.0(ws@8.18.3):
+  openai@6.22.0(ws@8.18.3)(zod@4.3.6):
     optionalDependencies:
       ws: 8.18.3
+      zod: 4.3.6
 
   opusscript@0.1.1: {}
 
@@ -3648,3 +3662,5 @@ snapshots:
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       meriyah: 6.1.4
+
+  zod@4.3.6: {}

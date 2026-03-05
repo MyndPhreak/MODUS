@@ -1,0 +1,30 @@
+diff --git a/dist/index.js b/dist/index.js
+index e8f7a5e6cedda68e8c2e7e31a0f1df5dcb0ef20a..a152ac25545a5499a9d7d024f1446c945cf74f37 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2150,7 +2150,9 @@ var VoiceReceiver = class {
+         );
+         if (packet) stream.push(packet);
+       } catch (error) {
+-        stream.destroy(error);
++        // [MODUS PATCH] Skip packet instead of destroying the stream.
++        // DAVE MLS key transitions cause transient decryption failures;
++        // destroying the stream kills the entire recording pipeline.
+       }
+     }
+   }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index c8120ddd0bc900a1be7c27f7e52cf4d9c28ed441..ce5a1f3d2b1a68ab2e6ed730710ec956f07a0d1b 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2091,7 +2091,9 @@ var VoiceReceiver = class {
+         );
+         if (packet) stream.push(packet);
+       } catch (error) {
+-        stream.destroy(error);
++        // [MODUS PATCH] Skip packet instead of destroying the stream.
++        // DAVE MLS key transitions cause transient decryption failures;
++        // destroying the stream kills the entire recording pipeline.
+       }
+     }
+   }
