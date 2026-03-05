@@ -10,6 +10,11 @@ import {
   AutocompleteInteraction,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import {
+  ModerationSettingsSchema,
+  type ModerationSettingsType,
+} from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -61,6 +66,10 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   exemptRoleIds: [],
   deleteCommandMessage: false,
 };
+
+// NOTE: The Zod schema (ModerationSettingsSchema) is the source of truth
+// for validation. DEFAULT_SETTINGS is retained only for backward compatibility
+// with code that references it directly.
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -163,7 +172,13 @@ async function getSettings(
     guildId,
     "moderation",
   );
-  return { ...DEFAULT_SETTINGS, ...saved };
+  const parsed = parseSettings(
+    ModerationSettingsSchema,
+    saved,
+    "moderation",
+    guildId,
+  );
+  return (parsed as ModerationSettings) ?? DEFAULT_SETTINGS;
 }
 
 async function getNextCaseId(

@@ -11,6 +11,8 @@ import {
   TextChannel,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { MilestoneSettingsSchema } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -137,9 +139,15 @@ async function getGuildMilestones(
   appwrite: ModuleManager["appwriteService"],
   guildId: string,
 ): Promise<MilestoneConfig[]> {
-  const settings = await appwrite.getModuleSettings(guildId, "milestones");
-  if (settings?.milestones && Array.isArray(settings.milestones)) {
-    return settings.milestones;
+  const raw = await appwrite.getModuleSettings(guildId, "milestones");
+  const parsed = parseSettings(
+    MilestoneSettingsSchema,
+    raw,
+    "milestones",
+    guildId,
+  );
+  if (parsed?.milestones && parsed.milestones.length > 0) {
+    return parsed.milestones;
   }
   return DEFAULT_MILESTONES;
 }

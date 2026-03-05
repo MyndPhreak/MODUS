@@ -8,6 +8,8 @@ import {
   GuildMember,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { TempVoiceSettingsSchema } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -54,7 +56,13 @@ async function getSettings(
     guildId,
     "tempvoice",
   );
-  return { ...DEFAULT_SETTINGS, ...raw };
+  const parsed = parseSettings(
+    TempVoiceSettingsSchema,
+    raw,
+    "tempvoice",
+    guildId,
+  );
+  return (parsed as TempVoiceSettings) ?? DEFAULT_SETTINGS;
 }
 
 // ── Module Definition ──────────────────────────────────────────────

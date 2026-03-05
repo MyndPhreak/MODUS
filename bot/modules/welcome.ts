@@ -8,6 +8,8 @@ import {
 } from "discord.js";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { WelcomeTemplateSchema } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -419,11 +421,12 @@ const welcomeModule: BotModule = {
           guildId,
           "welcome",
         );
-        const template = {
-          ...DEFAULT_TEMPLATE,
-          ...currentSettings,
-          channelId: channel.id,
-        };
+        const template = parseSettings(
+          WelcomeTemplateSchema,
+          { ...currentSettings, channelId: channel.id },
+          "welcome",
+          guildId,
+        ) ?? { ...DEFAULT_TEMPLATE, channelId: channel.id };
 
         await appwrite.setModuleSettings(guildId, "welcome", template);
 
@@ -442,10 +445,13 @@ const welcomeModule: BotModule = {
             guildId,
             "welcome",
           );
-          const template: WelcomeTemplate = {
-            ...DEFAULT_TEMPLATE,
-            ...currentSettings,
-          };
+          const template: WelcomeTemplate =
+            parseSettings(
+              WelcomeTemplateSchema,
+              currentSettings,
+              "welcome",
+              guildId,
+            ) ?? DEFAULT_TEMPLATE;
 
           const imageBuffer = await renderWelcomeImage(template, member);
           const attachment = new AttachmentBuilder(imageBuffer, {
@@ -492,10 +498,9 @@ export function registerWelcomeEvents(moduleManager: ModuleManager) {
       const settings = await appwrite.getModuleSettings(guildId, "welcome");
       if (!settings || !settings.channelId) return;
 
-      const template: WelcomeTemplate = {
-        ...DEFAULT_TEMPLATE,
-        ...settings,
-      };
+      const template: WelcomeTemplate =
+        parseSettings(WelcomeTemplateSchema, settings, "welcome", guildId) ??
+        DEFAULT_TEMPLATE;
 
       // Get channel
       const channel = member.guild.channels.cache.get(template.channelId!);

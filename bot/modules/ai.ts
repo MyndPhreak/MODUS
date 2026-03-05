@@ -7,6 +7,8 @@ import {
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { AISettingsSchema } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 import {
   musicPlay,
   musicSkip,
@@ -630,7 +632,9 @@ const aiModule: BotModule = {
       case "status": {
         const isEnabled = await appwrite.isModuleEnabled(guildId, "ai");
         const settings = await appwrite.getModuleSettings(guildId, "ai");
-        const merged: AIModuleSettings = { ...DEFAULT_SETTINGS, ...settings };
+        const merged: AIModuleSettings =
+          parseSettings(AISettingsSchema, settings, "ai", guildId) ??
+          DEFAULT_SETTINGS;
         const isPremium = await appwrite.isGuildPremium(guildId);
         const hasOwnKey = !!merged.aiApiKey;
 
@@ -690,9 +694,13 @@ export function registerAIEvents(moduleManager: ModuleManager) {
 
       // ─ Load settings ────────────────────────────────────────────
       const savedSettings = await appwrite.getModuleSettings(guildId, "ai");
-      const settings: Required<AIModuleSettings> = {
+      const settings: Required<AIModuleSettings> = (parseSettings(
+        AISettingsSchema,
+        savedSettings,
+        "ai",
+        guildId,
+      ) as Required<AIModuleSettings>) ?? {
         ...DEFAULT_SETTINGS,
-        ...savedSettings,
       };
 
       // ─ Determine API key & key source ───────────────────────────

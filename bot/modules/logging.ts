@@ -13,6 +13,8 @@ import {
   Invite,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { LoggingSettingsSchema } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -53,7 +55,9 @@ export async function sendAuditLog(
       guildId,
       "logging",
     );
-    const settings: LoggingSettings = { ...DEFAULT_SETTINGS, ...saved };
+    const settings: LoggingSettings =
+      parseSettings(LoggingSettingsSchema, saved, "logging", guildId) ??
+      DEFAULT_SETTINGS;
 
     if (!settings.auditChannelId || !settings[eventType]) return;
 
