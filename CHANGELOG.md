@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.1...modus-v1.7.2) (2026-03-05)
+
+
+### 🐛 Bug Fixes
+
+* **docker:** copy built node_modules from builder to preserve youtubei.js dist ([e4b88c9](https://github.com/MyndPhreak/MODUS/commit/e4b88c95597bcc8771dcb37c26ecdffdc74ac4e4))
+
 ## [1.7.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.0...modus-v1.7.1) (2026-03-05)
 
 
