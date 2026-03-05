@@ -2,11 +2,16 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   AutocompleteInteraction,
+  ButtonInteraction,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   GuildMember,
   VoiceBasedChannel,
   User,
   TextBasedChannel,
+  MessageFlags,
 } from "discord.js";
 import {
   useMainPlayer,
@@ -19,6 +24,8 @@ import type { ModuleManager } from "../ModuleManager";
 import { Databases, Query } from "node-appwrite";
 import type { BotModule } from "../ModuleManager";
 import { activeSessions as recordingActiveSessions } from "./recording";
+import { MusicSettingsSchema, type MusicSettings } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ─── Available Audio Filters ──────────────────────────────────────────────
 
@@ -108,16 +115,7 @@ const AVAILABLE_FILTERS: Record<
   },
 };
 
-// Default settings for the music module per guild
-const DEFAULT_SETTINGS = {
-  defaultVolume: 50,
-  djRoleId: "",
-  updateNickname: true,
-  maxQueueSize: 200,
-  activeFilters: [] as string[],
-};
-
-type MusicSettings = typeof DEFAULT_SETTINGS;
+// Defaults + type are defined in lib/schemas.ts (MusicSettingsSchema)
 
 async function getSettings(
   moduleManager: ModuleManager,
@@ -127,7 +125,8 @@ async function getSettings(
     guildId,
     "music",
   );
-  return { ...DEFAULT_SETTINGS, ...saved };
+  const parsed = parseSettings(MusicSettingsSchema, saved, "music", guildId);
+  return parsed ?? MusicSettingsSchema.parse({});
 }
 
 // ─── Nickname Sync ───────────────────────────────────────────────────────
@@ -170,7 +169,8 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
   const player = useMainPlayer();
 
   player.events.on("playerStart", async (queue: GuildQueue, track) => {
-    const channel = (queue.metadata as any)?.channel;
+    const metadata = queue.metadata as any;
+    const channel = metadata?.channel;
     console.log(`[Music] playerStart: "${track.title}" in ${queue.guild.name}`);
 
     // Update bot nickname to current track (if setting enabled)
@@ -182,6 +182,8 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     } catch {}
 
     if (!channel) return;
+
+    await ensureSpotifyThumbnail(track);
 
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
@@ -198,7 +200,27 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
       .setThumbnail(track.thumbnail || null)
       .setFooter({ text: `Volume: ${queue.node.volume}%` });
 
-    channel.send({ embeds: [embed] }).catch(() => {});
+    // If we have a pending interaction (first track), update it instead of
+    // sending a new message. Consume the reference so subsequent tracks in
+    // the same queue still use channel.send.
+    const pendingInteraction = metadata?.pendingInteraction;
+    if (pendingInteraction) {
+      metadata.pendingInteraction = null;
+      pendingInteraction
+        .editReply({
+          content: "",
+          embeds: [embed],
+          components: [buildNowPlayingButtons(false)],
+        })
+        .catch(() => {});
+    } else {
+      channel
+        .send({
+          embeds: [embed],
+          components: [buildNowPlayingButtons(false)],
+        })
+        .catch(() => {});
+    }
   });
 
   player.events.on("emptyQueue", async (queue: GuildQueue) => {
@@ -432,6 +454,7 @@ const filterCommand = new SlashCommandBuilder()
       .setDescription("Audio effect to toggle")
       .setRequired(true)
       .addChoices(
+        { name: "🚫 Remove All", value: "clear" },
         ...Object.entries(AVAILABLE_FILTERS).map(([key, val]) => ({
           name: `${val.emoji} ${val.label}`,
           value: key,
@@ -447,6 +470,58 @@ const filterCommand = new SlashCommandBuilder()
   );
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Fallback to resolve Spotify album art via public oEmbed API if the extractor
+ * failed and fell back to the default Spotify logo. Mutates track.thumbnail.
+ */
+async function ensureSpotifyThumbnail(track: any) {
+  if (!track || !track.url || !track.url.includes("spotify.com/track/")) return;
+  // If it's using the generic fallback logo
+  if (
+    !track.thumbnail ||
+    track.thumbnail.includes("twitter_card-default.jpg")
+  ) {
+    try {
+      const res = await fetch(
+        `https://open.spotify.com/oembed?url=${track.url}`,
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json.thumbnail_url) {
+          track.thumbnail = json.thumbnail_url;
+        }
+      }
+    } catch (e) {
+      console.error(
+        `[Music] Failed to resolve Spotify thumbnail for ${track.title}:`,
+        e,
+      );
+    }
+  }
+}
+
+function buildNowPlayingButtons(
+  isPaused: boolean,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("music:pause")
+      .setEmoji(isPaused ? "▶️" : "⏸️")
+      .setLabel(isPaused ? "Resume" : "Pause")
+      .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("music:skip")
+      .setEmoji("⏭️")
+      .setLabel("Skip")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("music:stop")
+      .setEmoji("⏹️")
+      .setLabel("Stop")
+      .setStyle(ButtonStyle.Danger),
+  );
+}
 
 function requireVoiceChannel(
   interaction: ChatInputCommandInteraction,
@@ -525,7 +600,10 @@ async function handlePlay(
         ? QueryType.AUTO
         : `ext:${YoutubeiExtractor.identifier}`,
       nodeOptions: {
-        metadata: { channel: interaction.channel },
+        metadata: {
+          channel: interaction.channel,
+          pendingInteraction: interaction,
+        },
         volume: settings.defaultVolume,
         bufferingTimeout: 15_000,
         selfDeaf: true,
@@ -533,7 +611,8 @@ async function handlePlay(
         leaveOnEmptyCooldown: 60000,
         leaveOnEnd: true,
         leaveOnEndCooldown: 60000,
-      },
+        daveEncryption: false,
+      } as any,
       requestedBy: interaction.user,
     });
 
@@ -554,6 +633,8 @@ async function handlePlay(
     const wasQueued = queue && queue.tracks.size > 0;
 
     if (wasQueued) {
+      await ensureSpotifyThumbnail(track);
+
       const embed = new EmbedBuilder()
         .setColor(0x57f287)
         .setTitle("✅ Added to Queue")
@@ -570,8 +651,8 @@ async function handlePlay(
 
       await interaction.editReply({ embeds: [embed] });
     } else {
-      // First track — just confirm it's starting; "Now Playing" embed
-      // will be sent by the playerStart event listener.
+      // First track — show a loading indicator; the playerStart event
+      // will update this same reply with the "Now Playing" embed.
       await interaction.editReply({ content: "🎵 Loading track..." });
 
       // Auto-apply saved filters for this guild when a new queue starts
@@ -731,6 +812,8 @@ async function handleNowPlaying(interaction: ChatInputCommandInteraction) {
     length: 15,
   });
 
+  await ensureSpotifyThumbnail(track);
+
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("🎵 Now Playing")
@@ -742,7 +825,10 @@ async function handleNowPlaying(interaction: ChatInputCommandInteraction) {
     )
     .setThumbnail(track.thumbnail || null);
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({
+    embeds: [embed],
+    components: [buildNowPlayingButtons(queue.node.isPaused())],
+  });
 }
 
 async function handleVolume(
@@ -909,6 +995,62 @@ async function handleFilter(
 
   const effect = interaction.options.getString("effect", true);
   const shouldSave = interaction.options.getBoolean("save") ?? false;
+
+  // ── Remove All Effects ──────────────────────────────────────────────
+  if (effect === "clear") {
+    try {
+      const allActive = queue.filters.ffmpeg.getFiltersEnabled();
+
+      if (allActive.length === 0) {
+        await interaction.editReply({
+          content: "ℹ️ No effects are currently active.",
+        });
+        return;
+      }
+
+      // Toggle off every enabled filter
+      await queue.filters.ffmpeg.toggle(allActive as any[]);
+
+      // Persist cleared state if requested
+      if (shouldSave) {
+        try {
+          const settings = await getSettings(
+            moduleManager,
+            interaction.guildId!,
+          );
+          settings.activeFilters = [];
+          await moduleManager.appwriteService.setModuleSettings(
+            interaction.guildId!,
+            "music",
+            settings,
+          );
+        } catch (err) {
+          console.error("[Music] Failed to save cleared filter settings:", err);
+        }
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0xed4245)
+        .setTitle("🚫 All Effects Removed")
+        .setDescription(
+          `Cleared **${allActive.length}** effect${allActive.length === 1 ? "" : "s"}.`,
+        )
+        .addFields({ name: "🎛️ Active Effects", value: "None" });
+
+      if (shouldSave) {
+        embed.setFooter({ text: "💾 Saved as server default" });
+      }
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (error: any) {
+      console.error("[Music] Clear filters error:", error);
+      await interaction.editReply({
+        content: `❌ Failed to clear effects: ${error.message}`,
+      });
+    }
+    return;
+  }
+
   const filterInfo = AVAILABLE_FILTERS[effect];
 
   if (!filterInfo) {
@@ -1048,7 +1190,8 @@ async function handlePlayQueue(
     let loaded = 0;
     let failed = 0;
 
-    for (const item of preQueue) {
+    for (let i = 0; i < preQueue.length; i++) {
+      const item = preQueue[i];
       try {
         const trackUrl = item.url || item.title;
         const isUrl = /^https?:\/\//i.test(trackUrl);
@@ -1057,7 +1200,11 @@ async function handlePlayQueue(
             ? QueryType.AUTO
             : `ext:${YoutubeiExtractor.identifier}`,
           nodeOptions: {
-            metadata: { channel: interaction.channel },
+            metadata: {
+              channel: interaction.channel,
+              // First track: let playerStart update the loading reply
+              ...(i === 0 && { pendingInteraction: interaction }),
+            },
             volume: settings.defaultVolume,
             bufferingTimeout: 15_000,
             selfDeaf: true,
@@ -1065,7 +1212,8 @@ async function handlePlayQueue(
             leaveOnEmptyCooldown: 60000,
             leaveOnEnd: true,
             leaveOnEndCooldown: 60000,
-          },
+            daveEncryption: false,
+          } as any,
           requestedBy: interaction.user,
         });
         loaded++;
@@ -1329,6 +1477,75 @@ const musicModule: BotModule = {
         await interaction.editReply({ content: "❓ Unknown command." });
     }
   },
+
+  async handleButton(
+    interaction: ButtonInteraction,
+    moduleManager: ModuleManager,
+  ) {
+    const action = interaction.customId.split(":")[1];
+    const player = useMainPlayer();
+    const queue = player.queues.get(interaction.guildId!);
+
+    // Require user to be in the same voice channel
+    const member = interaction.member as GuildMember;
+    if (!member?.voice?.channel) {
+      await interaction.reply({
+        content: "❌ You need to be in a voice channel to use this!",
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    if (!queue || !queue.currentTrack) {
+      await interaction.reply({
+        content: "❌ Nothing is currently playing.",
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    switch (action) {
+      case "pause": {
+        if (queue.node.isPaused()) {
+          queue.node.resume();
+        } else {
+          queue.node.pause();
+        }
+        await interaction.update({
+          components: [buildNowPlayingButtons(queue.node.isPaused())],
+        });
+        break;
+      }
+      case "skip": {
+        queue.node.skip();
+        // Clear buttons on old message; playerStart sends a new embed
+        await interaction.update({ components: [] });
+        break;
+      }
+      case "stop": {
+        // Reset nickname if applicable
+        try {
+          const settings = await getSettings(
+            moduleManager,
+            interaction.guildId!,
+          );
+          if (settings.updateNickname) {
+            updateBotNickname(queue);
+          }
+        } catch {}
+
+        queue.delete();
+        try {
+          player.queues.delete(interaction.guildId!);
+        } catch {}
+
+        await interaction.update({ components: [] });
+        break;
+      }
+      default:
+        break;
+    }
+  },
 };
 
 // ─── AI Tool Action Exports ───────────────────────────────────────────────
@@ -1368,7 +1585,8 @@ export async function musicPlay(
         leaveOnEmptyCooldown: 60000,
         leaveOnEnd: true,
         leaveOnEndCooldown: 60000,
-      },
+        daveEncryption: false,
+      } as any,
       requestedBy,
     });
 

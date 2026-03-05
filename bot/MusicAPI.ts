@@ -381,7 +381,8 @@ export function registerMusicAPI(server: http.Server, client: Client) {
               volume: queue.node.volume,
               bufferingTimeout: 15_000,
               selfDeaf: true,
-            },
+              daveEncryption: false,
+            } as any,
             requestedBy: { username: "Dashboard" } as any,
           });
 
