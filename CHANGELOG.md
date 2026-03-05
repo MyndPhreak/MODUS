@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.2...modus-v1.7.0) (2026-03-05)
+
+
+### ✨ Features
+
+* **bot:** add button interaction support to ModuleManager ([300b167](https://github.com/MyndPhreak/MODUS/commit/300b1679fdc71f731fa7048290bf501c403e7a3c))
+* **bot:** add multitrack recording with premium gating ([e635144](https://github.com/MyndPhreak/MODUS/commit/e6351440379332543b1d2fe7569560698fde3f4d))
+* **bot:** add music playback buttons, clear effects, and Spotify improvements ([359eaf6](https://github.com/MyndPhreak/MODUS/commit/359eaf62c2087ac5ce3936a126504e7764a14da6))
+* **bot:** add triggers module with webhook router, slash commands, and Appwrite schema ([cc81f66](https://github.com/MyndPhreak/MODUS/commit/cc81f66267da8042067e91e23c5ff080dd01ccfc))
+* **bot:** add Zod settings validation with schemas for all modules ([85df870](https://github.com/MyndPhreak/MODUS/commit/85df87089e1b4fcd3d0d8d410da7ff5d559233e1))
+* **web:** add triggers dashboard page with CRUD API routes ([39b5363](https://github.com/MyndPhreak/MODUS/commit/39b53637fb2c24fb4502506040af70e69fc8291d))
+
+
+### ♻️ Refactors
+
+* **bot:** migrate all modules to Zod-validated settings ([251e2a6](https://github.com/MyndPhreak/MODUS/commit/251e2a6d9f70e44e816650071a2d82001fcfac05))
+
 ## [1.6.2](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.1...modus-v1.6.2) (2026-03-05)
 
 
