@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.0...modus-v1.7.1) (2026-03-05)
+
+
+### 🐛 Bug Fixes
+
+* **docker:** copy patches directory alongside manifest before running pnpm install ([538d33d](https://github.com/MyndPhreak/MODUS/commit/538d33d6f83902d46fc2abd69e418410c8e28c25))
+
 ## [1.7.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.6.2...modus-v1.7.0) (2026-03-05)
 
 
