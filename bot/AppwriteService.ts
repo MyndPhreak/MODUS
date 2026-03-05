@@ -69,6 +69,7 @@ export class AppwriteService {
   private aiUsageLogCollectionId = "ai_usage_log";
   private tagsCollectionId = "tags";
   private tempVoiceChannelsCollectionId = "temp_voice_channels";
+  private triggersCollectionId = "triggers";
   public storage: Storage;
 
   // TTL cache for guild config lookups (60s default)
@@ -516,6 +517,7 @@ export class AppwriteService {
     title?: string;
     participants?: string;
     bitrate?: number;
+    multitrack?: boolean;
   }): Promise<string> {
     const doc = await this.databases.createDocument(
       this.databaseId,
@@ -1176,5 +1178,84 @@ export class AppwriteService {
         error,
       );
     }
+  }
+
+  // ── Triggers (Custom Webhooks) ─────────────────────────────────────────
+
+  async createTrigger(data: {
+    guild_id: string;
+    name: string;
+    secret: string;
+    provider: "webhook" | "github" | "twitch";
+    channel_id: string;
+    embed_template?: string;
+    filters?: string;
+    created_by?: string;
+  }): Promise<string> {
+    const doc = await this.databases.createDocument(
+      this.databaseId,
+      this.triggersCollectionId,
+      ID.unique(),
+      {
+        ...data,
+        enabled: true,
+        created_at: new Date().toISOString(),
+      },
+    );
+    return doc.$id;
+  }
+
+  async listTriggers(guildId: string): Promise<any[]> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.triggersCollectionId,
+        [Query.equal("guild_id", guildId), Query.limit(100)],
+      );
+      return response.documents;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error listing triggers for ${guildId}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  async getTriggerBySecret(secret: string): Promise<any | null> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.triggersCollectionId,
+        [Query.equal("secret", secret), Query.limit(1)],
+      );
+      return response.total > 0 ? response.documents[0] : null;
+    } catch (error) {
+      console.error(
+        `[AppwriteService] Error fetching trigger by secret:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async deleteTrigger(triggerId: string): Promise<void> {
+    await this.databases.deleteDocument(
+      this.databaseId,
+      this.triggersCollectionId,
+      triggerId,
+    );
+  }
+
+  async updateTrigger(
+    triggerId: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    await this.databases.updateDocument(
+      this.databaseId,
+      this.triggersCollectionId,
+      triggerId,
+      data,
+    );
   }
 }

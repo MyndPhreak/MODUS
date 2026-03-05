@@ -22,8 +22,13 @@ import { registerAIEvents } from "./modules/ai";
 import { registerLoggingEvents } from "./modules/logging";
 import { registerTempVoiceEvents } from "./modules/tempvoice";
 import { registerMusicAPI } from "./MusicAPI";
+import { registerWebhookRoutes } from "./WebhookRouter";
 
 dotenv.config();
+
+// Silence verbose parsing warnings from youtubei.js
+import { Log } from "youtubei.js";
+Log.setLevel(Log.Level.ERROR);
 
 const client = new Client({
   intents: [
@@ -58,12 +63,25 @@ async function loadExtractors() {
       createStream: createYtDlpStreamFunction,
     } as any);
 
+    const spClientId =
+      process.env.DP_SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_ID || null;
+    const spClientSecret =
+      process.env.DP_SPOTIFY_CLIENT_SECRET ||
+      process.env.SPOTIFY_CLIENT_SECRET ||
+      null;
+
     await player.extractors.register(SpotifyExtractor, {
+      clientId: spClientId,
+      clientSecret: spClientSecret,
       createStream: createSpotifyBridgeStreamFunction,
     } as any);
+
     console.log(
       "[Music] All extractors loaded:",
       player.extractors.store.map((e) => e.identifier).join(", "),
+    );
+    console.log(
+      `[Music] Spotify API credentials: ${spClientId ? "✅ present" : "❌ missing"}`,
     );
   } catch (err) {
     console.error("[Music] Failed to load extractors:", err);
@@ -212,6 +230,7 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
   registerMusicAPI(server, client);
+  registerWebhookRoutes(server, client, appwriteService);
 });
 
 client.on("interactionCreate", async (interaction) => {

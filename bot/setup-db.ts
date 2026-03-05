@@ -55,7 +55,7 @@ const collections: CollectionDef[] = [
     attributes: [
       { key: "name", type: "string", size: 128, required: true },
       { key: "description", type: "string", size: 1024, required: false },
-      { key: "enabled", type: "boolean", required: true, default: true },
+      { key: "enabled", type: "boolean", required: false, default: true },
     ],
     indexes: [{ key: "idx_name", type: "unique", attributes: ["name"] }],
   },
@@ -100,7 +100,7 @@ const collections: CollectionDef[] = [
     attributes: [
       { key: "guildId", type: "string", size: 64, required: true },
       { key: "moduleName", type: "string", size: 128, required: true },
-      { key: "enabled", type: "boolean", required: true, default: true },
+      { key: "enabled", type: "boolean", required: false, default: true },
       { key: "settings", type: "string", size: 16384, required: false },
     ],
     indexes: [
@@ -165,6 +165,7 @@ const collections: CollectionDef[] = [
       { key: "title", type: "string", size: 256, required: false },
       { key: "participants", type: "string", size: 4096, required: false },
       { key: "bitrate", type: "integer", required: false },
+      { key: "multitrack", type: "boolean", required: false, default: false },
     ],
     indexes: [
       { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
@@ -344,6 +345,46 @@ const collections: CollectionDef[] = [
         key: "idx_guild_owner",
         type: "key",
         attributes: ["guild_id", "owner_id"],
+      },
+    ],
+  },
+  {
+    id: "triggers",
+    name: "Triggers",
+    attributes: [
+      { key: "guild_id", type: "string", size: 64, required: true },
+      { key: "name", type: "string", size: 128, required: true },
+      { key: "secret", type: "string", size: 64, required: true },
+      {
+        key: "provider",
+        type: "enum",
+        enumValues: ["webhook", "github", "twitch"],
+        required: true,
+      },
+      { key: "channel_id", type: "string", size: 64, required: true },
+      {
+        key: "embed_template",
+        type: "string",
+        size: 4096,
+        required: false,
+      },
+      { key: "filters", type: "string", size: 2048, required: false },
+      { key: "created_by", type: "string", size: 64, required: false },
+      { key: "created_at", type: "string", size: 64, required: false },
+      { key: "enabled", type: "boolean", required: false, default: true },
+    ],
+    indexes: [
+      { key: "idx_guild_id", type: "key", attributes: ["guild_id"] },
+      { key: "idx_secret", type: "unique", attributes: ["secret"] },
+      {
+        key: "idx_guild_enabled",
+        type: "key",
+        attributes: ["guild_id", "enabled"],
+      },
+      {
+        key: "idx_guild_name",
+        type: "unique",
+        attributes: ["guild_id", "name"],
       },
     ],
   },
