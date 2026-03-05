@@ -25,9 +25,15 @@ import { useMainPlayer } from "discord-player";
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs";
+import { Transform, TransformCallback } from "stream";
 import os from "os";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
+import {
+  RecordingSettingsSchema,
+  type RecordingSettings,
+} from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -42,6 +48,7 @@ interface RecordingSession {
   maxDurationTimer: NodeJS.Timeout;
   recordingDocId?: string;
   bitrate: number;
+  multitrack: boolean;
 }
 
 interface UserRecordingStream {
@@ -49,6 +56,7 @@ interface UserRecordingStream {
   tempFilePath: string;
   username: string;
   startOffset: number; // ms from session start when first audio arrived (-1 = none yet)
+  silencePad: SilencePadTransform; // fills gaps so files are temporally accurate
   // Speech segment tracking
   segments: { t: number; d: number }[]; // completed segments: t=timeline start ms, d=duration ms
   _segStart: number; // current segment start (timeline ms), -1 if silent
@@ -56,20 +64,67 @@ interface UserRecordingStream {
   _segTimer: NodeJS.Timeout | null; // silence debounce
 }
 
-const DEFAULT_SETTINGS = {
-  maxDuration: 14400, // 4 hours in seconds
-  bitrate: 64, // kbps
-  announceMode: "tts" as "none" | "tts" | "soundClip",
-  announceSoundFileId: "",
-  allowedRoleIds: [] as string[],
-  allowedUserIds: [] as string[],
-};
-
-type RecordingSettings = typeof DEFAULT_SETTINGS;
+// Defaults + type are defined in lib/schemas.ts (RecordingSettingsSchema)
 
 // ─── Active Sessions ─────────────────────────────────────────────────────
 
 export const activeSessions = new Map<string, RecordingSession>();
+
+// ─── Silence-Gap Padding ─────────────────────────────────────────────────
+// Discord only sends Opus packets while a user is speaking. Once decoded to
+// PCM, gaps between utterances simply have NO data — FFmpeg sees a continuous
+// byte stream with the silence stripped out. This means mixed tracks sound
+// concatenated instead of overlaid at their correct timeline positions.
+//
+// SilencePadTransform sits between the PCM decoder and FFmpeg's stdin. When
+// data arrives after a gap (>60 ms), it first writes the corresponding number
+// of 20 ms silence frames so the PCM stream is temporally faithful.
+
+/** 20 ms of silence at 48 kHz, stereo, s16le = 48000 × 0.02 × 2ch × 2B = 3840 bytes */
+const SILENCE_FRAME = Buffer.alloc(3840);
+const FRAME_DURATION_MS = 20;
+/** Only inject silence when the gap is clearly a speech pause, not jitter. */
+const GAP_THRESHOLD_MS = 60;
+/** Max silence to inject per gap — prevents OOM on very long pauses. */
+const MAX_GAP_MS = 30_000;
+/** Batch size for silence writes: 1 second = 50 frames × 3840 B = 192 KB */
+const BATCH_FRAMES = 50;
+
+class SilencePadTransform extends Transform {
+  lastChunkTime = 0;
+
+  _transform(
+    chunk: Buffer,
+    _encoding: BufferEncoding,
+    callback: TransformCallback,
+  ) {
+    const now = Date.now();
+
+    if (this.lastChunkTime > 0) {
+      const gapMs = Math.min(now - this.lastChunkTime, MAX_GAP_MS);
+      if (gapMs > GAP_THRESHOLD_MS) {
+        // Fill the gap in batched 1-second chunks to avoid event-loop blocking
+        const framesToInsert = Math.floor(gapMs / FRAME_DURATION_MS) - 1;
+        const batchBuf = Buffer.alloc(
+          SILENCE_FRAME.length * Math.min(framesToInsert, BATCH_FRAMES),
+        );
+        let remaining = framesToInsert;
+        while (remaining > 0) {
+          const count = Math.min(remaining, BATCH_FRAMES);
+          this.push(
+            count === BATCH_FRAMES
+              ? batchBuf
+              : batchBuf.subarray(0, count * SILENCE_FRAME.length),
+          );
+          remaining -= count;
+        }
+      }
+    }
+
+    this.lastChunkTime = now;
+    callback(null, chunk);
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -83,11 +138,18 @@ async function getSettings(
   );
 
   // Backward compatibility: migrate old ttsAnnounce boolean → announceMode
-  const merged = { ...DEFAULT_SETTINGS, ...saved };
-  if ("ttsAnnounce" in saved && !("announceMode" in saved)) {
-    merged.announceMode = (saved as any).ttsAnnounce ? "tts" : "none";
+  const raw: Record<string, unknown> = { ...(saved ?? {}) };
+  if ("ttsAnnounce" in raw && !("announceMode" in raw)) {
+    raw.announceMode = (raw as any).ttsAnnounce ? "tts" : "none";
   }
-  return merged;
+
+  const parsed = parseSettings(
+    RecordingSettingsSchema,
+    raw,
+    "recording",
+    guildId,
+  );
+  return parsed ?? RecordingSettingsSchema.parse({});
 }
 
 function getTempDir(): string {
@@ -384,17 +446,37 @@ function startUserRecording(
     }, SILENCE_THRESHOLD_MS);
   });
 
-  opusStream.pipe(decoder).pipe(ffmpeg.stdin!);
+  const silencePad = new SilencePadTransform();
+  opusStream.pipe(decoder).pipe(silencePad).pipe(ffmpeg.stdin!);
 
   opusStream.on("error", (err: Error) => {
-    console.error(
-      `[Recording] Opus stream error for ${username}:`,
+    // DAVE decryption failures may surface here as stream errors.
+    // Our pnpm patch prevents stream destruction, but log for observability.
+    console.warn(
+      `[Recording] Opus stream error for ${username} (non-fatal):`,
       err.message,
     );
   });
 
+  // Detect unexpected stream destruction (e.g. if library patch is missing)
+  opusStream.on("close", () => {
+    const stream = session.userStreams.get(userId);
+    if (stream && activeSessions.has(session.guildId)) {
+      console.warn(
+        `[Recording] Opus stream closed unexpectedly for ${username} — ` +
+          `DAVE decryption may have failed. ` +
+          `Captured ${opusPacketCount} packets before close.`,
+      );
+    }
+  });
+
   decoder.on("error", (err: Error) => {
-    console.error(`[Recording] Decoder error for ${username}:`, err.message);
+    // Corrupted packets during DAVE key transitions can cause decode errors.
+    // Log but don't crash — the pipeline will skip the bad frame.
+    console.warn(
+      `[Recording] Decoder error for ${username} (non-fatal):`,
+      err.message,
+    );
   });
 
   ffmpeg.stdin?.on("error", (err: Error) => {
@@ -412,6 +494,7 @@ function startUserRecording(
     tempFilePath: tempFile,
     username,
     startOffset: -1,
+    silencePad,
     segments: [],
     _segStart: -1,
     _segPackets: 0,
@@ -477,63 +560,74 @@ async function stopRecording(
 
   await Promise.all(closePromises);
 
-  // Upload per-user tracks to Appwrite
+  // Upload per-user tracks to Appwrite (multitrack only)
   const participants: string[] = [];
   const recordingId = session.recordingDocId!;
 
-  for (const [userId, stream] of session.userStreams) {
-    try {
-      if (!fs.existsSync(stream.tempFilePath)) {
-        console.warn(
-          `[Recording] Temp file missing for ${stream.username}: ${stream.tempFilePath}`,
-        );
-        continue;
-      }
-      const stats = fs.statSync(stream.tempFilePath);
-      console.log(
-        `[Recording] Track file for ${stream.username}: ${stats.size} bytes`,
-      );
-      if (stats.size < 1000) {
-        // Empty or near-empty file (just container headers, no real audio) — skip
-        console.warn(
-          `[Recording] Skipping near-empty file for ${stream.username} (${stats.size} bytes)`,
-        );
-        fs.unlinkSync(stream.tempFilePath);
-        continue;
-      }
-
-      const fileBuffer = fs.readFileSync(stream.tempFilePath);
-      const fileName = `${stream.username}_${session.guildId}_${Date.now()}.ogg`;
-
-      const fileId = await moduleManager.appwriteService.uploadRecordingFile(
-        fileBuffer,
-        fileName,
-      );
-
-      await moduleManager.appwriteService.createRecordingTrack({
-        recording_id: recordingId,
-        guild_id: session.guildId,
-        user_id: userId,
-        username: stream.username,
-        file_id: fileId,
-        file_size: stats.size,
-        start_offset: stream.startOffset >= 0 ? stream.startOffset : 0,
-        segments: JSON.stringify(stream.segments),
-      });
-
-      participants.push(userId);
-
-      // Clean up temp file
-      fs.unlinkSync(stream.tempFilePath);
-    } catch (err) {
-      console.error(
-        `[Recording] Failed to upload track for ${stream.username}:`,
-        err,
-      );
-      // Clean up temp file even on error
+  if (session.multitrack) {
+    // ── Multitrack (Premium): upload each user's track individually ──
+    for (const [userId, stream] of session.userStreams) {
       try {
+        if (!fs.existsSync(stream.tempFilePath)) {
+          console.warn(
+            `[Recording] Temp file missing for ${stream.username}: ${stream.tempFilePath}`,
+          );
+          continue;
+        }
+        const stats = fs.statSync(stream.tempFilePath);
+        console.log(
+          `[Recording] Track file for ${stream.username}: ${stats.size} bytes`,
+        );
+        if (stats.size < 1000) {
+          console.warn(
+            `[Recording] Skipping near-empty file for ${stream.username} (${stats.size} bytes)`,
+          );
+          fs.unlinkSync(stream.tempFilePath);
+          continue;
+        }
+
+        const fileBuffer = fs.readFileSync(stream.tempFilePath);
+        const fileName = `${stream.username}_${session.guildId}_${Date.now()}.ogg`;
+
+        const fileId = await moduleManager.appwriteService.uploadRecordingFile(
+          fileBuffer,
+          fileName,
+        );
+
+        await moduleManager.appwriteService.createRecordingTrack({
+          recording_id: recordingId,
+          guild_id: session.guildId,
+          user_id: userId,
+          username: stream.username,
+          file_id: fileId,
+          file_size: stats.size,
+          start_offset: stream.startOffset >= 0 ? stream.startOffset : 0,
+          segments: JSON.stringify(stream.segments),
+        });
+
+        participants.push(userId);
+
+        // Clean up temp file
         fs.unlinkSync(stream.tempFilePath);
-      } catch {}
+      } catch (err) {
+        console.error(
+          `[Recording] Failed to upload track for ${stream.username}:`,
+          err,
+        );
+        try {
+          fs.unlinkSync(stream.tempFilePath);
+        } catch {}
+      }
+    }
+  } else {
+    // ── Single-track: just collect participant IDs, temp files stay for mixing ──
+    for (const [userId, stream] of session.userStreams) {
+      if (
+        fs.existsSync(stream.tempFilePath) &&
+        fs.statSync(stream.tempFilePath).size >= 1000
+      ) {
+        participants.push(userId);
+      }
     }
   }
 
@@ -565,52 +659,94 @@ async function generateMixedTrack(
   moduleManager: ModuleManager,
   recordingId: string,
 ): Promise<string | undefined> {
-  // Get all tracks for this recording
-  const tracks =
-    await moduleManager.appwriteService.getRecordingTracks(recordingId);
-
-  if (tracks.length === 0) return undefined;
-
-  if (tracks.length === 1) {
-    // Only one track — just use it as the mixed file too
-    return tracks[0].file_id;
+  // ── Collect input files + offset metadata ──────────────────────────────
+  interface MixInput {
+    tempPath: string;
+    startOffset: number;
+    ownsFile: boolean; // true = we created the temp file & must delete it
   }
+  const inputs: MixInput[] = [];
 
-  // Download all tracks to temp files
-  const tempFiles: string[] = [];
-  const tempDir = getTempDir();
+  if (session.multitrack) {
+    // Multitrack: tracks were already uploaded — download them for mixing
+    const tracks =
+      await moduleManager.appwriteService.getRecordingTracks(recordingId);
 
-  for (const track of tracks) {
-    try {
-      const buffer = await moduleManager.appwriteService.getRecordingFileBuffer(
-        track.file_id,
-      );
-      const tempPath = path.join(tempDir, `mix_input_${track.user_id}.ogg`);
-      fs.writeFileSync(tempPath, buffer);
-      tempFiles.push(tempPath);
-    } catch (err) {
-      console.error(
-        `[Recording] Failed to download track for mixing: ${track.username}`,
-        err,
-      );
+    if (tracks.length === 0) return undefined;
+    if (tracks.length === 1) return tracks[0].file_id;
+
+    const tempDir = getTempDir();
+    for (const track of tracks) {
+      try {
+        const buffer =
+          await moduleManager.appwriteService.getRecordingFileBuffer(
+            track.file_id,
+          );
+        const tempPath = path.join(tempDir, `mix_input_${track.user_id}.ogg`);
+        fs.writeFileSync(tempPath, buffer);
+        inputs.push({
+          tempPath,
+          startOffset: track.start_offset || 0,
+          ownsFile: true,
+        });
+      } catch (err) {
+        console.error(
+          `[Recording] Failed to download track for mixing: ${track.username}`,
+          err,
+        );
+      }
+    }
+  } else {
+    // Single-track: temp files still live on disk from the recording pipeline
+    for (const [, stream] of session.userStreams) {
+      if (
+        fs.existsSync(stream.tempFilePath) &&
+        fs.statSync(stream.tempFilePath).size >= 1000
+      ) {
+        inputs.push({
+          tempPath: stream.tempFilePath,
+          startOffset: stream.startOffset >= 0 ? stream.startOffset : 0,
+          ownsFile: true, // cleanups happen here for single-track
+        });
+      }
     }
   }
 
-  if (tempFiles.length === 0) return undefined;
+  if (inputs.length === 0) return undefined;
 
-  // Use FFmpeg to mix all tracks with proper time-alignment via adelay
+  // Single file: encode and upload it directly (skip amix overhead)
+  if (inputs.length === 1) {
+    try {
+      const buffer = fs.readFileSync(inputs[0].tempPath);
+      const fileId = await moduleManager.appwriteService.uploadRecordingFile(
+        buffer,
+        `mixed_${session.guildId}_${Date.now()}.ogg`,
+      );
+      if (inputs[0].ownsFile) {
+        try {
+          fs.unlinkSync(inputs[0].tempPath);
+        } catch {}
+      }
+      return fileId;
+    } catch (err) {
+      console.error("[Recording] Failed to upload single-track mix:", err);
+      return undefined;
+    }
+  }
+
+  // ── Build FFmpeg filter graph ──────────────────────────────────────────
+  const tempDir = getTempDir();
   const mixedPath = path.join(
     tempDir,
     `mixed_${session.guildId}_${Date.now()}.ogg`,
   );
 
-  const inputArgs = tempFiles.flatMap((f) => ["-i", f]);
+  const inputArgs = inputs.flatMap((inp) => ["-i", inp.tempPath]);
 
-  // Build a filter graph that delays each input by its start_offset before mixing
   const filterParts: string[] = [];
   const mixLabels: string[] = [];
-  for (let i = 0; i < tracks.length; i++) {
-    const delayMs = (tracks[i] as any).start_offset || 0;
+  for (let i = 0; i < inputs.length; i++) {
+    const delayMs = inputs[i].startOffset;
     if (delayMs > 0) {
       filterParts.push(`[${i}]adelay=${delayMs}|${delayMs}[d${i}]`);
       mixLabels.push(`[d${i}]`);
@@ -619,7 +755,7 @@ async function generateMixedTrack(
     }
   }
   const mixInput = mixLabels.join("");
-  const amix = `${mixInput}amix=inputs=${tracks.length}:duration=longest:normalize=0`;
+  const amix = `${mixInput}amix=inputs=${inputs.length}:duration=longest:normalize=0`;
   const filterComplex =
     filterParts.length > 0 ? `${filterParts.join(";")};${amix}` : amix;
 
@@ -651,10 +787,12 @@ async function generateMixedTrack(
 
     ffmpeg.on("close", async (code) => {
       // Clean up input temp files
-      for (const f of tempFiles) {
-        try {
-          fs.unlinkSync(f);
-        } catch {}
+      for (const inp of inputs) {
+        if (inp.ownsFile) {
+          try {
+            fs.unlinkSync(inp.tempPath);
+          } catch {}
+        }
       }
 
       if (code !== 0) {
@@ -691,7 +829,16 @@ const recordCommand = new SlashCommandBuilder()
   .setName("record")
   .setDescription("Record voice channel audio")
   .addSubcommand((sub) =>
-    sub.setName("start").setDescription("Start recording the voice channel"),
+    sub
+      .setName("start")
+      .setDescription("Start recording the voice channel")
+      .addBooleanOption((opt) =>
+        opt
+          .setName("multitrack")
+          .setDescription(
+            "Record each user as a separate track (Premium only)",
+          ),
+      ),
   )
   .addSubcommand((sub) =>
     sub
@@ -852,6 +999,22 @@ async function handleStart(
     );
   }
 
+  // Resolve multitrack mode — premium-gated
+  const wantsMultitrack = interaction.options.getBoolean("multitrack") ?? false;
+  let multitrack = false;
+  if (wantsMultitrack) {
+    const isPremium =
+      await moduleManager.appwriteService.isGuildPremium(guildId);
+    if (!isPremium) {
+      await interaction.editReply({
+        content:
+          "❌ Multi-track recording is a **Premium** feature. Without Premium, all users are recorded into a single mixed track.",
+      });
+      return;
+    }
+    multitrack = true;
+  }
+
   // Create recording metadata in Appwrite
   const recordingDocId = await moduleManager.appwriteService.createRecording({
     guild_id: guildId,
@@ -859,6 +1022,7 @@ async function handleStart(
     recorded_by: member.id,
     started_at: new Date().toISOString(),
     bitrate: settings.bitrate,
+    multitrack,
   });
 
   // Create session
@@ -906,13 +1070,20 @@ async function handleStart(
     }, settings.maxDuration * 1000),
     recordingDocId,
     bitrate: settings.bitrate,
+    multitrack,
   };
 
   activeSessions.set(guildId, session);
 
-  // Start recording all users currently in the channel
+  // Start recording all users currently in the channel (up to the limit)
   for (const [userId, channelMember] of voiceChannel.members) {
     if (channelMember.user.bot) continue; // Don't record bots
+    if (session.userStreams.size >= settings.maxConcurrentUsers) {
+      console.warn(
+        `[Recording] Concurrent user limit reached (${settings.maxConcurrentUsers}), skipping remaining members`,
+      );
+      break;
+    }
     startUserRecording(
       session,
       userId,
@@ -924,6 +1095,7 @@ async function handleStart(
   // Listen for new users joining the channel
   connection.receiver.speaking.on("start", (userId: string) => {
     if (session.userStreams.has(userId)) return;
+    if (session.userStreams.size >= settings.maxConcurrentUsers) return; // at capacity
     // Look up the member
     const guild = interaction.guild;
     if (!guild) return;
@@ -931,6 +1103,7 @@ async function handleStart(
       .fetch(userId)
       .then((m) => {
         if (m.user.bot) return;
+        if (session.userStreams.size >= settings.maxConcurrentUsers) return;
         startUserRecording(session, userId, m.displayName, settings.bitrate);
       })
       .catch(() => {});
