@@ -3,6 +3,7 @@ import {
   Message,
   ChatInputCommandInteraction,
   AutocompleteInteraction,
+  ButtonInteraction,
   REST,
   Routes,
   Interaction,
@@ -30,6 +31,11 @@ export interface BotModule {
   /** Optional autocomplete handler for slash command options. */
   autocomplete?: (
     interaction: AutocompleteInteraction,
+    moduleManager: ModuleManager,
+  ) => Promise<void>;
+  /** Optional button interaction handler. customId must be prefixed with `moduleName:`. */
+  handleButton?: (
+    interaction: ButtonInteraction,
     moduleManager: ModuleManager,
   ) => Promise<void>;
 }
@@ -212,6 +218,37 @@ export class ModuleManager {
         // No handler found (or module not loaded yet), respond empty to prevent "Loading options failed"
         try {
           await interaction.respond([]);
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+
+    // ─── Button Interactions ──────────────────────────────────────────
+    if (interaction.isButton()) {
+      const [modulePrefix] = interaction.customId.split(":");
+      if (!modulePrefix) return;
+
+      const module = this.uniqueModules.get(modulePrefix.toLowerCase());
+      if (!module?.handleButton) return;
+
+      if (!this.enabledModules.has(module.name.toLowerCase())) return;
+
+      try {
+        await module.handleButton(interaction, this);
+      } catch (error) {
+        console.error(
+          `[ModuleManager] Error handling button ${interaction.customId}:`,
+          error,
+        );
+        try {
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: "Something went wrong!",
+              flags: [MessageFlags.Ephemeral],
+            });
+          }
         } catch {
           /* ignore */
         }
