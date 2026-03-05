@@ -46,6 +46,7 @@ const activeTab = computed(() => {
   if (path.includes("/modules/automod")) return "automod";
   if (path.includes("/modules/logging")) return "logging";
   if (path.includes("/modules/milestones")) return "milestones";
+  if (path.includes("/modules/triggers")) return "triggers";
   if (path.includes("/modules/ai")) return "ai";
   if (path.includes("/modules")) return "modules";
   if (path.includes("/embeds")) return "embeds";
@@ -107,11 +108,16 @@ const sidebarTabs = computed(() => [
     to: `${basePath}/modules/milestones`,
   },
   {
+    id: "triggers",
+    label: "Triggers",
+    icon: "i-heroicons-bolt",
+    to: `${basePath}/modules/triggers`,
+  },
+  {
     id: "embeds",
     label: "Embeds",
     icon: "i-heroicons-paint-brush",
     to: `${basePath}/embeds`,
-    separator: true,
   },
   {
     id: "tags",

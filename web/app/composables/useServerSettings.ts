@@ -53,6 +53,7 @@ export function useServerSettings(guildId: string) {
       "milestones",
       "automod",
       "logging",
+      "triggers",
     ].includes(moduleName.toLowerCase());
   };
 

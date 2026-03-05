@@ -233,6 +233,11 @@ const moduleStyle = (name: string) => {
       bgClass: "bg-cyan-500/10 border border-cyan-500/20",
       iconClass: "text-cyan-400",
     },
+    triggers: {
+      icon: "i-heroicons-bolt",
+      bgClass: "bg-emerald-500/10 border border-emerald-500/20",
+      iconClass: "text-emerald-400",
+    },
   };
   return (
     styles[name.toLowerCase()] || {
