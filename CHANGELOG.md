@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.2...modus-v1.8.0) (2026-03-06)
+
+
+### ✨ Features
+
+* **web:** add webhook trigger proxy route and botWebhookUrl runtime config ([2e17c14](https://github.com/MyndPhreak/MODUS/commit/2e17c142dd8ca741fce22a29f5c095a7807a1d09))
+* **webhooks:** Improve embeds for github webhooks ([2046afe](https://github.com/MyndPhreak/MODUS/commit/2046afe9ffefca90f847cc5027b7af30b551ed94))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** improve webhook trigger handler with split not-found and disabled guards ([bb94aa8](https://github.com/MyndPhreak/MODUS/commit/bb94aa8da1e4c3430937e53dfbca09804bd8beee))
+* **music:** resolve bass-heavy audio ducking via FFmpeg reconnect flags and Opus format ([9c8f0ad](https://github.com/MyndPhreak/MODUS/commit/9c8f0ade8d19923f6998928e40fb3203da800637))
+
 ## [1.7.2](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.1...modus-v1.7.2) (2026-03-05)
 
 
