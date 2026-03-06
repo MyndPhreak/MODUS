@@ -54,11 +54,15 @@ function getDirectAudioUrl(videoId: string): Promise<string> {
         "--no-warnings",
         "--no-check-certificates",
         "--format",
-        // Format 140 = m4a/AAC 128k — MPEG-4 container probes instantly.
-        // Avoid webm/opus: FFmpeg must scan the entire Matroska header before
-        // it can start streaming, which triggers discord-voip's ~5 s probe
-        // timeout under YouTube CDN throttling on server IPs.
-        "140/bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best",
+        // Format 251 = Opus 160kbps WebM — preferred because:
+        //   1. Opus is Discord's native codec (no transcode overhead in FFmpeg).
+        //   2. WebM/Opus CDN delivery throttles less aggressively than M4A on
+        //      server IPs, reducing buffering underruns on bass-heavy content.
+        //   3. The old concern about Matroska header probe timeouts only applied
+        //      under the old double-FFmpeg pipeline. Since we use --get-url and
+        //      discord-player's own FFmpeg handles the URL, probe is fine.
+        // Format 140 = m4a/AAC 128kbps — fallback if 251 is unavailable.
+        "251/140/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
         "--get-url", // Just print the direct URL, don't download
         "--no-cache-dir",
         "--no-playlist", // Never expand playlists — we pass single video IDs
@@ -106,7 +110,7 @@ function searchYouTubeForAudio(searchQuery: string): Promise<string> {
         "--no-warnings",
         "--no-check-certificates",
         "--format",
-        "140/bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best",
+        "251/140/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
         "--get-url",
         "--no-cache-dir",
         "--no-playlist",

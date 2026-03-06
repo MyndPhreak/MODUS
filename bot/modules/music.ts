@@ -173,6 +173,23 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     const channel = metadata?.channel;
     console.log(`[Music] playerStart: "${track.title}" in ${queue.guild.name}`);
 
+    // Inject FFmpeg reconnect input flags so bass-transient buffer underruns
+    // don't cause audible ducking. Without these, a momentary CDN stall causes
+    // FFmpeg to output silence rather than rebuffering, which Discord's voice
+    // gateway replays as a volume duck on the next real packet.
+    try {
+      queue.filters.ffmpeg.setInputArgs([
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
+      ]);
+    } catch {
+      // setInputArgs is not available on all discord-player builds — safe to skip
+    }
+
     // Update bot nickname to current track (if setting enabled)
     try {
       const settings = await getSettings(moduleManager, queue.guild.id);
