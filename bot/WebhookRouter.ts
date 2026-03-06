@@ -251,7 +251,7 @@ export function registerWebhookRoutes(
 
       // ── POST /webhooks/trigger/:secret ───────────────────────────
       const triggerMatch = pathname.match(
-        /^\/webhooks\/trigger\/([a-f0-9-]{36})$/,
+        /^\/webhooks\/trigger\/([a-f0-9-]{36})$/i,
       );
       if (triggerMatch && req.method === "POST") {
         const secret = triggerMatch[1];
@@ -259,7 +259,17 @@ export function registerWebhookRoutes(
         try {
           const trigger = await appwriteService.getTriggerBySecret(secret);
 
-          if (!trigger || !trigger.enabled) {
+          if (!trigger) {
+            console.warn(
+              `[Webhooks] No trigger found for secret: ${secret.slice(0, 8)}...`,
+            );
+            return sendJson(res, 404, { error: "Trigger not found" });
+          }
+
+          if (!trigger.enabled) {
+            console.warn(
+              `[Webhooks] Trigger "${trigger.name}" is disabled, ignoring request`,
+            );
             return sendJson(res, 404, { error: "Trigger not found" });
           }
 
