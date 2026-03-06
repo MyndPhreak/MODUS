@@ -68,13 +68,25 @@ interface ProviderResult {
 function flattenGitHub(body: any): Record<string, any> {
   return {
     ...body,
-    // Convenient aliases
+    // Pull request / issue aliases
     "pr.title": body.pull_request?.title ?? body.issue?.title ?? "",
     "pr.url": body.pull_request?.html_url ?? body.issue?.html_url ?? "",
     "pr.author": body.pull_request?.user?.login ?? body.sender?.login ?? "",
     "pr.number": body.pull_request?.number ?? body.issue?.number ?? "",
     "pr.state": body.pull_request?.state ?? body.action ?? "",
     "pr.merged": body.pull_request?.merged ?? false,
+    // Release aliases
+    "release.title": body.release?.name ?? body.release?.tag_name ?? "",
+    "release.url": body.release?.html_url ?? "",
+    "release.tag": body.release?.tag_name ?? "",
+    "release.body": body.release?.body ?? "",
+    "release.author": body.release?.author?.login ?? body.sender?.login ?? "",
+    "release.prerelease": body.release?.prerelease ? "pre-release" : "release",
+    // Push aliases
+    "push.branch": (body.ref ?? "").replace("refs/heads/", ""),
+    "push.commits": String(body.commits?.length ?? 0),
+    "push.compare": body.compare ?? "",
+    // Repository + sender
     "repo.name": body.repository?.full_name ?? "",
     "repo.url": body.repository?.html_url ?? "",
     "sender.login": body.sender?.login ?? "",
@@ -96,12 +108,57 @@ function flattenTwitch(body: any): Record<string, any> {
   };
 }
 
+/** Returns the default embed title/description for each GitHub event type. */
+function githubEventDefaults(
+  ghEvent: string | undefined,
+  action: string | undefined,
+  merged?: boolean,
+): { title: string; description: string; color: number } {
+  switch (ghEvent) {
+    case "release":
+      return {
+        title: "🚀 {repo.name} — {release.title}",
+        description:
+          "**[{release.tag}]({release.url})** by **{release.author}** · _{release.prerelease}_\n\n{release.body}",
+        color: 0x238636,
+      };
+    case "pull_request":
+      return {
+        title: "🐙 GitHub — {pr.title}",
+        description:
+          "[#{pr.number}]({pr.url}) in **{repo.name}** by **{pr.author}** · state: `{pr.state}`",
+        color: action === "closed" && merged ? 0x8957e5 : 0x238636,
+      };
+    case "issues":
+      return {
+        title: "🐙 GitHub Issue — {pr.title}",
+        description:
+          "[#{pr.number}]({pr.url}) in **{repo.name}** by **{sender.login}**",
+        color: 0xe3b341,
+      };
+    case "push":
+      return {
+        title: "📦 {repo.name} — push to `{push.branch}`",
+        description:
+          "**{push.commits}** commit(s) · [compare]({push.compare}) by **{sender.login}**",
+        color: 0x1f6feb,
+      };
+    default:
+      return {
+        title: "🐙 GitHub — {repo.name}",
+        description: "Event: `{action}` by **{sender.login}**",
+        color: 0x238636,
+      };
+  }
+}
+
 function handleGitHub(
   trigger: any,
   body: any,
   headers: http.IncomingHttpHeaders,
 ): ProviderResult {
   const flat = flattenGitHub(body);
+  const ghEvent = headers["x-github-event"] as string | undefined;
 
   // Apply filters
   if (trigger.filters) {
@@ -119,10 +176,16 @@ function handleGitHub(
     }
   }
 
-  // Build embed
-  let title = "🐙 GitHub — {pr.title}";
-  let description = "[{repo.name}]({pr.url}) by **{sender.login}**";
-  let color = 0x238636;
+  // Resolve embed template: use stored template if present, otherwise pick
+  // event-appropriate defaults so the embed is always populated correctly.
+  const defaults = githubEventDefaults(
+    ghEvent,
+    body.action,
+    body.pull_request?.merged ?? false,
+  );
+  let title = defaults.title;
+  let description = defaults.description;
+  let color = defaults.color;
 
   if (trigger.embed_template) {
     try {
@@ -133,10 +196,14 @@ function handleGitHub(
     } catch {}
   }
 
+  // Truncate release body so the changelog doesn't overflow Discord's 4096 limit.
+  // We keep room for the header line (~120 chars) before the {release.body} expands.
+  const resolvedDescription = resolvePlaceholders(description, flat);
+
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(resolvePlaceholders(title, flat).slice(0, 256))
-    .setDescription(resolvePlaceholders(description, flat).slice(0, 4096))
+    .setDescription(resolvedDescription.slice(0, 4096))
     .setTimestamp();
 
   // Add sender avatar as thumbnail if available
@@ -144,7 +211,16 @@ function handleGitHub(
     embed.setThumbnail(flat["sender.avatar"]);
   }
 
-  const ghEvent = headers["x-github-event"] as string | undefined;
+  // Link the release / PR / commit directly in the embed URL (makes title clickable)
+  const embedUrl =
+    flat["release.url"] ||
+    flat["pr.url"] ||
+    flat["push.compare"] ||
+    flat["repo.url"];
+  if (embedUrl) {
+    embed.setURL(embedUrl);
+  }
+
   if (ghEvent) {
     embed.setFooter({ text: `Event: ${ghEvent} / ${body.action ?? "n/a"}` });
   }
