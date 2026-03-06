@@ -23,6 +23,7 @@ export default defineNuxtConfig({
       appwriteEndpoint: "https://api.ppo.gg/v1", // Set via NUXT_PUBLIC_APPWRITE_ENDPOINT
       appwriteProjectId: "69266f6e00118a9f6b58", // Set via NUXT_PUBLIC_APPWRITE_PROJECT_ID
       baseUrl: "https://modus.ppo.gg", // Set via NUXT_PUBLIC_BASE_URL
+      webhookBaseUrl: "https://modus.ppo.gg", // Bot's public origin for webhook URLs — Set via NUXT_PUBLIC_WEBHOOK_BASE_URL
       botAdminIds: "", // Comma-separated Discord IDs, set via NUXT_PUBLIC_BOT_ADMIN_IDS
       botUrl: "", // Bot health check URL, set via NUXT_PUBLIC_BOT_URL
       discordClientId: "", // Discord bot client ID, set via NUXT_PUBLIC_DISCORD_CLIENT_ID
