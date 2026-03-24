@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.8.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.2...modus-v1.8.0) (2026-03-24)
+
+
+### ✨ Features
+
+* **bot:** add anti-raid module with join velocity detection ([2bf0104](https://github.com/MyndPhreak/MODUS/commit/2bf01040231399518420be1979cf592ec50a07dc))
+* **bot:** add multi-type ticketing system with transcripts ([2cdaa14](https://github.com/MyndPhreak/MODUS/commit/2cdaa14531695875bac666461b5d889c9b0edf33))
+* **bot:** add polls module with Discord native polls ([caa37b7](https://github.com/MyndPhreak/MODUS/commit/caa37b728b36ed8730501836b13bcb0a538fdb88))
+* **bot:** add reaction roles module with button and dropdown panels ([587751c](https://github.com/MyndPhreak/MODUS/commit/587751ce5d6555ad14624863f40e248b5c2a7e81))
+* **bot:** add server events module for scheduled events ([91cc54c](https://github.com/MyndPhreak/MODUS/commit/91cc54ca0c51810ec529e1037026002ea5ed5cc4))
+* **bot:** add shared discord utilities library ([2713cc4](https://github.com/MyndPhreak/MODUS/commit/2713cc4dd520940f48108ffc107858ef9063232d))
+* **bot:** add social alerts module with Twitch EventSub integration ([1cd6d9e](https://github.com/MyndPhreak/MODUS/commit/1cd6d9e06089b966989ecdbe27bbd9733dde9b6b))
+* **bot:** add verification module with customizable gate ([06f1abe](https://github.com/MyndPhreak/MODUS/commit/06f1abe6c9a8546a751b575cce49760b5024b7ce))
+* **bot:** extend module manager with dynamic registration and schemas ([cc53662](https://github.com/MyndPhreak/MODUS/commit/cc53662b65fd677424b5ee1d7646aa72912e06b2))
+* **bot:** offload welcome image rendering to dashboard API ([185b198](https://github.com/MyndPhreak/MODUS/commit/185b19896cb5f8bb3ebd887eec6ce97e378b913a))
+* **web:** add Google Fonts picker and UX improvements to welcome editor ([09347d2](https://github.com/MyndPhreak/MODUS/commit/09347d222f21dcea2529bb8c91615765bc524778))
+* **web:** add server-side welcome image render API with Google Fonts ([06e0bcb](https://github.com/MyndPhreak/MODUS/commit/06e0bcb9942f2a42e84987284f0cd68d09f401fb))
+* **web:** add webhook trigger proxy route and botWebhookUrl runtime config ([2e17c14](https://github.com/MyndPhreak/MODUS/commit/2e17c142dd8ca741fce22a29f5c095a7807a1d09))
+* **webhooks:** Improve embeds for github webhooks ([2046afe](https://github.com/MyndPhreak/MODUS/commit/2046afe9ffefca90f847cc5027b7af30b551ed94))
+* **web:** move dashboard pages under /dashboard/ route ([640337c](https://github.com/MyndPhreak/MODUS/commit/640337c8bc5f65ad8a914109fe6a47586424de22))
+* **web:** redesign landing page with hero, features, and stats sections ([97e7f0b](https://github.com/MyndPhreak/MODUS/commit/97e7f0b57ce8bd33cc774ada11ca55e2e4912d2e))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** improve webhook trigger handler with split not-found and disabled guards ([bb94aa8](https://github.com/MyndPhreak/MODUS/commit/bb94aa8da1e4c3430937e53dfbca09804bd8beee))
+* **music:** resolve bass-heavy audio ducking via FFmpeg reconnect flags and Opus format ([9c8f0ad](https://github.com/MyndPhreak/MODUS/commit/9c8f0ade8d19923f6998928e40fb3203da800637))
+
+
+### ♻️ Refactors
+
+* **bot:** improve existing modules with schema validation and consistency ([0b51c39](https://github.com/MyndPhreak/MODUS/commit/0b51c391fce2285f2c49b300563dac6a8149844c))
+* **web:** update module dashboard pages with UFormField consistency ([f891992](https://github.com/MyndPhreak/MODUS/commit/f8919928fca0446dfc8789529cc34fb59fd08343))
+
+
+### 📖 Documentation
+
+* **web:** update privacy policy and terms of service ([68493bb](https://github.com/MyndPhreak/MODUS/commit/68493bba992b70c9ff9fe94c25e4524d6ecf023f))
+
 ## [1.7.2](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.1...modus-v1.7.2) (2026-03-05)
 
 
