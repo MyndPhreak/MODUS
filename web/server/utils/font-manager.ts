@@ -9,7 +9,7 @@
 import { GlobalFonts } from "@napi-rs/canvas";
 import { existsSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { isSystemFont, findFont, type FontDefinition } from "../../shared/fonts";
+import { isSystemFont, findFont, type FontDefinition } from "#shared/fonts";
 
 const FONTS_DIR = join(process.cwd(), "data", "fonts");
 const registeredFonts = new Set<string>();

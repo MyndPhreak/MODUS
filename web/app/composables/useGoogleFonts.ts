@@ -12,7 +12,7 @@ import {
   isSystemFont,
   googleFontsCssUrl,
   type FontDefinition,
-} from "../../shared/fonts";
+} from "#shared/fonts";
 
 // ── Module-level cache (persists across component remounts) ──────
 
