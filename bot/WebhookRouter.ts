@@ -9,6 +9,7 @@
  */
 
 import http from "http";
+import crypto from "crypto";
 import { URL } from "url";
 import { Client, TextChannel, EmbedBuilder } from "discord.js";
 import { AppwriteService } from "./AppwriteService";
@@ -320,10 +321,161 @@ export function registerWebhookRoutes(
       );
       const pathname = url.pathname;
 
-      // ── Twitch webhook verification challenge ────────────────────
-      // Twitch sends a POST with type "webhook_callback_verification"
-      // that requires echoing back the challenge value.
-      // We handle this before the main trigger logic.
+      // ── POST /webhooks/alerts/twitch ─────────────────────────────
+      // Receives Twitch EventSub deliveries for the Social Alerts module.
+      // Verifies HMAC, answers verification challenges, dispatches embeds.
+      if (pathname === "/webhooks/alerts/twitch" && req.method === "POST") {
+        // Buffer raw body first (HMAC must cover raw bytes)
+        const rawBody = await new Promise<string>((resolve, reject) => {
+          let buf = "";
+          req.on("data", (c) => (buf += c));
+          req.on("end", () => resolve(buf));
+          req.on("error", reject);
+        });
+
+        // Verify Twitch HMAC signature
+        const twitchSecret = process.env.TWITCH_EVENTSUB_SECRET;
+        if (twitchSecret) {
+          const msgId = (req.headers["twitch-eventsub-message-id"] as string) ?? "";
+          const msgTs = (req.headers["twitch-eventsub-message-timestamp"] as string) ?? "";
+          const sigHeader = (req.headers["twitch-eventsub-message-signature"] as string) ?? "";
+          const expected =
+            "sha256=" +
+            crypto
+              .createHmac("sha256", twitchSecret)
+              .update(msgId + msgTs + rawBody)
+              .digest("hex");
+          if (sigHeader !== expected) {
+            console.warn("[Alerts/Twitch] Invalid HMAC signature — rejecting");
+            res.writeHead(403);
+            res.end("Forbidden");
+            return;
+          }
+        }
+
+        let body: any;
+        try {
+          body = JSON.parse(rawBody);
+        } catch {
+          res.writeHead(400);
+          res.end("Bad Request");
+          return;
+        }
+
+        const msgType = req.headers["twitch-eventsub-message-type"] as string;
+
+        // Verification challenge
+        if (msgType === "webhook_callback_verification") {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end(body.challenge ?? "");
+          console.log("[Alerts/Twitch] Answered EventSub verification challenge");
+          return;
+        }
+
+        // Revocation
+        if (msgType === "revocation") {
+          console.warn(
+            `[Alerts/Twitch] Subscription revoked: ${body.subscription?.type} (${body.subscription?.status})`,
+          );
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
+        // Event notification
+        if (msgType === "notification") {
+          res.writeHead(204);
+          res.end();
+
+          const event = body.event ?? {};
+          const subType: string = body.subscription?.type ?? "";
+          const broadcasterLogin: string = (event.broadcaster_user_login ?? "").toLowerCase();
+          const broadcasterName: string = event.broadcaster_user_name ?? broadcasterLogin;
+
+          try {
+            const configs = await appwriteService.getAllAlertsConfigs();
+            for (const { guildId, alerts } of configs) {
+              for (const alert of alerts) {
+                if (
+                  alert.platform === "twitch" &&
+                  alert.handle.toLowerCase() === broadcasterLogin
+                ) {
+                  const isOnline = subType === "stream.online";
+                  const embed = isOnline
+                    ? {
+                        title: `📺 ${broadcasterName} is live!`,
+                        description:
+                          `**${broadcasterName}** just went live on Twitch!` +
+                          (event.title ? `\n\n🎮 *${event.title}*` : ""),
+                        url: `https://twitch.tv/${broadcasterLogin}`,
+                        color: 0x9146ff,
+                        thumbnail: {
+                          url: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${broadcasterLogin}-320x180.jpg`,
+                        },
+                        timestamp: new Date().toISOString(),
+                        footer: { text: "Twitch" },
+                      }
+                    : {
+                        title: `📴 ${broadcasterName} ended their stream`,
+                        description: `**${broadcasterName}** is no longer live on Twitch.`,
+                        color: 0x6b7280,
+                        timestamp: new Date().toISOString(),
+                        footer: { text: "Twitch" },
+                      };
+
+                  const discordToken = process.env.DISCORD_TOKEN;
+                  if (discordToken) {
+                    const msgBody: any = { embeds: [embed] };
+                    if (alert.message) msgBody.content = alert.message;
+                    const payload = JSON.stringify(msgBody);
+
+                    const req2 = require("https").request(
+                      {
+                        hostname: "discord.com",
+                        path: `/api/v10/channels/${alert.channelId}/messages`,
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "Content-Length": Buffer.byteLength(payload),
+                          Authorization: `Bot ${discordToken}`,
+                        },
+                      },
+                      (r: any) => {
+                        let d = "";
+                        r.on("data", (c: any) => (d += c));
+                        r.on("end", () => {
+                          if (r.statusCode >= 400) {
+                            console.warn(
+                              `[Alerts/Twitch] Discord error (${r.statusCode}) guild ${guildId}:`,
+                              d,
+                            );
+                          } else {
+                            console.log(
+                              `[Alerts/Twitch] ${subType} → channel ${alert.channelId} (guild ${guildId})`,
+                            );
+                          }
+                        });
+                      },
+                    );
+                    req2.on("error", (e: Error) =>
+                      console.error("[Alerts/Twitch] Discord request error:", e.message),
+                    );
+                    req2.write(payload);
+                    req2.end();
+                  }
+                }
+              }
+            }
+          } catch (err: any) {
+            console.error("[Alerts/Twitch] Error dispatching event:", err.message);
+          }
+          return;
+        }
+
+        res.writeHead(204);
+        res.end();
+        return;
+      }
 
       // ── POST /webhooks/trigger/:secret ───────────────────────────
       const triggerMatch = pathname.match(
