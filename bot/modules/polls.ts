@@ -57,6 +57,12 @@ const pollsModule: BotModule = {
             .setRequired(true)
             .setMaxLength(300),
         )
+        .addStringOption((opt) =>
+          opt.setName("option1").setDescription("Answer option 1").setRequired(true).setMaxLength(55),
+        )
+        .addStringOption((opt) =>
+          opt.setName("option2").setDescription("Answer option 2").setRequired(true).setMaxLength(55),
+        )
         .addIntegerOption((opt) =>
           opt
             .setName("duration")
@@ -68,12 +74,6 @@ const pollsModule: BotModule = {
           opt
             .setName("multiselect")
             .setDescription("Allow members to vote for multiple options? Default: false"),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option1").setDescription("Answer option 1").setRequired(true).setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option2").setDescription("Answer option 2").setRequired(true).setMaxLength(55),
         )
         .addStringOption((opt) =>
           opt.setName("option3").setDescription("Answer option 3").setMaxLength(55),
