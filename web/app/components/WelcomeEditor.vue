@@ -56,6 +56,41 @@
         <input v-model="template.backgroundColor" class="we-hex-input w-20" />
       </div>
 
+      <div class="we-toolbar-sep" />
+
+      <!-- Background Image -->
+      <div class="we-toolbar-group">
+        <button
+          class="we-tool-btn"
+          :class="{ 'text-violet-400': !!template.backgroundImage }"
+          title="Upload background image"
+          @click="($refs.bgImageInput as HTMLInputElement).click()"
+        >
+          <UIcon name="i-heroicons-photo" />
+        </button>
+        <input
+          ref="bgImageInput"
+          type="file"
+          accept="image/*"
+          class="sr-only"
+          @change="handleBgImageUpload"
+        />
+        <button
+          v-if="template.backgroundImage"
+          class="we-tool-btn text-red-400 hover:text-red-300"
+          title="Remove background image"
+          @click="removeBgImage"
+        >
+          <UIcon name="i-heroicons-x-mark" class="text-xs" />
+        </button>
+        <span
+          v-if="bgUploading"
+          class="text-[10px] text-zinc-500 flex items-center gap-1"
+        >
+          <UIcon name="i-heroicons-arrow-path" class="animate-spin text-xs" />
+        </span>
+      </div>
+
       <div class="flex-1" />
 
       <div class="we-toolbar-group">
@@ -80,6 +115,26 @@
       <div
         class="w-[240px] shrink-0 flex flex-col bg-[#1e1e1e] border-r border-zinc-800"
       >
+        <!-- Preset Templates -->
+        <div class="p-2 border-b border-zinc-800">
+          <p class="we-panel-label mb-2">Presets</p>
+          <div class="grid grid-cols-2 gap-1">
+            <button
+              v-for="preset in PRESETS"
+              :key="preset.name"
+              class="we-preset-btn"
+              :title="preset.name"
+              @click="applyPreset(preset)"
+            >
+              <div
+                class="we-preset-swatch"
+                :style="{ background: preset.preview }"
+              />
+              <span class="text-[9px] truncate">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Add Element Tools -->
         <div class="p-2 border-b border-zinc-800">
           <p class="we-panel-label mb-2">Tools</p>
@@ -102,16 +157,39 @@
             class="flex items-center justify-between p-2 border-b border-zinc-800"
           >
             <p class="we-panel-label">Layers</p>
-            <span class="text-[10px] text-zinc-500 tabular-nums">{{
-              template.elements.length
-            }}</span>
+            <div class="flex items-center gap-1">
+              <button
+                v-if="selectedElementId"
+                class="we-tool-btn-sm" title="Move up"
+                @click="moveLayer('up')"
+              >
+                <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
+              </button>
+              <button
+                v-if="selectedElementId"
+                class="we-tool-btn-sm" title="Move down"
+                @click="moveLayer('down')"
+              >
+                <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
+              </button>
+              <button
+                v-if="selectedElementId"
+                class="we-tool-btn-sm" title="Duplicate"
+                @click="duplicateSelectedElement"
+              >
+                <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
+              </button>
+              <span class="text-[10px] text-zinc-500 tabular-nums ml-1">{{
+                template.elements.length
+              }}</span>
+            </div>
           </div>
           <div class="flex-1 overflow-y-auto p-1 space-y-px">
             <div
               v-if="template.elements.length === 0"
               class="text-center py-8 text-zinc-600 text-[11px]"
             >
-              No layers
+              Add elements using the tools above
             </div>
             <button
               v-for="(el, index) in reversedElements"
@@ -195,6 +273,18 @@
                     width: template.canvasWidth,
                     height: template.canvasHeight,
                     fill: template.backgroundColor,
+                  }"
+                />
+
+                <!-- Background Image -->
+                <v-image
+                  v-if="bgImageObj"
+                  :config="{
+                    x: 0,
+                    y: 0,
+                    width: template.canvasWidth,
+                    height: template.canvasHeight,
+                    image: bgImageObj,
                   }"
                 />
 
@@ -417,6 +507,32 @@
               class="we-textarea"
               placeholder="Use {username}, etc."
             />
+
+            <!-- Font Family -->
+            <div class="mt-1.5">
+              <span class="we-prop-label block mb-1">Font</span>
+              <select
+                :value="selectedElement.fontFamily || 'sans-serif'"
+                @change="handleFontChange($event)"
+                class="we-select w-full"
+              >
+                <optgroup
+                  v-for="group in fontGroups"
+                  :key="group.label"
+                  :label="group.label"
+                >
+                  <option
+                    v-for="font in group.fonts"
+                    :key="font.family"
+                    :value="font.family"
+                    :style="{ fontFamily: `'${font.family}', ${font.category}` }"
+                  >
+                    {{ font.family }}
+                  </option>
+                </optgroup>
+              </select>
+            </div>
+
             <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-1.5">
               <div class="we-prop-row">
                 <span class="we-prop-label">Size</span
@@ -599,8 +715,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { Query } from "appwrite";
+import { useGoogleFonts } from "~/composables/useGoogleFonts";
+
+const { fontGroups, loadFont, loadTemplateFonts } = useGoogleFonts();
 
 const props = defineProps<{
   guildId: string;
@@ -736,6 +855,67 @@ const DEFAULT_TEMPLATE: WelcomeTemplate = {
   ],
 };
 
+// ── Preset Templates ──
+
+interface TemplatePreset {
+  name: string;
+  preview: string;
+  template: WelcomeTemplate;
+}
+
+const PRESETS: TemplatePreset[] = [
+  {
+    name: "Classic",
+    preview: "linear-gradient(135deg, #0f0c29, #302b63, #24243e)",
+    template: JSON.parse(JSON.stringify(DEFAULT_TEMPLATE)),
+  },
+  {
+    name: "Sunset",
+    preview: "linear-gradient(135deg, #f12711, #f5af19)",
+    template: {
+      canvasWidth: 1024, canvasHeight: 500, backgroundColor: "#1a0a00",
+      elements: [
+        { id: "bg-overlay", type: "rect", x: 0, y: 0, width: 1024, height: 500, fill: "linear-gradient(135deg, #1a0a00, #4a1a00, #1a0a00)", opacity: 1 },
+        { id: "accent-top", type: "rect", x: 0, y: 0, width: 1024, height: 4, fill: "linear-gradient(90deg, #f12711, #f5af19, #f12711)", opacity: 1 },
+        { id: "avatar", type: "avatar", x: 512, y: 155, radius: 80, borderColor: "#f5af19", borderWidth: 4 },
+        { id: "welcome-label", type: "text", x: 512, y: 280, text: "WELCOME", fontSize: 44, fontFamily: "sans-serif", fontStyle: "bold", fill: "#ffffff", align: "center" },
+        { id: "username-text", type: "text", x: 512, y: 340, text: "{username}", fontSize: 30, fontFamily: "sans-serif", fill: "#f5af19", align: "center" },
+        { id: "server-text", type: "text", x: 512, y: 395, text: "to {server_name}", fontSize: 20, fontFamily: "sans-serif", fill: "#d4a574", align: "center" },
+        { id: "member-count", type: "text", x: 512, y: 450, text: "Member #{member_count}", fontSize: 16, fontFamily: "sans-serif", fill: "#8b6914", align: "center" },
+      ],
+    },
+  },
+  {
+    name: "Neon",
+    preview: "linear-gradient(135deg, #0a0a0a, #1a0033, #0a0a0a)",
+    template: {
+      canvasWidth: 1024, canvasHeight: 500, backgroundColor: "#0a0a0a",
+      elements: [
+        { id: "bg-overlay", type: "rect", x: 0, y: 0, width: 1024, height: 500, fill: "linear-gradient(135deg, #0a0a0a, #1a0033, #0a0a0a)", opacity: 1 },
+        { id: "accent-top", type: "rect", x: 0, y: 0, width: 1024, height: 3, fill: "linear-gradient(90deg, #00ff88, #00ccff, #ff00ff)", opacity: 1 },
+        { id: "accent-bot", type: "rect", x: 0, y: 497, width: 1024, height: 3, fill: "linear-gradient(90deg, #ff00ff, #00ccff, #00ff88)", opacity: 1 },
+        { id: "avatar", type: "avatar", x: 512, y: 155, radius: 80, borderColor: "#00ccff", borderWidth: 4 },
+        { id: "welcome-label", type: "text", x: 512, y: 280, text: "WELCOME", fontSize: 44, fontFamily: "sans-serif", fontStyle: "bold", fill: "#00ff88", align: "center" },
+        { id: "username-text", type: "text", x: 512, y: 340, text: "{username}", fontSize: 30, fontFamily: "sans-serif", fill: "#00ccff", align: "center" },
+        { id: "server-text", type: "text", x: 512, y: 395, text: "to {server_name}", fontSize: 20, fontFamily: "sans-serif", fill: "#cc66ff", align: "center" },
+        { id: "member-count", type: "text", x: 512, y: 450, text: "Member #{member_count}", fontSize: 16, fontFamily: "sans-serif", fill: "#555577", align: "center" },
+      ],
+    },
+  },
+  {
+    name: "Minimal",
+    preview: "linear-gradient(135deg, #18181b, #27272a)",
+    template: {
+      canvasWidth: 1024, canvasHeight: 500, backgroundColor: "#18181b",
+      elements: [
+        { id: "avatar", type: "avatar", x: 512, y: 175, radius: 70, borderColor: "#3f3f46", borderWidth: 3 },
+        { id: "username-text", type: "text", x: 512, y: 300, text: "{username}", fontSize: 32, fontFamily: "sans-serif", fontStyle: "bold", fill: "#fafafa", align: "center" },
+        { id: "server-text", type: "text", x: 512, y: 360, text: "joined {server_name}", fontSize: 18, fontFamily: "sans-serif", fill: "#71717a", align: "center" },
+      ],
+    },
+  },
+];
+
 // ── State ──
 
 const template = ref<WelcomeTemplate>(
@@ -746,6 +926,92 @@ const saving = ref(false);
 const stageRef = ref<any>(null);
 const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
+const bgUploading = ref(false);
+const bgImageObj = ref<HTMLImageElement | null>(null);
+
+// ── Background Image ──
+
+function loadBgImage(url: string) {
+  if (!url) {
+    bgImageObj.value = null;
+    return;
+  }
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    bgImageObj.value = img;
+  };
+  img.onerror = () => {
+    bgImageObj.value = null;
+  };
+  img.src = url;
+}
+
+watch(
+  () => template.value.backgroundImage,
+  (url) => loadBgImage(url || ""),
+  { immediate: true },
+);
+
+async function handleBgImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  // Immediately preview via data URL
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target?.result as string;
+    if (dataUrl) loadBgImage(dataUrl);
+  };
+  reader.readAsDataURL(file);
+
+  // Upload to server for persistent URL
+  bgUploading.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/welcome/upload-bg", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.statusMessage || "Upload failed");
+    }
+    const { url } = await res.json();
+    template.value.backgroundImage = url;
+    toast.add({
+      title: "Background uploaded",
+      description: "Background image set. Remember to save.",
+      color: "success",
+    });
+  } catch (err: any) {
+    toast.add({
+      title: "Upload failed",
+      description: err?.message || "Could not upload image.",
+      color: "error",
+    });
+  } finally {
+    bgUploading.value = false;
+    input.value = "";
+  }
+}
+
+function removeBgImage() {
+  template.value.backgroundImage = undefined;
+  bgImageObj.value = null;
+}
+
+function applyPreset(preset: TemplatePreset) {
+  const channelId = template.value.channelId;
+  const bgImage = template.value.backgroundImage;
+  template.value = JSON.parse(JSON.stringify(preset.template));
+  // Preserve channel selection and background image
+  if (channelId) template.value.channelId = channelId;
+  if (bgImage) template.value.backgroundImage = bgImage;
+  selectedElementId.value = null;
+}
 
 const placeholders = [
   "{username}",
@@ -890,6 +1156,7 @@ function circleConfig(el: TemplateElement) {
 }
 
 function textConfig(el: TemplateElement) {
+  const family = el.fontFamily || "sans-serif";
   return {
     x:
       el.align === "center"
@@ -901,7 +1168,7 @@ function textConfig(el: TemplateElement) {
     width: 400,
     text: previewText(el.text || ""),
     fontSize: el.fontSize || 24,
-    fontFamily: el.fontFamily || "sans-serif",
+    fontFamily: family,
     fontStyle: el.fontStyle || "",
     fill: el.fill || "#ffffff",
     align: el.align || "center",
@@ -1020,9 +1287,64 @@ function deleteSelectedElement() {
   }
 }
 
+function duplicateSelectedElement() {
+  if (!selectedElement.value) return;
+  elementCounter++;
+  const src = selectedElement.value;
+  const newEl: TemplateElement = {
+    ...JSON.parse(JSON.stringify(src)),
+    id: `${src.type}-${Date.now()}-${elementCounter}`,
+    x: src.x + 20,
+    y: src.y + 20,
+  };
+  template.value.elements.push(newEl);
+  selectedElementId.value = newEl.id;
+}
+
+function moveLayer(direction: 'up' | 'down') {
+  if (!selectedElementId.value) return;
+  const els = template.value.elements;
+  const i = els.findIndex((el) => el.id === selectedElementId.value);
+  if (i === -1) return;
+  // 'up' in layer panel = higher index (rendered later = on top)
+  const target = direction === 'up' ? i + 1 : i - 1;
+  if (target < 0 || target >= els.length) return;
+  [els[i], els[target]] = [els[target], els[i]];
+}
+
 function selectElement(id: string) {
   selectedElementId.value = id;
 }
+
+// ── Font Change Handler ──
+
+function handleFontChange(event: Event) {
+  const family = (event.target as HTMLSelectElement).value;
+  if (selectedElement.value) {
+    selectedElement.value.fontFamily = family;
+    loadFont(family);
+  }
+}
+
+// ── Keyboard Shortcuts ──
+
+function handleKeyDown(e: KeyboardEvent) {
+  // Don't intercept when typing in an input
+  const tag = (e.target as HTMLElement).tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deleteSelectedElement();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+});
 
 // ── Drag / Transform ──
 
@@ -1145,7 +1467,10 @@ async function saveTemplate() {
 }
 
 onMounted(() => {
-  loadTemplate();
+  loadTemplate().then(() => {
+    // Load Google Fonts used in the template for Konva preview
+    loadTemplateFonts(template.value.elements);
+  });
 });
 </script>
 
@@ -1269,6 +1594,23 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .we-tool-btn:hover {
+  background: #333;
+  color: #e4e4e7;
+}
+.we-tool-btn-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  color: #71717a;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.we-tool-btn-sm:hover {
   background: #333;
   color: #e4e4e7;
 }
@@ -1427,5 +1769,32 @@ onMounted(() => {
 }
 .we-num-input {
   -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ── Preset Buttons ── */
+.we-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 4px;
+  background: #262626;
+  border: 1px solid #333;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #a1a1aa;
+}
+.we-preset-btn:hover {
+  background: #333;
+  border-color: #52525b;
+  color: #e4e4e7;
+}
+.we-preset-swatch {
+  width: 100%;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 </style>
