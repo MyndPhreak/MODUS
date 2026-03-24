@@ -4,6 +4,8 @@ import {
   Message,
   GuildMember,
 } from "discord.js";
+import http from "http";
+import https from "https";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { BotModule, ModuleManager } from "../ModuleManager";
@@ -319,6 +321,24 @@ const OPENAI_TOOLS: any[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current, real-time information. Use this when the user asks about recent events, news, current prices, weather, live scores, or anything that requires up-to-date information you might not have.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query to look up on the web.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
 ];
 
 // Anthropic tool format (input_schema instead of parameters)
@@ -444,16 +464,81 @@ async function callLLM(
   };
 }
 
+// ── Web Search ─────────────────────────────────────────────────────
+
+async function performWebSearch(query: string): Promise<string> {
+  const baseUrl = process.env.SEARXNG_URL?.replace(/\/$/, "");
+  if (!baseUrl) throw new Error("SEARXNG_URL not configured");
+
+  const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json&categories=general&language=en`;
+  const parsed = new URL(searchUrl);
+  const requester = parsed.protocol === "https:" ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const req = requester.get(
+      searchUrl,
+      { headers: { "Accept": "application/json" } },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            const results: { title: string; url: string; content?: string }[] =
+              (json.results ?? []).slice(0, 5);
+            if (!results.length) {
+              resolve("No results found.");
+              return;
+            }
+            const formatted = results
+              .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content ?? ""}`)
+              .join("\n\n");
+            resolve(formatted);
+          } catch {
+            reject(new Error("Failed to parse search results"));
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(8000, () => {
+      req.destroy();
+      reject(new Error("Search request timed out"));
+    });
+  });
+}
+
 // ── Tool Router ────────────────────────────────────────────────────
-// Executes the tool call returned by the LLM and returns the result message.
+// Executes the tool call returned by the LLM and returns the result.
+// directReply: send as-is to the user (music tools)
+// llmContext:  pass back to the LLM so it can synthesize a natural reply (web search)
+
+interface ToolExecResult {
+  directReply?: string;
+  llmContext?: string;
+}
 
 async function executeToolCall(
   toolCall: ToolCall,
   message: Message,
   guildId: string,
   moduleManager: ModuleManager,
-): Promise<string> {
+): Promise<ToolExecResult> {
   const { name, args } = toolCall;
+
+  // ── Web search (no module dependency) ──────────────────────────
+  if (name === "web_search") {
+    const query = (args.query as string) || "";
+    if (!query) return { directReply: "❌ I need a search query to look something up." };
+    if (!process.env.SEARXNG_URL) {
+      return {
+        directReply:
+          "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.",
+      };
+    }
+    const results = await performWebSearch(query);
+    return { llmContext: results.slice(0, 3200) };
+  }
 
   // All music tools require the music module to be enabled
   const isMusicEnabled = await moduleManager.appwriteService.isModuleEnabled(
@@ -461,19 +546,22 @@ async function executeToolCall(
     "music",
   );
   if (!isMusicEnabled) {
-    return "❌ The music module is not enabled on this server. Ask an admin to enable it in the dashboard.";
+    return {
+      directReply:
+        "❌ The music module is not enabled on this server. Ask an admin to enable it in the dashboard.",
+    };
   }
 
   switch (name) {
     case "play_music": {
       const query = (args.query as string) || "";
-      if (!query) return "❌ I need a song name or URL to play something.";
+      if (!query) return { directReply: "❌ I need a song name or URL to play something." };
 
       // Resolve the user's voice channel from the message member
       const member = message.member as GuildMember | null;
       const voiceChannel = member?.voice?.channel;
       if (!voiceChannel) {
-        return "❌ You need to be in a voice channel for me to play music!";
+        return { directReply: "❌ You need to be in a voice channel for me to play music!" };
       }
 
       const result = await musicPlay(
@@ -484,55 +572,57 @@ async function executeToolCall(
         moduleManager,
         message.channel as any,
       );
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "skip_track": {
       const result = await musicSkip(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "stop_music": {
       const result = await musicStop(guildId, moduleManager);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "pause_music": {
       const result = await musicPause(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "resume_music": {
       const result = await musicResume(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "set_volume": {
       const level =
         typeof args.level === "number" ? args.level : Number(args.level);
       if (isNaN(level))
-        return "❌ Please specify a valid volume level (1–100).";
+        return { directReply: "❌ Please specify a valid volume level (1–100)." };
       const result = await musicSetVolume(guildId, level, moduleManager);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "get_queue": {
       const result = await musicGetQueue(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "get_nowplaying": {
       const result = await musicGetNowPlaying(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     case "shuffle_queue": {
       const result = await musicShuffle(guildId);
-      return result.message;
+      return { directReply: result.message };
     }
 
     default:
-      return `❓ I tried to use an unknown tool: \`${name}\`. That's a bug — please report it!`;
+      return {
+        directReply: `❓ I tried to use an unknown tool: \`${name}\`. That's a bug — please report it!`,
+      };
   }
 }
 
@@ -580,7 +670,12 @@ const TOOL_USE_SYSTEM_PROMPT_APPENDIX = `
 You also have direct control over the music player for this Discord server. \
 When a user asks you to play, skip, stop, pause, resume, adjust volume, view the queue, or shuffle, \
 use the appropriate music tool rather than describing what to do. \
-Always execute the action and report what you did.`;
+Always execute the action and report what you did.
+
+You can also search the web for current information using the web_search tool. \
+Use it when the user asks about recent events, news, live scores, current prices, or anything \
+that requires up-to-date information you might not have. \
+Do NOT use web_search for general knowledge questions you can already answer accurately.`;
 
 const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
   aiProvider: "Groq",
@@ -657,7 +752,8 @@ const aiModule: BotModule = {
             `Key: ${keyStatus}`,
             `Cooldown: \`${merged.rateLimitSeconds}s\` per user`,
             `DM responses: ${merged.respondToDMs ? "✅" : "❌"}`,
-            `Tool use (music): ${merged.toolUseEnabled ? "✅" : "❌"}`,
+            `Tool use: ${merged.toolUseEnabled ? "✅" : "❌"}`,
+            `Web search: ${merged.toolUseEnabled && process.env.SEARXNG_URL ? "✅" : "❌"}`,
           ].join("\n"),
         );
         break;
@@ -899,7 +995,47 @@ export function registerAIEvents(moduleManager: ModuleManager) {
             guildId,
             moduleManager,
           );
-          reply = toolResult.slice(0, 1990);
+
+          if (toolResult.directReply) {
+            // Music tools and error cases — send as-is
+            reply = toolResult.directReply.slice(0, 1990);
+          } else if (toolResult.llmContext) {
+            // Web search — make a second LLM call to synthesize the results
+            if ("sendTyping" in message.channel) {
+              await message.channel.sendTyping().catch(() => {});
+            }
+
+            const searchSystemPrompt =
+              effectiveSystemPrompt +
+              "\n\nYou just performed a web search. Here are the results:\n\n" +
+              toolResult.llmContext +
+              "\n\nUse these search results to answer the user's question. Cite sources (title + URL) when relevant. Be concise.";
+
+            const followUpMessages: ChatMessage[] = [
+              { role: "system", content: searchSystemPrompt },
+              ...llmMessages.filter((m) => m.role !== "system"),
+            ];
+
+            const followUp = await callLLM(
+              settings.aiProvider,
+              apiKey,
+              settings.aiModel,
+              followUpMessages,
+              settings.maxOutputTokens,
+              settings.aiBaseUrl || undefined,
+              false, // no tools on follow-up to prevent recursion
+            );
+
+            reply =
+              followUp.content.slice(0, 1990) ||
+              "🔍 I found some results but couldn't summarize them.";
+
+            // Accumulate token usage from the follow-up call
+            result.input_tokens += followUp.input_tokens;
+            result.output_tokens += followUp.output_tokens;
+          } else {
+            reply = "❌ Something went wrong trying to do that. Please try again.";
+          }
         } catch (toolErr: any) {
           moduleManager.logger.error("Tool execution error", guildId, toolErr, "ai");
           reply =
