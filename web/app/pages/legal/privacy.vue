@@ -18,7 +18,7 @@
         <h1 class="text-3xl font-black text-white tracking-tight mb-2">
           Privacy Policy
         </h1>
-        <p class="text-sm text-gray-500">Last updated: February 18, 2026</p>
+        <p class="text-sm text-gray-500">Last updated: March 22, 2026</p>
       </div>
 
       <!-- Content -->
@@ -84,7 +84,9 @@
               class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
             >
               <strong class="text-slate-300">Voice Channel Audio</strong> — Only
-              when the Recording module is explicitly enabled and active
+              when the Recording module is explicitly enabled and active.
+              Recordings are accessible only to the server owner and
+              administrators with access to server settings
             </li>
             <li
               class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
@@ -97,6 +99,17 @@
             >
               <strong class="text-slate-300">Music Queue Data</strong> — Song
               titles, URLs, and queue preferences for the Music module
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <strong class="text-slate-300">AI Conversations</strong> — When
+              the AI Assistant module is used, MODUS reads the last 5 messages
+              in the channel for context. These messages are sent to third-party
+              AI providers (OpenAI, Anthropic, Google) for processing.
+              <strong class="text-white"
+                >No conversation data is stored by MODUS.</strong
+              >
             </li>
           </ul>
         </section>
@@ -337,6 +350,39 @@
                 >Discord Privacy Policy</a
               >
             </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <a
+                href="https://openai.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                >OpenAI Privacy Policy</a
+              >
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <a
+                href="https://www.anthropic.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                >Anthropic Privacy Policy</a
+              >
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <a
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                >Google Privacy Policy</a
+              > (Gemini)
+            </li>
           </ul>
         </section>
 
@@ -358,8 +404,12 @@
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             If you have questions about this Privacy Policy or wish to exercise
-            your data rights, please reach out through our Discord support
-            channels.
+            your data rights, please contact us at
+            <a
+              href="mailto:support@ppo.gg"
+              class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+              >support@ppo.gg</a
+            >.
           </p>
         </section>
       </div>
@@ -376,11 +426,11 @@
           Terms of Service
         </NuxtLink>
         <NuxtLink
-          to="/login"
+          to="/"
           class="text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1.5"
         >
           <UIcon name="i-heroicons-arrow-left" class="w-4 h-4" />
-          Back to Login
+          Back to Home
         </NuxtLink>
       </div>
     </div>

@@ -18,7 +18,7 @@
         <h1 class="text-3xl font-black text-white tracking-tight mb-2">
           Terms of Service
         </h1>
-        <p class="text-sm text-gray-500">Last updated: February 18, 2026</p>
+        <p class="text-sm text-gray-500">Last updated: March 22, 2026</p>
       </div>
 
       <!-- Content -->
@@ -178,6 +178,12 @@
             <li
               class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
             >
+              Recordings are accessible only to the server owner and
+              administrators with access to server settings
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
+            >
               MODUS is not responsible for how you use recorded content
             </li>
           </ul>
@@ -185,7 +191,44 @@
 
         <section>
           <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
-            7. Service Availability
+            7. AI Module Usage
+          </h2>
+          <p class="text-sm text-slate-400 leading-7">
+            The AI Assistant module uses third-party AI providers (including
+            OpenAI, Anthropic, and Google) to process user messages. By using
+            this module, you acknowledge that:
+          </p>
+          <ul class="mt-2 space-y-1">
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
+            >
+              MODUS reads the last 5 messages in the channel for context when
+              the AI module is invoked — no message content is stored by MODUS
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
+            >
+              Messages are sent to third-party AI providers for processing and
+              are subject to those providers' respective privacy policies
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
+            >
+              AI-generated responses are provided as-is and may not always be
+              accurate, complete, or appropriate
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-violet-500/60"
+            >
+              You are responsible for the content of prompts you submit and for
+              how you use AI-generated responses
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
+            8. Service Availability
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             We strive to keep the Service operational, but we do not guarantee
@@ -198,7 +241,7 @@
 
         <section>
           <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
-            8. Limitation of Liability
+            9. Limitation of Liability
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             The Service is provided "as is" and "as available" without
@@ -211,7 +254,7 @@
 
         <section>
           <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
-            9. Termination
+            10. Termination
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             We reserve the right to suspend or terminate your access to the
@@ -223,7 +266,7 @@
 
         <section>
           <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
-            10. Changes to These Terms
+            11. Changes to These Terms
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             We may update these Terms from time to time. Continued use of the
@@ -234,11 +277,16 @@
 
         <section>
           <h2 class="text-lg font-extrabold text-slate-200 mb-3 tracking-tight">
-            11. Contact
+            12. Contact
           </h2>
           <p class="text-sm text-slate-400 leading-7">
-            If you have any questions about these Terms of Service, please reach
-            out through our Discord support channels.
+            If you have any questions about these Terms of Service, please
+            contact us at
+            <a
+              href="mailto:support@ppo.gg"
+              class="text-violet-400 hover:text-violet-300 underline underline-offset-2"
+              >support@ppo.gg</a
+            >.
           </p>
         </section>
       </div>
@@ -255,11 +303,11 @@
           Privacy Policy
         </NuxtLink>
         <NuxtLink
-          to="/login"
+          to="/"
           class="text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1.5"
         >
           <UIcon name="i-heroicons-arrow-left" class="w-4 h-4" />
-          Back to Login
+          Back to Home
         </NuxtLink>
       </div>
     </div>
