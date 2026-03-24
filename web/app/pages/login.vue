@@ -113,7 +113,7 @@ watch(
   () => userStore.initialized,
   (ready) => {
     if (ready && userStore.isLoggedIn) {
-      router.push("/");
+      router.push("/dashboard");
     }
   },
 );
@@ -123,7 +123,7 @@ watch(
   () => userStore.isLoggedIn,
   (loggedIn) => {
     if (loggedIn) {
-      router.push("/");
+      router.push("/dashboard");
     }
   },
 );

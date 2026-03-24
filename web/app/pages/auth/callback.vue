@@ -32,7 +32,7 @@ onMounted(async () => {
     await userStore.fetchUserSession();
 
     if (userStore.isLoggedIn) {
-      router.push("/");
+      router.push("/dashboard");
     } else {
       error.value = "Login failed. Please try again.";
       setTimeout(() => router.push("/login"), 2000);

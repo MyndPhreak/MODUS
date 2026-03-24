@@ -47,7 +47,7 @@ const userInitial = computed(() => userStore.userName.charAt(0).toUpperCase());
 
 // Active link helper for default nav
 function isActive(to: string) {
-  if (to === "/") return route.path === "/";
+  if (to === "/dashboard") return route.path === "/dashboard";
   return route.path.startsWith(to);
 }
 
@@ -66,7 +66,7 @@ const mainNavLinks = computed(() => {
     {
       label: "Dashboard",
       icon: "i-heroicons-home",
-      to: "/",
+      to: "/dashboard",
     },
   ];
 
@@ -74,7 +74,7 @@ const mainNavLinks = computed(() => {
     links.push({
       label: "Admin",
       icon: "i-heroicons-shield-check",
-      to: "/admin",
+      to: "/dashboard/admin",
     });
   }
 
@@ -119,7 +119,7 @@ const mainNavLinks = computed(() => {
         <div v-else class="border-b border-white/5 bg-[#050507]/20">
           <!-- Back to dashboard -->
           <NuxtLink
-            to="/"
+            to="/dashboard"
             class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-gray-500 hover:text-white transition-colors border-b border-white/5 group"
           >
             <UIcon
@@ -219,10 +219,10 @@ const mainNavLinks = computed(() => {
             <NuxtLink
               v-for="server in sidebarServers"
               :key="server.$id"
-              :to="`/server/${server.$id}/modules`"
+              :to="`/dashboard/server/${server.$id}/modules`"
               class="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 mb-1 group"
               :class="
-                route.path.startsWith(`/server/${server.$id}`)
+                route.path.startsWith(`/dashboard/server/${server.$id}`)
                   ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               "
@@ -255,10 +255,10 @@ const mainNavLinks = computed(() => {
 
           <!-- Add Server link -->
           <NuxtLink
-            to="/discover"
+            to="/dashboard/discover"
             class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mt-1"
             :class="
-              isActive('/discover')
+              isActive('/dashboard/discover')
                 ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
             "
@@ -452,13 +452,6 @@ const mainNavLinks = computed(() => {
                   {{ botLatency }}ms
                 </span>
               </div>
-
-              <UButton
-                icon="i-heroicons-bell"
-                color="neutral"
-                variant="ghost"
-                class="rounded-full w-9 h-9 p-0 border border-white/5"
-              />
             </div>
           </template>
         </DashboardNavbar>
