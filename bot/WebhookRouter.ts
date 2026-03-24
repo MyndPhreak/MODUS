@@ -48,6 +48,9 @@ function resolvePlaceholders(
   data: Record<string, any>,
 ): string {
   return template.replace(/\{([^}]+)\}/g, (match, path) => {
+    // Prefer flat keys (e.g. "repo.name") over nested traversal so that
+    // flattenGitHub aliases always win over raw body properties.
+    if (path in data) return data[path] != null ? String(data[path]) : match;
     const keys = path.split(".");
     let value: any = data;
     for (const key of keys) {
