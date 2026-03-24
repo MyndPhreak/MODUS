@@ -184,3 +184,216 @@ export const TriggersSettingsSchema = z.object({
 });
 
 export type TriggersSettingsType = z.infer<typeof TriggersSettingsSchema>;
+
+// ── Anti-Raid ──────────────────────────────────────────────────────
+
+export const AntiRaidSettingsSchema = z.object({
+  joinThreshold: z.number().default(5), // 5 joins
+  timeWindow: z.number().default(10), // in 10 seconds
+  action: z.literal(["lockdown", "kick", "ban"]).default("lockdown"),
+  alertChannelId: z.string().optional(),
+});
+
+export type AntiRaidSettingsType = z.infer<typeof AntiRaidSettingsSchema>;
+
+// ── Shared Panel Embed Config ──────────────────────────────────────
+
+export const PanelEmbedSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  /** Hex color string, e.g. "#5865F2" */
+  color: z.string().optional(),
+});
+
+export type PanelEmbedConfig = z.infer<typeof PanelEmbedSchema>;
+
+// ── Verification (Enhanced) ─────────────────────────────────────────
+
+export const VerificationButtonSchema = z.object({
+  id: z.string(),
+  label: z.string().max(80),
+  emoji: z.string().optional(),
+  style: z.literal(["Primary", "Secondary", "Success", "Danger"]).default("Success"),
+  roleId: z.string(),
+});
+
+export type VerificationButtonConfig = z.infer<typeof VerificationButtonSchema>;
+
+export const VerificationSettingsSchema = z.object({
+  /** Channel where the panel was last deployed */
+  verificationChannelId: z.string().optional(),
+  /** Discord message ID of the deployed panel (for in-place edits) */
+  verificationMessageId: z.string().optional(),
+  /** Optional embed shown above the buttons */
+  embed: PanelEmbedSchema.optional(),
+  /** Button definitions — up to 5 per row, max 5 rows = 25 total */
+  buttons: z.array(VerificationButtonSchema).default([]),
+});
+
+export type VerificationSettingsType = z.infer<typeof VerificationSettingsSchema>;
+
+// ── Tickets ────────────────────────────────────────────────────────
+
+/**
+ * A single text-input question shown in the pre-open modal.
+ * Up to 5 per ticket type (Discord modal component limit).
+ */
+export const TicketQuestionSchema = z.object({
+  /** Unique key — used as the Discord TextInput customId to retrieve the answer. */
+  id: z.string(),
+  /** Displayed inside the modal (≤45 chars — Discord TextInput label limit). */
+  label: z.string().max(45),
+  placeholder: z.string().max(100).optional(),
+  required: z.boolean().default(true),
+  /** "short" = single-line, "paragraph" = multi-line textarea. */
+  style: z.literal(["short", "paragraph"]).default("short"),
+  minLength: z.number().min(0).max(4000).optional(),
+  maxLength: z.number().min(1).max(4000).optional(),
+});
+
+export type TicketQuestionConfig = z.infer<typeof TicketQuestionSchema>;
+
+/**
+ * A single configurable ticket category (e.g. "Billing", "Bug Report").
+ * Up to 5 types are shown as buttons on the panel; 6-25 fall back to
+ * a select menu automatically.
+ */
+export const TicketTypeSchema = z.object({
+  id: z.string(),
+  name: z.string().max(80),
+  emoji: z.string().optional(),
+  /** Short description shown in the select-menu drop-down (≤100 chars) */
+  description: z.string().max(100).optional(),
+  /** Text channel whose thread list hosts private threads for this type */
+  parentChannelId: z.string().optional(),
+  /** Staff roles pinged/allowed for this type (falls back to global staffRoleIds) */
+  staffRoleIds: z.array(z.string()).default([]),
+  embed: PanelEmbedSchema.optional(),
+  buttonStyle: z.literal(["Primary", "Secondary", "Success", "Danger"]).default("Primary"),
+  /** Questions shown in the pre-open modal for this type (max 5). Empty = no modal for this type. */
+  questions: z.array(TicketQuestionSchema).default([]),
+});
+
+export type TicketTypeConfig = z.infer<typeof TicketTypeSchema>;
+
+export const TicketsSettingsSchema = z.object({
+  // ── Panel deployment ──────────────────────────────────────────────
+  panelChannelId: z.string().optional(),
+  /** Discord message ID of the deployed panel — used for in-place edits */
+  panelMessageId: z.string().optional(),
+  panelEmbed: PanelEmbedSchema.optional(),
+
+  // ── Ticket types (empty = single-mode, no type selection shown) ───
+  types: z.array(TicketTypeSchema).default([]),
+
+  // ── Fallbacks (used in single-mode or when a type has no override) ─
+  /** Default parent text channel for private threads */
+  defaultParentChannelId: z.string().optional(),
+  /** Global staff roles (pinged on every new ticket, can manage tickets) */
+  staffRoleIds: z.array(z.string()).default([]),
+
+  // ── Transcripts ───────────────────────────────────────────────────
+  /** Channel where the bot posts the transcript when a ticket closes */
+  transcriptChannelId: z.string().optional(),
+  /** Also DM the markdown transcript to the ticket opener */
+  dmTranscript: z.boolean().default(true),
+
+  // ── Behaviour ─────────────────────────────────────────────────────
+  /** Max concurrent open tickets per user (0 = unlimited) */
+  maxTicketsPerUser: z.number().default(1),
+  /** Thread name template. Variables: {count} {username} {type} */
+  namingTemplate: z.string().default("ticket-{count}-{username}"),
+  /**
+   * Fallback questions for types that define none. Max 5.
+   * Empty array = no pre-open modal.
+   */
+  questions: z.array(TicketQuestionSchema).default([]),
+  /**
+   * Close ticket threads after this many hours of inactivity (measured by last message).
+   * 0 = disabled.
+   */
+  inactivityHours: z.number().default(0),
+
+  // ── Internal ──────────────────────────────────────────────────────
+  /** Ever-incrementing ticket serial number — do not expose in the UI */
+  ticketCounter: z.number().default(0),
+});
+
+export type TicketsSettingsType = z.infer<typeof TicketsSettingsSchema>;
+
+// ── Button Roles (replaces Reaction Roles) ─────────────────────────
+//
+// The Appwrite module key remains "reaction-roles" for backward compat.
+// The UI / bot now calls this feature "Button Roles".
+
+export const ButtonRoleEntrySchema = z.object({
+  id: z.string(),
+  label: z.string().max(80),
+  emoji: z.string().optional(),
+  roleId: z.string(),
+  style: z.literal(["Primary", "Secondary", "Success", "Danger"]).default("Primary"),
+});
+
+export type ButtonRoleEntry = z.infer<typeof ButtonRoleEntrySchema>;
+
+export const ButtonRolesPanelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** Channel where this panel was last deployed */
+  channelId: z.string().optional(),
+  /** Discord message ID of the deployed panel */
+  messageId: z.string().optional(),
+  /** "buttons" = up to 5×5 button grid; "dropdown" = single select menu */
+  type: z.literal(["buttons", "dropdown"]).default("buttons"),
+  embed: PanelEmbedSchema.optional(),
+  entries: z.array(ButtonRoleEntrySchema).default([]),
+});
+
+export type ButtonRolesPanel = z.infer<typeof ButtonRolesPanelSchema>;
+
+export const ButtonRolesSettingsSchema = z.object({
+  panels: z.array(ButtonRolesPanelSchema).default([]),
+});
+
+export type ButtonRolesSettingsType = z.infer<typeof ButtonRolesSettingsSchema>;
+
+// Legacy alias — kept so any older code that imports ReactionRolesSettingsType
+// still compiles without errors during the migration window.
+/** @deprecated Use ButtonRolesSettingsType instead */
+export type ReactionRolesSettingsType = ButtonRolesSettingsType;
+/** @deprecated Use ButtonRolesSettingsSchema instead */
+export const ReactionRolesSettingsSchema = ButtonRolesSettingsSchema;
+
+// ── Polls ──────────────────────────────────────────────────────────
+
+export const PollsSettingsSchema = z.object({
+  maxOptions: z.number().default(10), // Limit number of poll options
+});
+
+export type PollsSettingsType = z.infer<typeof PollsSettingsSchema>;
+
+// ── Events ────────────────────────────────────────────────────────
+
+export const EventsSettingsSchema = z.object({
+  announcementChannelId: z.string().optional(),
+  notifyRoleIds: z.array(z.string()).default([]),
+});
+
+export type EventsSettingsType = z.infer<typeof EventsSettingsSchema>;
+
+// ── Social Alerts ─────────────────────────────────────────────────
+
+export const SocialAlertSchema = z.object({
+  platform: z.enum(["youtube", "twitch", "x", "rss", "github", "tiktok"]),
+  handle: z.string(), 
+  channelId: z.string(),
+  message: z.string().optional(),
+});
+
+export const AlertsSettingsSchema = z.object({
+  alerts: z.array(SocialAlertSchema).default([]),
+});
+
+export type AlertsSettingsType = z.infer<typeof AlertsSettingsSchema>;
+
+

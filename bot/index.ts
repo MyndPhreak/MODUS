@@ -21,6 +21,13 @@ import { registerAutoModEvents } from "./modules/automod";
 import { registerAIEvents } from "./modules/ai";
 import { registerLoggingEvents } from "./modules/logging";
 import { registerTempVoiceEvents } from "./modules/tempvoice";
+import { registerAntiRaidEvents } from "./modules/antiraid";
+import { registerVerificationEvents } from "./modules/verification";
+import { registerTicketsEvents } from "./modules/tickets/index";
+import { registerReactionRolesEvents } from "./modules/reaction-roles";
+import { registerPollsEvents } from "./modules/polls";
+import { registerEventsEvents } from "./modules/events";
+import { registerAlertsEvents } from "./modules/alerts";
 import { registerMusicAPI } from "./MusicAPI";
 import { registerWebhookRoutes } from "./WebhookRouter";
 
@@ -39,8 +46,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.GuildMember],
+  partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.Reaction],
 });
 
 // Initialize discord-player
@@ -170,6 +178,13 @@ client.once("ready", async () => {
   registerAIEvents(moduleManager);
   registerLoggingEvents(moduleManager);
   await registerTempVoiceEvents(moduleManager);
+  registerAntiRaidEvents(moduleManager);
+  registerVerificationEvents(moduleManager);
+  registerTicketsEvents(moduleManager);
+  registerReactionRolesEvents(moduleManager);
+  registerPollsEvents(moduleManager);
+  registerEventsEvents(moduleManager);
+  registerAlertsEvents(moduleManager);
   serverStatusService.start();
 
   let botVersion = process.env.npm_package_version || "1.0.0";

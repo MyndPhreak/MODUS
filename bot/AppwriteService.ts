@@ -1258,4 +1258,115 @@ export class AppwriteService {
       data,
     );
   }
+
+  // ── Alerts Worker ─────────────────────────────────────────────────
+
+  /**
+   * Returns all guild_configs docs where moduleName=alerts AND enabled=true,
+   * paginated across all guilds. Used exclusively by AlertsWorker.
+   */
+  async getAllAlertsConfigs(): Promise<Array<{ guildId: string; alerts: any[] }>> {
+    const results: Array<{ guildId: string; alerts: any[] }> = [];
+    const pageSize = 100;
+    let offset = 0;
+
+    while (true) {
+      try {
+        const response = await this.databases.listDocuments(
+          this.databaseId,
+          this.guildConfigsCollectionId,
+          [
+            Query.equal("moduleName", "alerts"),
+            Query.equal("enabled", true),
+            Query.limit(pageSize),
+            Query.offset(offset),
+          ],
+        );
+
+        for (const doc of response.documents) {
+          try {
+            const settings = doc.settings ? JSON.parse(doc.settings) : {};
+            const alerts = Array.isArray(settings.alerts) ? settings.alerts : [];
+            if (alerts.length > 0) {
+              results.push({ guildId: doc.guildId, alerts });
+            }
+          } catch {
+            // skip malformed settings
+          }
+        }
+
+        if (response.documents.length < pageSize) break;
+        offset += pageSize;
+      } catch (error) {
+        console.error("[AppwriteService] Error fetching all alerts configs:", error);
+        break;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Returns the persisted last-seen state for all alerts in a guild.
+   * Shape: Record<`${platform}:${handle}`, lastSeenId: string>
+   */
+  async getAlertsState(guildId: string): Promise<Record<string, string>> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.guildConfigsCollectionId,
+        [
+          Query.equal("guildId", guildId),
+          Query.equal("moduleName", "alerts_state"),
+          Query.limit(1),
+        ],
+      );
+      if (response.total > 0 && response.documents[0].settings) {
+        return JSON.parse(response.documents[0].settings);
+      }
+    } catch {
+      // ignore — treat as empty
+    }
+    return {};
+  }
+
+  /**
+   * Persists the last-seen state for a guild's alerts.
+   */
+  async setAlertsState(guildId: string, state: Record<string, string>): Promise<void> {
+    try {
+      const response = await this.databases.listDocuments(
+        this.databaseId,
+        this.guildConfigsCollectionId,
+        [
+          Query.equal("guildId", guildId),
+          Query.equal("moduleName", "alerts_state"),
+          Query.limit(1),
+        ],
+      );
+      const settingsJson = JSON.stringify(state);
+      if (response.total > 0) {
+        await this.databases.updateDocument(
+          this.databaseId,
+          this.guildConfigsCollectionId,
+          response.documents[0].$id,
+          { settings: settingsJson },
+        );
+      } else {
+        await this.databases.createDocument(
+          this.databaseId,
+          this.guildConfigsCollectionId,
+          ID.unique(),
+          {
+            guildId,
+            moduleName: "alerts_state",
+            enabled: true,
+            settings: settingsJson,
+          },
+        );
+      }
+    } catch (error) {
+      console.error(`[AppwriteService] Error saving alerts state for ${guildId}:`, error);
+    }
+  }
 }

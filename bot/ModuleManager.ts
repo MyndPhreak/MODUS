@@ -4,6 +4,8 @@ import {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   ButtonInteraction,
+  StringSelectMenuInteraction,
+  ModalSubmitInteraction,
   REST,
   Routes,
   Interaction,
@@ -24,6 +26,12 @@ export interface BotModule {
   commands?: any[];
   /** If false, the module handles its own deferReply/reply. Default: true (auto-defers as ephemeral). */
   deferReply?: boolean;
+  /**
+   * If true, ModuleManager skips deferReply entirely — the module must call
+   * interaction.reply() itself. Required for APIs like native Discord Polls
+   * where the poll payload must be the *initial* reply, not an editReply.
+   */
+  skipDefer?: boolean;
   execute: (
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
@@ -38,14 +46,33 @@ export interface BotModule {
     interaction: ButtonInteraction,
     moduleManager: ModuleManager,
   ) => Promise<void>;
+  /** Optional select-menu interaction handler. customId must be prefixed with `moduleName:`. */
+  handleSelectMenu?: (
+    interaction: StringSelectMenuInteraction,
+    moduleManager: ModuleManager,
+  ) => Promise<void>;
+  /** Optional modal-submit handler. customId must be prefixed with `moduleName:`. */
+  handleModal?: (
+    interaction: ModalSubmitInteraction,
+    moduleManager: ModuleManager,
+  ) => Promise<void>;
 }
 
 export class ModuleManager {
-  private client: Client;
+  /** Exposed so event-registration helpers (e.g. inactivity sweep) can access the Discord client. */
+  public readonly client: Client;
   /** Maps command name → BotModule (a module with multiple commands has multiple entries). */
   private modules: Map<string, BotModule> = new Map();
   /** Tracks unique module names so we don't register a module twice. */
   private uniqueModules: Map<string, BotModule> = new Map();
+  /**
+   * Allows a module to be resolved from a button customId prefix that differs from its name.
+   * e.g. { 'button-roles' → 'reaction-roles', 'button-roles-select' → 'reaction-roles' }
+   */
+  private buttonPrefixAliases: Map<string, string> = new Map([
+    ["button-roles", "reaction-roles"],
+    ["button-roles-select", "reaction-roles"],
+  ]);
 
   /** Public read-only access to all registered modules (keyed by module name). */
   public getRegisteredModules(): ReadonlyMap<string, BotModule> {
@@ -70,13 +97,30 @@ export class ModuleManager {
       fs.mkdirSync(this.modulesPath);
     }
 
-    const files = fs
+    // Collect flat files (legacy single-file modules)
+    const flatFiles = fs
       .readdirSync(this.modulesPath)
-      .filter((file) => file.endsWith(".ts") || file.endsWith(".js"));
+      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
+      .map((f) => path.join(this.modulesPath, f));
 
-    for (const file of files) {
+    // Collect index entry-points from subdirectory modules (e.g. modules/tickets/index.ts)
+    const subdirEntries = fs.readdirSync(this.modulesPath, { withFileTypes: true });
+    const subdirFiles: string[] = [];
+    for (const entry of subdirEntries) {
+      if (!entry.isDirectory()) continue;
+      for (const ext of ["index.ts", "index.js"]) {
+        const candidate = path.join(this.modulesPath, entry.name, ext);
+        if (fs.existsSync(candidate)) {
+          subdirFiles.push(candidate);
+          break;
+        }
+      }
+    }
+
+    const files = [...flatFiles, ...subdirFiles];
+
+    for (const modulePath of files) {
       try {
-        const modulePath = path.join(this.modulesPath, file);
         // Clear cache to allow hot-reloading if needed later
         delete require.cache[require.resolve(modulePath)];
 
@@ -92,7 +136,7 @@ export class ModuleManager {
           if (module.commands && module.commands.length > 0) {
             // Multi-command module: register each command name
             for (const cmd of module.commands) {
-              const cmdName = (cmd.name || cmd.name || "").toLowerCase();
+              const cmdName = (cmd.name || "").toLowerCase();
               if (cmdName) {
                 this.modules.set(cmdName, module);
               }
@@ -113,11 +157,11 @@ export class ModuleManager {
           );
         } else {
           console.warn(
-            `[ModuleManager] Skipping module ${file}: Missing name or execute function.`,
+            `[ModuleManager] Skipping module ${modulePath}: Missing name or execute function.`,
           );
         }
       } catch (error) {
-        console.error(`[ModuleManager] Error loading module ${file}:`, error);
+        console.error(`[ModuleManager] Error loading module ${modulePath}:`, error);
       }
     }
 
@@ -230,7 +274,12 @@ export class ModuleManager {
       const [modulePrefix] = interaction.customId.split(":");
       if (!modulePrefix) return;
 
-      const module = this.uniqueModules.get(modulePrefix.toLowerCase());
+      // Direct lookup first; fall back to alias map for modules that use
+      // a different customId prefix (e.g. button-roles → reaction-roles)
+      const resolvedName =
+        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
+        modulePrefix.toLowerCase();
+      const module = this.uniqueModules.get(resolvedName);
       if (!module?.handleButton) return;
 
       if (!this.enabledModules.has(module.name.toLowerCase())) return;
@@ -240,6 +289,74 @@ export class ModuleManager {
       } catch (error) {
         console.error(
           `[ModuleManager] Error handling button ${interaction.customId}:`,
+          error,
+        );
+        try {
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: "Something went wrong!",
+              flags: [MessageFlags.Ephemeral],
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+
+    // ─── Select Menu Interactions ─────────────────────────────────────
+    if (interaction.isStringSelectMenu()) {
+      const [modulePrefix] = interaction.customId.split(":");
+      if (!modulePrefix) return;
+
+      const resolvedName =
+        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
+        modulePrefix.toLowerCase();
+      const module = this.uniqueModules.get(resolvedName);
+      if (!module?.handleSelectMenu) return;
+
+      if (!this.enabledModules.has(module.name.toLowerCase())) return;
+
+      try {
+        await module.handleSelectMenu(interaction, this);
+      } catch (error) {
+        console.error(
+          `[ModuleManager] Error handling select menu ${interaction.customId}:`,
+          error,
+        );
+        try {
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: "Something went wrong!",
+              flags: [MessageFlags.Ephemeral],
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+
+    // ─── Modal Submit Interactions ────────────────────────────────────
+    if (interaction.isModalSubmit()) {
+      const [modulePrefix] = interaction.customId.split(":");
+      if (!modulePrefix) return;
+
+      const resolvedName =
+        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
+        modulePrefix.toLowerCase();
+      const module = this.uniqueModules.get(resolvedName);
+      if (!module?.handleModal) return;
+
+      if (!this.enabledModules.has(module.name.toLowerCase())) return;
+
+      try {
+        await module.handleModal(interaction, this);
+      } catch (error) {
+        console.error(
+          `[ModuleManager] Error handling modal ${interaction.customId}:`,
           error,
         );
         try {
@@ -284,22 +401,25 @@ export class ModuleManager {
 
       // 2. Defer the reply FIRST to meet Discord's 3-second deadline
       //    before making any slow network calls (like Appwrite checks)
-      try {
-        if (module.deferReply !== false) {
-          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-        } else {
-          // Modules that handle their own reply still need fast acknowledgement
-          await interaction.deferReply();
+      //    Exception: skipDefer modules (e.g. polls) own the first reply themselves.
+      if (!module.skipDefer) {
+        try {
+          if (module.deferReply !== false) {
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+          } else {
+            // Modules that handle their own reply still need fast acknowledgement
+            await interaction.deferReply();
+          }
+        } catch (deferError: any) {
+          // 10062 = Unknown interaction — likely expired before we could defer
+          if (deferError?.code !== 10062) {
+            console.error(
+              `[ModuleManager] Failed to defer reply for ${commandName}:`,
+              deferError,
+            );
+          }
+          return;
         }
-      } catch (deferError: any) {
-        // 10062 = Unknown interaction — likely expired before we could defer
-        if (deferError?.code !== 10062) {
-          console.error(
-            `[ModuleManager] Failed to defer reply for ${commandName}:`,
-            deferError,
-          );
-        }
-        return;
       }
 
       // 3. Check guild-specific enablement (network call, but interaction is already deferred)
