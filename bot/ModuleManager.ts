@@ -402,14 +402,9 @@ export class ModuleManager {
       // 2. Defer the reply FIRST to meet Discord's 3-second deadline
       //    before making any slow network calls (like Appwrite checks)
       //    Exception: skipDefer modules (e.g. polls) own the first reply themselves.
-      if (!module.skipDefer) {
+      if (!module.skipDefer && module.deferReply !== false) {
         try {
-          if (module.deferReply !== false) {
-            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-          } else {
-            // Modules that handle their own reply still need fast acknowledgement
-            await interaction.deferReply();
-          }
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         } catch (deferError: any) {
           // 10062 = Unknown interaction — likely expired before we could defer
           if (deferError?.code !== 10062) {
