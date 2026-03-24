@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
+import { parseHexColor } from "../lib/discord-utils";
 
 // ─── Command Definitions ─────────────────────────────────────────────────
 
@@ -85,13 +86,7 @@ function slugify(input: string): string {
     .slice(0, 128);
 }
 
-function parseColor(input: string): number | null {
-  if (!input || !input.trim()) return null;
-  const cleaned = input.trim().replace("#", "");
-  const parsed = parseInt(cleaned, 16);
-  if (isNaN(parsed) || parsed < 0 || parsed > 0xffffff) return null;
-  return parsed;
-}
+// parseHexColor is imported from ../lib/discord-utils
 
 // ─── Command Handlers ────────────────────────────────────────────────────
 
@@ -165,7 +160,7 @@ async function handleTag(
         embeds: [embed],
       });
     } catch (error) {
-      console.error("[Tags] Error parsing embed data:", error);
+      moduleManager.logger.error("Error parsing embed data", interaction.guildId ?? undefined, error, "tags");
       await interaction.editReply({
         content: tag.content || "❌ Failed to render tag embed.",
       });
@@ -232,7 +227,7 @@ async function handleTagCreate(
     const embed: Record<string, any> = {};
     if (embedTitle) embed.title = embedTitle;
     if (embedDescription) embed.description = embedDescription;
-    const color = parseColor(embedColor || "");
+    const color = parseHexColor(embedColor || "");
     embed.color = color !== null ? color : 0x5865f2;
     embedData = JSON.stringify(embed);
   }
@@ -265,7 +260,7 @@ async function handleTagCreate(
 
     await interaction.editReply({ embeds: [preview] });
   } catch (error: any) {
-    console.error("[Tags] Error creating tag:", error);
+    moduleManager.logger.error("Error creating tag", interaction.guildId ?? undefined, error, "tags");
     await interaction.editReply({
       content: `❌ Failed to create tag: ${error.message || "Unknown error"}`,
     });
@@ -300,7 +295,7 @@ async function handleTagDelete(
       content: `✅ Tag \`${name}\` has been deleted.`,
     });
   } catch (error: any) {
-    console.error("[Tags] Error deleting tag:", error);
+    moduleManager.logger.error("Error deleting tag", interaction.guildId ?? undefined, error, "tags");
     await interaction.editReply({
       content: `❌ Failed to delete tag: ${error.message || "Unknown error"}`,
     });

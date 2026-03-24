@@ -15,7 +15,7 @@ const reloadModule: BotModule = {
             await moduleManager.loadModules();
             await interaction.editReply('✅ All modules have been reloaded successfully!');
         } catch (error) {
-            console.error('[ReloadModule] Error reloading modules:', error);
+            moduleManager.logger.error('Error reloading modules', undefined, error, 'reload');
             await interaction.editReply('❌ Failed to reload modules. Check console for errors.');
         }
     },

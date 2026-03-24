@@ -70,7 +70,7 @@ export async function sendAuditLog(
       await channel.send({ embeds: [embed] });
     }
   } catch (err) {
-    console.error(`[Logging] Error sending audit log for ${eventType}:`, err);
+    moduleManager.logger.error(`Error sending audit log for ${eventType}`, guildId, err, "logging");
   }
 }
 
@@ -450,8 +450,10 @@ export function registerLoggingEvents(moduleManager: ModuleManager) {
     );
   });
 
-  console.log(
-    "[Logging] Core event listeners registered (messageDelete, messageUpdate, member[Add/Remove], role*, channel*, invite*).",
+  moduleManager.logger.info(
+    "Core event listeners registered (messageDelete, messageUpdate, member[Add/Remove], role*, channel*, invite*).",
+    undefined,
+    "logging",
   );
 }
 

@@ -605,9 +605,11 @@ async function executeActions(
         }
       }
     } catch (err) {
-      console.error(
-        `[AutoMod] Error executing action ${action.type} for rule "${rule.name}":`,
+      moduleManager.logger.error(
+        `Error executing action ${action.type} for rule "${rule.name}"`,
+        guildId,
         err,
+        "automod",
       );
     }
   }
@@ -696,9 +698,11 @@ async function evaluateMessage(
         }
       }
     } catch (err) {
-      console.error(
-        `[AutoMod] Error evaluating rule "${rule.name}" in guild ${guildId}:`,
+      moduleManager.logger.error(
+        `Error evaluating rule "${rule.name}" in guild ${guildId}`,
+        guildId,
         err,
+        "automod",
       );
     }
   }
@@ -774,7 +778,7 @@ export function registerAutoModEvents(moduleManager: ModuleManager) {
     try {
       await evaluateMessage(message, "message_create", moduleManager);
     } catch (err) {
-      console.error("[AutoMod] Error in messageCreate handler:", err);
+      moduleManager.logger.error("Error in messageCreate handler", undefined, err, "automod");
     }
   });
 
@@ -795,12 +799,14 @@ export function registerAutoModEvents(moduleManager: ModuleManager) {
         );
       }
     } catch (err) {
-      console.error("[AutoMod] Error in messageUpdate handler:", err);
+      moduleManager.logger.error("Error in messageUpdate handler", undefined, err, "automod");
     }
   });
 
-  console.log(
-    "[AutoMod] messageCreate + messageUpdate event listeners registered.",
+  moduleManager.logger.info(
+    "messageCreate + messageUpdate event listeners registered.",
+    undefined,
+    "automod",
   );
 }
 

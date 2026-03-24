@@ -85,7 +85,15 @@ const LEADERBOARD_PAGE_SIZE = 10;
 
 /** key = "guildId:userId" */
 const userCache: Map<string, CachedUserState> = new Map();
+/** Tracks when each cache entry was last accessed */
+const userCacheLastAccess: Map<string, number> = new Map();
 let flushTimer: NodeJS.Timeout | null = null;
+let cacheCleanupTimer: NodeJS.Timeout | null = null;
+const CACHE_TTL_MS = 30 * 60_000; // Evict entries inactive for 30 minutes
+const CACHE_CLEANUP_INTERVAL_MS = 5 * 60_000; // Run cleanup every 5 minutes
+
+/** Module-scoped reference to ModuleManager, set during event registration */
+let _moduleManager: ModuleManager | null = null;
 
 function cacheKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
@@ -196,7 +204,7 @@ async function flushBuffer(appwrite: ModuleManager["appwriteService"]) {
       state.charCount = newTotal;
       state.pendingChars = 0;
     } catch (error) {
-      console.error(`[Milestones] Error flushing buffer for ${key}:`, error);
+      _moduleManager?.logger.error(`Error flushing buffer for ${key}`, undefined, error, "milestones");
     }
   });
 
@@ -206,8 +214,10 @@ async function flushBuffer(appwrite: ModuleManager["appwriteService"]) {
 function startFlushTimer(appwrite: ModuleManager["appwriteService"]) {
   if (flushTimer) return;
   flushTimer = setInterval(() => flushBuffer(appwrite), FLUSH_INTERVAL_MS);
-  console.log(
-    `[Milestones] Buffer flush timer started (every ${FLUSH_INTERVAL_MS / 1000}s)`,
+  _moduleManager?.logger.info(
+    `Buffer flush timer started (every ${FLUSH_INTERVAL_MS / 1000}s)`,
+    undefined,
+    "milestones",
   );
 }
 
@@ -261,7 +271,7 @@ async function sendOptInPrompt(message: Message, charCount: number) {
     try {
       await message.reply({ embeds: [embed], components: [row] });
     } catch (err) {
-      console.error("[Milestones] Failed to send opt-in prompt:", err);
+      _moduleManager?.logger.error("Failed to send opt-in prompt", undefined, err, "milestones");
     }
   }
 }
@@ -325,7 +335,7 @@ async function sendMilestoneNotification(
     try {
       await (targetChannel as TextChannel).send({ embeds: [embed] });
     } catch (err) {
-      console.error("[Milestones] Failed to send public notification:", err);
+      _moduleManager?.logger.error("Failed to send public notification", message.guild?.id, err, "milestones");
     }
   } else {
     // Private — DM the user
@@ -736,6 +746,7 @@ const milestonesModule: BotModule = {
 // ── Event Registration ─────────────────────────────────────────────────
 
 export function registerMilestoneEvents(moduleManager: ModuleManager) {
+  _moduleManager = moduleManager;
   const client = moduleManager["client"];
   const appwrite = moduleManager.appwriteService;
 
@@ -766,6 +777,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
 
       const key = cacheKey(guildId, userId);
       let state = userCache.get(key);
+      userCacheLastAccess.set(key, Date.now()); // Track access for cleanup
 
       // ── First encounter: load from DB ──
       if (!state) {
@@ -784,6 +796,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
             username: message.author.displayName,
           };
           userCache.set(key, state);
+          userCacheLastAccess.set(key, Date.now());
 
           await sendOptInPrompt(message, chars);
           return;
@@ -801,6 +814,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
           username: message.author.displayName,
         };
         userCache.set(key, state);
+        userCacheLastAccess.set(key, Date.now());
       }
 
       // Skip opted-out users
@@ -832,7 +846,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
           state.pendingChars = 0;
           state.lastMilestone = crossed[crossed.length - 1].threshold;
         } catch (err) {
-          console.error("[Milestones] Error flushing user on milestone:", err);
+          moduleManager.logger.error("Error flushing user on milestone", guildId, err, "milestones");
         }
 
         // Get rank for notification
@@ -850,7 +864,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
       }
     } catch (err) {
       // Fail silently to avoid disrupting message flow
-      console.error("[Milestones] Error in messageCreate handler:", err);
+      moduleManager.logger.error("Error in messageCreate handler", undefined, err, "milestones");
     }
   });
 
@@ -935,7 +949,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
         } catch (err: any) {
           // Might already exist if they clicked too fast
           if (err?.code !== 409) {
-            console.error("[Milestones] Error creating milestone user:", err);
+            moduleManager.logger.error("Error creating milestone user", undefined, err, "milestones");
           }
         }
 
@@ -994,12 +1008,37 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
         });
       }
     } catch (err) {
-      console.error("[Milestones] Error handling button interaction:", err);
+      moduleManager.logger.error("Error handling button interaction", undefined, err, "milestones");
     }
   });
 
-  console.log(
-    "[Milestones] messageCreate + button interaction listeners registered.",
+  // ── Periodic Cache Cleanup ──
+  // Prevent unbounded memory growth by evicting entries not accessed recently
+  if (!cacheCleanupTimer) {
+    cacheCleanupTimer = setInterval(() => {
+      const now = Date.now();
+      let evicted = 0;
+      for (const [key, lastAccess] of userCacheLastAccess) {
+        if (now - lastAccess > CACHE_TTL_MS) {
+          userCache.delete(key);
+          userCacheLastAccess.delete(key);
+          evicted++;
+        }
+      }
+      if (evicted > 0) {
+        moduleManager.logger.info(
+          `Cache cleanup: evicted ${evicted} stale entries (${userCache.size} remaining)`,
+          undefined,
+          "milestones",
+        );
+      }
+    }, CACHE_CLEANUP_INTERVAL_MS);
+  }
+
+  moduleManager.logger.info(
+    "messageCreate + button interaction listeners registered.",
+    undefined,
+    "milestones",
   );
 }
 

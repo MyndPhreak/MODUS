@@ -117,6 +117,9 @@ const AVAILABLE_FILTERS: Record<
 
 // Defaults + type are defined in lib/schemas.ts (MusicSettingsSchema)
 
+/** Module-scoped reference to ModuleManager, set during event registration */
+let _moduleManager: ModuleManager | null = null;
+
 async function getSettings(
   moduleManager: ModuleManager,
   guildId: string,
@@ -151,9 +154,10 @@ async function updateBotNickname(queue: GuildQueue, trackTitle?: string) {
     }
   } catch (err) {
     // Missing permissions — silently ignore
-    console.warn(
-      `[Music] Could not update nickname in ${queue.guild.name}:`,
-      (err as Error).message,
+    _moduleManager?.logger.warn(
+      `Could not update nickname in ${queue.guild.name}: ${(err as Error).message}`,
+      queue.guild.id,
+      "music",
     );
   }
 }
@@ -165,13 +169,14 @@ let eventsRegistered = false;
 function registerPlayerEvents(moduleManager: ModuleManager) {
   if (eventsRegistered) return;
   eventsRegistered = true;
+  _moduleManager = moduleManager;
 
   const player = useMainPlayer();
 
   player.events.on("playerStart", async (queue: GuildQueue, track) => {
     const metadata = queue.metadata as any;
     const channel = metadata?.channel;
-    console.log(`[Music] playerStart: "${track.title}" in ${queue.guild.name}`);
+    moduleManager.logger.info(`playerStart: "${track.title}" in ${queue.guild.name}`, queue.guild.id, "music");
 
     // Inject FFmpeg reconnect input flags so bass-transient buffer underruns
     // don't cause audible ducking. Without these, a momentary CDN stall causes
@@ -242,7 +247,7 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
 
   player.events.on("emptyQueue", async (queue: GuildQueue) => {
     const channel = (queue.metadata as any)?.channel;
-    console.log(`[Music] emptyQueue in ${queue.guild.name}`);
+    moduleManager.logger.info(`emptyQueue in ${queue.guild.name}`, queue.guild.id, "music");
 
     // Reset nickname when queue finishes (if setting enabled)
     try {
@@ -262,7 +267,7 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
   });
 
   player.events.on("disconnect", async (queue: GuildQueue) => {
-    console.log(`[Music] disconnect in ${queue.guild.name}`);
+    moduleManager.logger.info(`disconnect in ${queue.guild.name}`, queue.guild.id, "music");
     // Reset nickname when bot disconnects from voice (if setting enabled)
     try {
       const settings = await getSettings(moduleManager, queue.guild.id);
@@ -273,11 +278,12 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
   });
 
   player.events.on("playerError", (queue: GuildQueue, error) => {
-    console.error(
-      `[Music] Player error in ${queue.guild.name}:`,
-      error.message,
+    moduleManager.logger.error(
+      `Player error in ${queue.guild.name}: ${error.message}`,
+      queue.guild.id,
+      error,
+      "music",
     );
-    console.error("[Music] Full error:", error);
     const channel = (queue.metadata as any)?.channel;
     if (channel) {
       channel
@@ -287,16 +293,19 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
   });
 
   player.events.on("error", (queue: GuildQueue, error) => {
-    console.error(
-      `[Music] General error in ${queue.guild.name}:`,
-      error.message,
+    moduleManager.logger.error(
+      `General error in ${queue.guild.name}: ${error.message}`,
+      queue.guild.id,
+      error,
+      "music",
     );
-    console.error("[Music] Full error:", error);
   });
 
   player.events.on("playerSkip" as any, (queue: GuildQueue, track: any) => {
-    console.warn(
-      `[Music] playerSkip: "${track?.title}" in ${queue.guild.name} — stream likely failed`,
+    moduleManager.logger.warn(
+      `playerSkip: "${track?.title}" in ${queue.guild.name} — stream likely failed`,
+      queue.guild.id,
+      "music",
     );
     const channel = (queue.metadata as any)?.channel;
     if (channel) {
@@ -348,8 +357,10 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
         const toToggle = [...toEnable, ...toDisable];
         if (toToggle.length === 0) return;
 
-        console.log(
-          `[Music] Dashboard filter sync for guild ${guildId}: +[${toEnable.join(",")}] -[${toDisable.join(",")}]`,
+        moduleManager.logger.info(
+          `Dashboard filter sync for guild ${guildId}: +[${toEnable.join(",")}] -[${toDisable.join(",")}]`,
+          guildId,
+          "music",
         );
 
         await queue.filters.ffmpeg.toggle(toToggle as any[]);
@@ -377,7 +388,7 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
           channel.send({ embeds: [embed] }).catch(() => {});
         }
       } catch (err) {
-        console.error("[Music] Error processing realtime filter sync:", err);
+        moduleManager.logger.error("Error processing realtime filter sync", undefined, err, "music");
       }
     },
   );
@@ -510,9 +521,10 @@ async function ensureSpotifyThumbnail(track: any) {
         }
       }
     } catch (e) {
-      console.error(
-        `[Music] Failed to resolve Spotify thumbnail for ${track.title}:`,
-        e,
+      _moduleManager?.logger.warn(
+        `Failed to resolve Spotify thumbnail for ${track.title}`,
+        undefined,
+        "music",
       );
     }
   }
@@ -557,26 +569,14 @@ function requireQueue(
 ): GuildQueue | null {
   const player = useMainPlayer();
 
-  // Debug: log what queues exist vs what we're looking for
-  const allQueueKeys = player.queues.cache.map((_, key) => key);
-  console.log(
-    `[Music Debug] requireQueue lookup — guildId: "${interaction.guildId}", existing queues: [${allQueueKeys.join(", ")}]`,
-  );
-
+  // Queue state for diagnostics is available through logger if needed
   const queue = player.queues.get(interaction.guildId!);
 
   if (!queue) {
-    console.log(
-      `[Music Debug] No queue found for guild ${interaction.guildId}`,
-    );
     interaction.editReply({ content: "❌ Nothing is currently playing." });
     return null;
   }
 
-  // Debug log to help diagnose state issues
-  console.log(
-    `[Music Debug] Queue state: isPlaying=${queue.isPlaying()}, currentTrack=${!!queue.currentTrack}, tracks=${queue.tracks.size}, node.isPlaying=${queue.node.isPlaying()}`,
-  );
 
   if (checkCurrentTrack && !queue.currentTrack) {
     // If specific track action is requested but no track is current
@@ -686,18 +686,20 @@ async function handlePlay(
               await activeQueue.filters.ffmpeg.toggle(
                 settings.activeFilters as any[],
               );
-              console.log(
-                `[Music] Auto-applied saved filters: ${settings.activeFilters.join(", ")} in ${interaction.guild?.name}`,
+              _moduleManager?.logger.info(
+                `Auto-applied saved filters: ${settings.activeFilters.join(", ")} in ${interaction.guild?.name}`,
+                interaction.guildId ?? undefined,
+                "music",
               );
             }
           } catch (err) {
-            console.error("[Music] Failed to auto-apply filters:", err);
+            _moduleManager?.logger.error("Failed to auto-apply filters", interaction.guildId ?? undefined, err, "music");
           }
         }, 2000); // Wait for playback to stabilize before applying filters
       }
     }
   } catch (error: any) {
-    console.error("[Music] Play error:", error);
+    moduleManager.logger.error("Play error", interaction.guildId ?? undefined, error, "music");
     await interaction.editReply({
       content: `❌ Could not play: ${error.message}`,
     });
@@ -883,7 +885,7 @@ async function handleVolume(
       settings,
     );
   } catch (err) {
-    console.error("[Music] Failed to save volume settings:", err);
+    moduleManager.logger.error("Failed to save volume settings", interaction.guildId ?? undefined, err, "music");
   }
 
   await interaction.editReply({
@@ -1042,7 +1044,7 @@ async function handleFilter(
             settings,
           );
         } catch (err) {
-          console.error("[Music] Failed to save cleared filter settings:", err);
+          moduleManager.logger.error("Failed to save cleared filter settings", interaction.guildId ?? undefined, err, "music");
         }
       }
 
@@ -1060,7 +1062,7 @@ async function handleFilter(
 
       await interaction.editReply({ embeds: [embed] });
     } catch (error: any) {
-      console.error("[Music] Clear filters error:", error);
+      moduleManager.logger.error("Clear filters error", interaction.guildId ?? undefined, error, "music");
       await interaction.editReply({
         content: `❌ Failed to clear effects: ${error.message}`,
       });
@@ -1106,7 +1108,7 @@ async function handleFilter(
           settings,
         );
       } catch (err) {
-        console.error("[Music] Failed to save filter settings:", err);
+        moduleManager.logger.error("Failed to save filter settings", interaction.guildId ?? undefined, err, "music");
       }
     }
 
@@ -1125,7 +1127,7 @@ async function handleFilter(
 
     await interaction.editReply({ embeds: [embed] });
   } catch (error: any) {
-    console.error("[Music] Filter error:", error);
+    moduleManager.logger.error("Filter error", interaction.guildId ?? undefined, error, "music");
     await interaction.editReply({
       content: `❌ Failed to apply filter: ${error.message}`,
     });
@@ -1235,9 +1237,11 @@ async function handlePlayQueue(
         });
         loaded++;
       } catch (err) {
-        console.error(
-          `[Music] Failed to load pre-queue track: ${item.title}`,
+        moduleManager.logger.error(
+          `Failed to load pre-queue track: ${item.title}`,
+          interaction.guildId ?? undefined,
           err,
+          "music",
         );
         failed++;
       }
@@ -1287,12 +1291,12 @@ async function handlePlayQueue(
             );
           }
         } catch (err) {
-          console.error("[Music] Failed to auto-apply filters:", err);
+          _moduleManager?.logger.error("Failed to auto-apply filters", interaction.guildId ?? undefined, err, "music");
         }
       }, 2000);
     }
   } catch (error: any) {
-    console.error("[Music] Dashboard queue error:", error);
+    moduleManager.logger.error("Dashboard queue error", interaction.guildId ?? undefined, error, "music");
     await interaction.editReply({
       content: `❌ Failed to load dashboard queue: ${error.message}`,
     });
@@ -1437,11 +1441,13 @@ const musicModule: BotModule = {
       if (error?.code === 10062) return;
 
       if (error.message === "Search timeout") {
-        console.warn(`[Music] Autocomplete timed out for "${query}"`);
+        _moduleManager?.logger.warn(`Autocomplete timed out for "${query}"`, undefined, "music");
       } else {
-        console.error(
-          "[Music] Autocomplete search error:",
-          error?.message || error,
+        _moduleManager?.logger.error(
+          "Autocomplete search error",
+          undefined,
+          error,
+          "music",
         );
       }
 

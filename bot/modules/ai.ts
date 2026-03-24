@@ -86,6 +86,9 @@ interface ConversationEntry {
 
 const channelContext = new Map<string, ConversationEntry[]>();
 
+/** Module-scoped reference to ModuleManager, set during event registration */
+let _moduleManager: ModuleManager | null = null;
+
 function pruneContext(
   channelId: string,
   maxCount: number,
@@ -420,9 +423,10 @@ async function callLLM(
       args = JSON.parse(tcAny.function?.arguments ?? "{}");
     } catch {
       // malformed JSON from model — treat as chat
-      console.warn(
-        "[AI] Failed to parse tool call arguments:",
-        tcAny.function?.arguments,
+      _moduleManager?.logger.warn(
+        "Failed to parse tool call arguments",
+        undefined,
+        "ai",
       );
     }
     return {
@@ -671,6 +675,7 @@ const aiModule: BotModule = {
 // ── Event Registration ─────────────────────────────────────────────
 
 export function registerAIEvents(moduleManager: ModuleManager) {
+  _moduleManager = moduleManager;
   const client = moduleManager["client"];
 
   client.on("messageCreate", async (message: Message) => {
@@ -846,8 +851,10 @@ export function registerAIEvents(moduleManager: ModuleManager) {
 
           if (contextMessages.length > 0) {
             llmMessages.push(...contextMessages);
-            console.log(
-              `[AI] Including ${contextMessages.length} context messages for channel ${channelId}`,
+            moduleManager.logger.info(
+              `Including ${contextMessages.length} context messages for channel ${channelId}`,
+              guildId,
+              "ai",
             );
           }
         }
@@ -857,8 +864,10 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       llmMessages.push({ role: "user", content: trimmedMessage });
 
       // ─ Call the LLM ─────────────────────────────────────────────
-      console.log(
-        `[AI] Calling LLM: provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}, messages=${llmMessages.length}`,
+      moduleManager.logger.info(
+        `Calling LLM: provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}, messages=${llmMessages.length}`,
+        guildId,
+        "ai",
       );
 
       const result = await callLLM(
@@ -892,7 +901,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           );
           reply = toolResult.slice(0, 1990);
         } catch (toolErr: any) {
-          console.error("[AI] Tool execution error:", toolErr);
+          moduleManager.logger.error("Tool execution error", guildId, toolErr, "ai");
           reply =
             "❌ Something went wrong trying to do that. Please try again.";
         }
@@ -938,7 +947,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         "ai",
       );
     } catch (err: any) {
-      console.error("[AI] Error handling message:", err);
+      moduleManager.logger.error("Error handling message", message.guildId ?? undefined, err, "ai");
 
       // Surface a user-friendly error
       const errMsg =
@@ -956,7 +965,42 @@ export function registerAIEvents(moduleManager: ModuleManager) {
     }
   });
 
-  console.log("[AI] messageCreate event listener registered.");
+  // ── Periodic Cleanup: cooldownMap & channelContext ──
+  // Prevent unbounded memory growth
+  const CLEANUP_INTERVAL_MS = 5 * 60_000;
+  setInterval(() => {
+    const now = Date.now();
+    let evictedCooldowns = 0;
+    let evictedContexts = 0;
+
+    // Evict expired cooldowns (entries older than 5 minutes are definitely stale)
+    for (const [key, ts] of cooldownMap) {
+      if (now - ts > 5 * 60_000) {
+        cooldownMap.delete(key);
+        evictedCooldowns++;
+      }
+    }
+
+    // Evict channel contexts where ALL entries are older than the max TTL (30min)
+    const MAX_CONTEXT_TTL = 30 * 60_000;
+    for (const [channelId, entries] of channelContext) {
+      const newest = entries[entries.length - 1];
+      if (!newest || now - newest.timestamp > MAX_CONTEXT_TTL) {
+        channelContext.delete(channelId);
+        evictedContexts++;
+      }
+    }
+
+    if (evictedCooldowns > 0 || evictedContexts > 0) {
+      moduleManager.logger.info(
+        `Cache cleanup: evicted ${evictedCooldowns} cooldowns, ${evictedContexts} contexts (cooldowns=${cooldownMap.size}, contexts=${channelContext.size})`,
+        undefined,
+        "ai",
+      );
+    }
+  }, CLEANUP_INTERVAL_MS);
+
+  moduleManager.logger.info("messageCreate event listener registered.", undefined, "ai");
 }
 
 export default aiModule;

@@ -343,7 +343,7 @@ const tempvoiceModule: BotModule = {
         try {
           await appwrite.updateTempChannelOwner(vc.id, member.id);
         } catch (err) {
-          console.error("[TempVoice] Failed to update owner in Appwrite:", err);
+          moduleManager.logger.error("Failed to update owner in Appwrite", guildId, err, "tempvoice");
         }
 
         await interaction.editReply(`👑 You are now the owner of <#${vc.id}>!`);
@@ -498,7 +498,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
             "tempvoice",
           );
         } catch (err) {
-          console.error("[TempVoice] Failed to clean up orphan channel:", err);
+          moduleManager.logger.error("Failed to clean up orphan channel", record.guild_id, err, "tempvoice");
         }
       }
     }
@@ -512,7 +512,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
       `[TempVoice] Hydrated ${activeChannels.size} active temp channel(s)`,
     );
   } catch (err) {
-    console.error("[TempVoice] Failed to hydrate temp channels:", err);
+    moduleManager.logger.error("Failed to hydrate temp channels", undefined, err, "tempvoice");
   }
 
   // ── Voice State Update Listener ──────────────────────────────────
@@ -592,9 +592,11 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
                   lobby_channel_id: newState.channelId,
                 });
               } catch (err) {
-                console.error(
-                  "[TempVoice] Failed to persist temp channel:",
+                moduleManager.logger.error(
+                  "Failed to persist temp channel",
+                  guildId,
                   err,
+                  "tempvoice",
                 );
               }
 
@@ -604,10 +606,10 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
                 "tempvoice",
               );
             } catch (err) {
-              console.error("[TempVoice] Failed to create temp channel:", err);
               moduleManager.logger.error(
-                `Failed to create temp channel for ${member.user.tag}: ${err}`,
+                `Failed to create temp channel for ${member.user.tag}`,
                 guildId,
+                err,
                 "tempvoice",
               );
             }
@@ -639,9 +641,11 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
                 "tempvoice",
               );
             } catch (err) {
-              console.error(
-                "[TempVoice] Failed to delete empty temp channel:",
+              moduleManager.logger.error(
+                "Failed to delete empty temp channel",
+                guildId,
                 err,
+                "tempvoice",
               );
             }
 
@@ -649,15 +653,17 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
             try {
               await appwrite.deleteTempChannel(oldState.channelId);
             } catch (err) {
-              console.error(
-                "[TempVoice] Failed to remove Appwrite record:",
+              moduleManager.logger.error(
+                "Failed to remove Appwrite record",
+                guildId,
                 err,
+                "tempvoice",
               );
             }
           }
         }
       } catch (err) {
-        console.error("[TempVoice] Error in voiceStateUpdate:", err);
+        moduleManager.logger.error("Error in voiceStateUpdate", undefined, err, "tempvoice");
       }
     },
   );
@@ -672,7 +678,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
     }
   });
 
-  console.log("[TempVoice] voiceStateUpdate event listener registered.");
+  moduleManager.logger.info("voiceStateUpdate event listener registered.", undefined, "tempvoice");
 }
 
 export default tempvoiceModule;

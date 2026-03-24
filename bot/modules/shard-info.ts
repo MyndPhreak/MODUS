@@ -102,7 +102,7 @@ const shardInfoModule: BotModule = {
         ];
       }
     } catch (err) {
-      console.error("[shard-info] broadcastEval failed:", err);
+      moduleManager.logger.error("broadcastEval failed", interaction.guildId ?? undefined, err, "shard-info");
       // Fallback to local stats only
       const mem = process.memoryUsage();
       allShardStats = [

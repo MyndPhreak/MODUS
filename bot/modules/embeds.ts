@@ -22,6 +22,9 @@ import type { BotModule } from "../ModuleManager";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
+/** Module-scoped reference to ModuleManager, set when execute() is first called */
+let _moduleManager: ModuleManager | null = null;
+
 function parseColor(input: string): number | null {
   if (!input || !input.trim()) return null;
   const cleaned = input.trim().replace("#", "");
@@ -219,7 +222,7 @@ function registerModalHandler(client: any) {
           components: [row],
         });
       } catch (error) {
-        console.error("[Embeds] Error handling modal submit:", error);
+        _moduleManager?.logger.error("Error handling modal submit", interaction.guildId ?? undefined, error, "embeds");
         try {
           if (interaction.deferred || interaction.replied) {
             await interaction.editReply({
@@ -275,7 +278,7 @@ function registerModalHandler(client: any) {
           components: [],
         });
       } catch (error) {
-        console.error("[Embeds] Error sending embed:", error);
+        _moduleManager?.logger.error("Error sending embed", interaction.guildId ?? undefined, error, "embeds");
         try {
           await interaction.editReply({
             content:
@@ -420,7 +423,7 @@ async function handleEmbedQuick(
       embeds: [embed],
     });
   } catch (error: any) {
-    console.error("[Embeds] Quick send error:", error);
+    moduleManager.logger.error("Quick send error", interaction.guildId ?? undefined, error, "embeds");
     await interaction.editReply({
       content: `❌ Failed to send embed: ${error.message}`,
     });
@@ -440,6 +443,7 @@ const embedsModule: BotModule = {
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
   ) {
+    _moduleManager = moduleManager;
     const commandName = interaction.commandName;
 
     switch (commandName) {

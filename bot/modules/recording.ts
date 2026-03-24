@@ -70,6 +70,9 @@ interface UserRecordingStream {
 
 export const activeSessions = new Map<string, RecordingSession>();
 
+/** Module-scoped reference to ModuleManager, set when execute() is first called */
+let _moduleManager: ModuleManager | null = null;
+
 // ─── Silence-Gap Padding ─────────────────────────────────────────────────
 // Discord only sends Opus packets while a user is speaking. Once decoded to
 // PCM, gaps between utterances simply have NO data — FFmpeg sees a continuous
@@ -201,9 +204,10 @@ async function updateNickname(member: GuildMember | null, recording: boolean) {
       await member.setNickname(null);
     }
   } catch (err) {
-    console.warn(
-      `[Recording] Could not update nickname:`,
-      (err as Error).message,
+    _moduleManager?.logger.warn(
+      `Could not update nickname: ${(err as Error).message}`,
+      undefined,
+      "recording",
     );
   }
 }
@@ -219,18 +223,20 @@ async function playAnnounceSoundClip(
   let subscription: ReturnType<VoiceConnection["subscribe"]> | undefined;
 
   try {
-    console.log(`[Recording] Downloading announce sound clip: ${fileId}`);
+    _moduleManager?.logger.info(`Downloading announce sound clip: ${fileId}`, undefined, "recording");
 
     // Download the file from Appwrite
     const fileBuffer =
       await moduleManager.appwriteService.getRecordingFileBuffer(fileId);
 
-    console.log(
-      `[Recording] Downloaded announce clip: ${fileBuffer.length} bytes`,
+    _moduleManager?.logger.info(
+      `Downloaded announce clip: ${fileBuffer.length} bytes`,
+      undefined,
+      "recording",
     );
 
     if (fileBuffer.length === 0) {
-      console.warn("[Recording] Announce sound clip is empty, skipping.");
+      _moduleManager?.logger.warn("Announce sound clip is empty, skipping.", undefined, "recording");
       return;
     }
 
@@ -263,17 +269,19 @@ async function playAnnounceSoundClip(
     });
 
     ffmpeg.on("error", (err) => {
-      console.error("[Recording] FFmpeg spawn error:", err.message);
+      _moduleManager?.logger.error("FFmpeg spawn error", undefined, err, "recording");
     });
 
     ffmpeg.on("close", (code) => {
       if (code !== 0) {
-        console.error(
-          `[Recording] FFmpeg announce decode exited ${code}:`,
+        _moduleManager?.logger.error(
+          `FFmpeg announce decode exited ${code}`,
+          undefined,
           ffmpegStderr.slice(-500),
+          "recording",
         );
       } else {
-        console.log("[Recording] FFmpeg announce decode completed OK");
+        _moduleManager?.logger.info("FFmpeg announce decode completed OK", undefined, "recording");
       }
     });
 
@@ -285,24 +293,24 @@ async function playAnnounceSoundClip(
     subscription = connection.subscribe(player);
     player.play(resource);
 
-    console.log("[Recording] Announce playback started");
+    _moduleManager?.logger.info("Announce playback started", undefined, "recording");
 
     // Wait for playback to finish (max 10s safety)
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
-        console.warn("[Recording] Announce playback timed out after 10s");
+        _moduleManager?.logger.warn("Announce playback timed out after 10s", undefined, "recording");
         player?.stop(true);
         resolve();
       }, 10_000);
 
       player!.on(AudioPlayerStatus.Idle, () => {
-        console.log("[Recording] Announce playback finished (idle)");
+        _moduleManager?.logger.info("Announce playback finished (idle)", undefined, "recording");
         clearTimeout(timeout);
         resolve();
       });
 
       player!.on("error", (err) => {
-        console.error("[Recording] Announce player error:", err.message);
+        _moduleManager?.logger.error("Announce player error", undefined, err, "recording");
         clearTimeout(timeout);
         resolve();
       });
@@ -313,9 +321,11 @@ async function playAnnounceSoundClip(
       fs.unlinkSync(tempFile);
     } catch {}
   } catch (err) {
-    console.error(
-      "[Recording] Failed to play announce sound clip:",
-      (err as Error).message,
+    _moduleManager?.logger.error(
+      "Failed to play announce sound clip",
+      undefined,
+      err,
+      "recording",
     );
   } finally {
     // CRITICAL: Clean up the audio player and unsubscribe from the connection
@@ -329,7 +339,7 @@ async function playAnnounceSoundClip(
 
     // Brief delay to let the voice connection stabilize before recording starts
     await new Promise((r) => setTimeout(r, 500));
-    console.log("[Recording] Announce clip cleanup complete");
+    _moduleManager?.logger.info("Announce clip cleanup complete", undefined, "recording");
   }
 }
 
@@ -378,14 +388,16 @@ function startUserRecording(
     // Only log errors, not progress
     const msg = data.toString();
     if (msg.includes("Error") || msg.includes("error")) {
-      console.error(`[Recording] FFmpeg error for ${username}:`, msg);
+      _moduleManager?.logger.error(`FFmpeg error for ${username}`, undefined, msg, "recording");
     }
   });
 
   ffmpeg.on("close", (code) => {
     if (code !== 0 && code !== 255) {
-      console.warn(
-        `[Recording] FFmpeg exited with code ${code} for ${username}`,
+      _moduleManager?.logger.warn(
+        `FFmpeg exited with code ${code} for ${username}`,
+        undefined,
+        "recording",
       );
     }
   });
@@ -419,8 +431,10 @@ function startUserRecording(
     // Capture start_offset from first packet
     if (opusPacketCount === 1 && stream.startOffset < 0) {
       stream.startOffset = timelineMs;
-      console.log(
-        `[Recording] First opus packet for ${username} — offset: ${timelineMs}ms`,
+      _moduleManager?.logger.info(
+        `First opus packet for ${username} — offset: ${timelineMs}ms`,
+        undefined,
+        "recording",
       );
     }
 
@@ -452,9 +466,10 @@ function startUserRecording(
   opusStream.on("error", (err: Error) => {
     // DAVE decryption failures may surface here as stream errors.
     // Our pnpm patch prevents stream destruction, but log for observability.
-    console.warn(
-      `[Recording] Opus stream error for ${username} (non-fatal):`,
-      err.message,
+    _moduleManager?.logger.warn(
+      `Opus stream error for ${username} (non-fatal): ${err.message}`,
+      undefined,
+      "recording",
     );
   });
 
@@ -462,10 +477,12 @@ function startUserRecording(
   opusStream.on("close", () => {
     const stream = session.userStreams.get(userId);
     if (stream && activeSessions.has(session.guildId)) {
-      console.warn(
-        `[Recording] Opus stream closed unexpectedly for ${username} — ` +
+      _moduleManager?.logger.warn(
+        `Opus stream closed unexpectedly for ${username} — ` +
           `DAVE decryption may have failed. ` +
           `Captured ${opusPacketCount} packets before close.`,
+        undefined,
+        "recording",
       );
     }
   });
@@ -473,18 +490,21 @@ function startUserRecording(
   decoder.on("error", (err: Error) => {
     // Corrupted packets during DAVE key transitions can cause decode errors.
     // Log but don't crash — the pipeline will skip the bad frame.
-    console.warn(
-      `[Recording] Decoder error for ${username} (non-fatal):`,
-      err.message,
+    _moduleManager?.logger.warn(
+      `Decoder error for ${username} (non-fatal): ${err.message}`,
+      undefined,
+      "recording",
     );
   });
 
   ffmpeg.stdin?.on("error", (err: Error) => {
     // EPIPE is expected when FFmpeg closes before all data is written
     if ((err as any).code !== "EPIPE") {
-      console.error(
-        `[Recording] FFmpeg stdin error for ${username}:`,
-        err.message,
+      _moduleManager?.logger.error(
+        `FFmpeg stdin error for ${username}`,
+        undefined,
+        err,
+        "recording",
       );
     }
   });
@@ -501,7 +521,7 @@ function startUserRecording(
     _segTimer: null,
   });
 
-  console.log(`[Recording] Started recording user: ${username} (${userId})`);
+  _moduleManager?.logger.info(`Started recording user: ${username} (${userId})`, undefined, "recording");
 }
 
 async function stopRecording(
@@ -569,18 +589,24 @@ async function stopRecording(
     for (const [userId, stream] of session.userStreams) {
       try {
         if (!fs.existsSync(stream.tempFilePath)) {
-          console.warn(
-            `[Recording] Temp file missing for ${stream.username}: ${stream.tempFilePath}`,
+          _moduleManager?.logger.warn(
+            `Temp file missing for ${stream.username}: ${stream.tempFilePath}`,
+            session.guildId,
+            "recording",
           );
           continue;
         }
         const stats = fs.statSync(stream.tempFilePath);
-        console.log(
-          `[Recording] Track file for ${stream.username}: ${stats.size} bytes`,
+        _moduleManager?.logger.info(
+          `Track file for ${stream.username}: ${stats.size} bytes`,
+          session.guildId,
+          "recording",
         );
         if (stats.size < 1000) {
-          console.warn(
-            `[Recording] Skipping near-empty file for ${stream.username} (${stats.size} bytes)`,
+          _moduleManager?.logger.warn(
+            `Skipping near-empty file for ${stream.username} (${stats.size} bytes)`,
+            session.guildId,
+            "recording",
           );
           fs.unlinkSync(stream.tempFilePath);
           continue;
@@ -610,9 +636,11 @@ async function stopRecording(
         // Clean up temp file
         fs.unlinkSync(stream.tempFilePath);
       } catch (err) {
-        console.error(
-          `[Recording] Failed to upload track for ${stream.username}:`,
+        _moduleManager?.logger.error(
+          `Failed to upload track for ${stream.username}`,
+          session.guildId,
           err,
+          "recording",
         );
         try {
           fs.unlinkSync(stream.tempFilePath);
@@ -636,7 +664,7 @@ async function stopRecording(
   try {
     mixedFileId = await generateMixedTrack(session, moduleManager, recordingId);
   } catch (err) {
-    console.error("[Recording] Failed to generate mixed track:", err);
+    _moduleManager?.logger.error("Failed to generate mixed track", session.guildId, err, "recording");
   }
 
   // Update recording metadata
@@ -690,9 +718,11 @@ async function generateMixedTrack(
           ownsFile: true,
         });
       } catch (err) {
-        console.error(
-          `[Recording] Failed to download track for mixing: ${track.username}`,
+        _moduleManager?.logger.error(
+          `Failed to download track for mixing: ${track.username}`,
+          session.guildId,
           err,
+          "recording",
         );
       }
     }
@@ -729,7 +759,7 @@ async function generateMixedTrack(
       }
       return fileId;
     } catch (err) {
-      console.error("[Recording] Failed to upload single-track mix:", err);
+      _moduleManager?.logger.error("Failed to upload single-track mix", session.guildId, err, "recording");
       return undefined;
     }
   }
@@ -796,7 +826,7 @@ async function generateMixedTrack(
       }
 
       if (code !== 0) {
-        console.error("[Recording] FFmpeg mix failed:", stderrLog.slice(-500));
+        _moduleManager?.logger.error("FFmpeg mix failed", session.guildId, stderrLog.slice(-500), "recording");
         try {
           fs.unlinkSync(mixedPath);
         } catch {}
@@ -813,7 +843,7 @@ async function generateMixedTrack(
         fs.unlinkSync(mixedPath);
         resolve(fileId);
       } catch (err) {
-        console.error("[Recording] Failed to upload mixed track:", err);
+        _moduleManager?.logger.error("Failed to upload mixed track", session.guildId, err, "recording");
         try {
           fs.unlinkSync(mixedPath);
         } catch {}
@@ -1065,7 +1095,7 @@ async function handleStart(
           }
         }
       } catch (err) {
-        console.error("[Recording] Error during auto-stop:", err);
+        _moduleManager?.logger.error("Error during auto-stop", session?.guildId, err, "recording");
       }
     }, settings.maxDuration * 1000),
     recordingDocId,
@@ -1079,8 +1109,10 @@ async function handleStart(
   for (const [userId, channelMember] of voiceChannel.members) {
     if (channelMember.user.bot) continue; // Don't record bots
     if (session.userStreams.size >= settings.maxConcurrentUsers) {
-      console.warn(
-        `[Recording] Concurrent user limit reached (${settings.maxConcurrentUsers}), skipping remaining members`,
+      _moduleManager?.logger.warn(
+        `Concurrent user limit reached (${settings.maxConcurrentUsers}), skipping remaining members`,
+        guildId,
+        "recording",
       );
       break;
     }
@@ -1229,7 +1261,7 @@ async function handleStop(
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    console.error("[Recording] Error stopping recording:", err);
+    moduleManager.logger.error("Error stopping recording", session?.guildId, err, "recording");
     await interaction.editReply({
       content: "❌ An error occurred while saving the recording. Check logs.",
     });
@@ -1281,7 +1313,7 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
 // ─── Module Export ────────────────────────────────────────────────────────
 
 const recordingModule: BotModule = {
-  name: "Recording",
+  name: "recording",
   description: "Record voice channel audio with per-user multi-track support",
   commands: [recordCommand],
   deferReply: true,
@@ -1290,6 +1322,7 @@ const recordingModule: BotModule = {
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
   ) {
+    _moduleManager = moduleManager;
     const subcommand = interaction.options.getSubcommand();
 
     switch (subcommand) {

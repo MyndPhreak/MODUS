@@ -215,7 +215,7 @@ async function sendModLog(
         await channel.send({ embeds: [embed] });
       }
     } catch (err) {
-      console.warn("[Moderation] Failed to send mod log:", err);
+      moduleManager.logger.warn("Failed to send mod log", guildId, "moderation");
     }
   }
 
@@ -981,7 +981,7 @@ const moderationModule: BotModule = {
               }
             }
           } catch (err) {
-            console.error("[Moderation] Auto-action failed:", err);
+            moduleManager.logger.error("Auto-action failed", interaction.guildId ?? undefined, err, "moderation");
             autoActionMsg = "\n⚠️ Auto-action failed — check bot permissions.";
           }
         }
@@ -1127,7 +1127,7 @@ const moderationModule: BotModule = {
             `🗑️ Deleted **${deleted.size}** message(s).${targetUser ? ` (from ${targetUser.tag})` : ""}`,
           );
         } catch (err) {
-          console.error("[Moderation] Purge failed:", err);
+          moduleManager.logger.error("Purge failed", interaction.guildId ?? undefined, err, "moderation");
           await interaction.editReply(
             "❌ Failed to delete messages. Messages older than 14 days cannot be bulk-deleted.",
           );
