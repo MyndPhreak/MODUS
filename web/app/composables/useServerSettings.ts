@@ -54,6 +54,15 @@ export function useServerSettings(guildId: string) {
       "automod",
       "logging",
       "triggers",
+      "ai",
+      "antiraid",
+      "verification",
+      "tickets",
+      "alerts",
+      "tempvoice",
+      "reaction-roles",
+      "events",
+      "polls",
     ].includes(moduleName.toLowerCase());
   };
 
