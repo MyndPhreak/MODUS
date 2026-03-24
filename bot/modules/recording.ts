@@ -880,7 +880,8 @@ const recordCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName("status").setDescription("Check if a recording is in progress"),
-  );
+  )
+  .toJSON();
 
 // ─── Command Handlers ────────────────────────────────────────────────────
 
