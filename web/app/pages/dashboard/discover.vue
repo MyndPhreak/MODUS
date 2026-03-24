@@ -5,7 +5,7 @@
         <UButton
           variant="ghost"
           icon="i-heroicons-arrow-left"
-          to="/"
+          to="/dashboard"
           class="rounded-xl border border-white/5 bg-white/5 hover:bg-white/10"
         />
         <h1 class="text-3xl font-black text-white tracking-tight gradient-text">

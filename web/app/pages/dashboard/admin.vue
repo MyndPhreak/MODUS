@@ -18,7 +18,7 @@
       <p class="text-gray-500 mb-8">
         You do not have administrative privileges.
       </p>
-      <UButton to="/" color="primary">Back to Dashboard</UButton>
+      <UButton to="/dashboard" color="primary">Back to Dashboard</UButton>
     </div>
 
     <!-- Child pages -->
@@ -40,9 +40,9 @@ const isBotAdmin = computed(() => userStore.isAdmin);
 // Determine active tab from current route
 const activeTab = computed(() => {
   const path = route.path;
-  if (path.includes("/admin/ai")) return "ai";
-  if (path.includes("/admin/servers")) return "servers";
-  if (path.includes("/admin/logs")) return "logs";
+  if (path.includes("/dashboard/admin/ai")) return "ai";
+  if (path.includes("/dashboard/admin/servers")) return "servers";
+  if (path.includes("/dashboard/admin/logs")) return "logs";
   return "modules";
 });
 
@@ -52,27 +52,27 @@ const sidebarTabs = [
     id: "modules",
     label: "Global Modules",
     icon: "i-heroicons-squares-2x2",
-    to: "/admin/modules",
+    to: "/dashboard/admin/modules",
   },
   {
     id: "ai",
     label: "AI Settings",
     icon: "i-heroicons-cpu-chip",
-    to: "/admin/ai",
+    to: "/dashboard/admin/ai",
     separator: true,
   },
   {
     id: "servers",
     label: "Registered Servers",
     icon: "i-heroicons-server-stack",
-    to: "/admin/servers",
+    to: "/dashboard/admin/servers",
     separator: true,
   },
   {
     id: "logs",
     label: "Live Bot Logs",
     icon: "i-heroicons-document-text",
-    to: "/admin/logs",
+    to: "/dashboard/admin/logs",
   },
 ];
 

@@ -18,7 +18,7 @@
       <p class="text-gray-500 mb-8">
         You do not have administrative privileges for this server.
       </p>
-      <UButton to="/" color="primary">Back to Dashboard</UButton>
+      <UButton to="/dashboard" color="primary">Back to Dashboard</UButton>
     </div>
 
     <!-- Content: Child Pages -->
@@ -35,7 +35,7 @@ const { register: registerSidebar, unregister: unregisterSidebar } =
   useServerSidebar();
 const { state, initialize } = useServerSettings(guildId);
 
-const basePath = `/server/${guildId}`;
+const basePath = `/dashboard/server/${guildId}`;
 
 // Determine active tab from current route
 const activeTab = computed(() => {
@@ -48,10 +48,18 @@ const activeTab = computed(() => {
   if (path.includes("/modules/milestones")) return "milestones";
   if (path.includes("/modules/triggers")) return "triggers";
   if (path.includes("/modules/ai")) return "ai";
+  if (path.includes("/modules/antiraid")) return "antiraid";
+  if (path.includes("/modules/verification")) return "verification";
+  if (path.includes("/modules/tickets")) return "tickets";
+  if (path.includes("/modules/alerts")) return "alerts";
+  if (path.includes("/modules/tempvoice")) return "tempvoice";
+  if (path.includes("/modules/reaction-roles")) return "reaction-roles";
+  if (path.includes("/modules/events")) return "events";
+  if (path.includes("/modules/polls")) return "polls";
+  if (path.includes("/modules/embeds")) return "embeds";
+  if (path.includes("/modules/tags")) return "tags";
+  if (path.includes("/modules/welcome")) return "welcome";
   if (path.includes("/modules")) return "modules";
-  if (path.includes("/embeds")) return "embeds";
-  if (path.includes("/tags")) return "tags";
-  if (path.includes("/welcome")) return "welcome";
   if (path.includes("/logs")) return "logs";
   return "modules";
 });
@@ -59,10 +67,17 @@ const activeTab = computed(() => {
 // Sidebar tab definitions — route-based
 const sidebarTabs = computed(() => [
   {
+    id: "logs",
+    label: "Server Logs",
+    icon: "i-heroicons-document-text",
+    to: `${basePath}/logs`,
+  },
+  {
     id: "modules",
     label: "Modules",
     icon: "i-heroicons-squares-2x2",
     to: `${basePath}/modules`,
+    separator: true,
   },
   {
     id: "music",
@@ -114,35 +129,71 @@ const sidebarTabs = computed(() => [
     to: `${basePath}/modules/triggers`,
   },
   {
+    id: "antiraid",
+    label: "Anti-Raid",
+    icon: "i-heroicons-shield-check",
+    to: `${basePath}/modules/antiraid`,
+    separator: true,
+  },
+  {
+    id: "verification",
+    label: "Verification",
+    icon: "i-heroicons-check-badge",
+    to: `${basePath}/modules/verification`,
+  },
+  {
+    id: "tickets",
+    label: "Tickets",
+    icon: "i-heroicons-ticket",
+    to: `${basePath}/modules/tickets`,
+  },
+  {
+    id: "alerts",
+    label: "Social Alerts",
+    icon: "i-heroicons-bell-alert",
+    to: `${basePath}/modules/alerts`,
+  },
+  {
+    id: "tempvoice",
+    label: "Temp Voice",
+    icon: "i-heroicons-speaker-wave",
+    to: `${basePath}/modules/tempvoice`,
+  },
+  {
+    id: "reaction-roles",
+    label: "Reaction Roles",
+    icon: "i-heroicons-face-smile",
+    to: `${basePath}/modules/reaction-roles`,
+  },
+  {
+    id: "events",
+    label: "Events",
+    icon: "i-heroicons-calendar-days",
+    to: `${basePath}/modules/events`,
+  },
+  {
+    id: "polls",
+    label: "Polls",
+    icon: "i-heroicons-chart-bar",
+    to: `${basePath}/modules/polls`,
+  },
+  {
     id: "embeds",
     label: "Embeds",
     icon: "i-heroicons-paint-brush",
-    to: `${basePath}/embeds`,
+    to: `${basePath}/modules/embeds`,
   },
   {
     id: "tags",
     label: "Tags",
     icon: "i-heroicons-tag",
-    to: `${basePath}/tags`,
+    to: `${basePath}/modules/tags`,
   },
   {
     id: "welcome",
     label: "Welcome Image",
     icon: "i-heroicons-sparkles",
-    to: `${basePath}/welcome`,
-  },
-  {
-    id: "logs",
-    label: "Logs",
-    icon: "i-heroicons-document-text",
-    to: `${basePath}/logs`,
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    icon: "i-heroicons-bell",
-    badge: "Soon",
-    disabled: true,
+    to: `${basePath}/modules/welcome`,
   },
 ]);
 
