@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.8.0...modus-v1.9.0) (2026-03-24)
+
+
+### ✨ Features
+
+* **bot:** add web search tool to AI module via SearXNG ([53dffae](https://github.com/MyndPhreak/MODUS/commit/53dffaeeafe1ad0c6a06f008df71a1c0804c72bb))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** call toJSON() on recording command builder ([d007ce5](https://github.com/MyndPhreak/MODUS/commit/d007ce514f649a9536f48d6d7ffbec1237da3646))
+* **bot:** prefer flat key lookup in webhook placeholder resolution ([fd9ed0d](https://github.com/MyndPhreak/MODUS/commit/fd9ed0d082eeff48eac8544c81482c104ee8d25a))
+* **bot:** reorder required poll options before optional ones in command builder ([c8243a2](https://github.com/MyndPhreak/MODUS/commit/c8243a2b89abb58a2224651990dc281f313f1e66))
+* **web:** use #shared alias for fonts import to fix Nitro server bundle resolution ([9613ae9](https://github.com/MyndPhreak/MODUS/commit/9613ae92b3f145415b4d9edeaf536134ba3f6fb1))
+
+
+### ♻️ Refactors
+
+* **bot:** simplify defer reply logic in ModuleManager ([eb12eb7](https://github.com/MyndPhreak/MODUS/commit/eb12eb700ec8d8411f9d85d3a367fef7e775a4c5))
+
 ## [1.8.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.7.2...modus-v1.8.0) (2026-03-24)
 
 
