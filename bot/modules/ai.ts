@@ -475,10 +475,18 @@ async function performWebSearch(query: string): Promise<string> {
   const requester = parsed.protocol === "https:" ? https : http;
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
     const req = requester.get(
       searchUrl,
       { headers: { "Accept": "application/json" } },
       (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          res.resume();
+          done(() => reject(new Error(`SearXNG returned HTTP ${res.statusCode}`)));
+          return;
+        }
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
@@ -487,23 +495,26 @@ async function performWebSearch(query: string): Promise<string> {
             const results: { title: string; url: string; content?: string }[] =
               (json.results ?? []).slice(0, 5);
             if (!results.length) {
-              resolve("No results found.");
+              done(() => resolve("No results found."));
               return;
             }
             const formatted = results
               .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content ?? ""}`)
               .join("\n\n");
-            resolve(formatted);
+            done(() => resolve(formatted));
           } catch {
-            reject(new Error("Failed to parse search results"));
+            // SearXNG likely returned HTML — JSON format probably not enabled
+            done(() => reject(new Error(
+              "SearXNG returned a non-JSON response. Enable JSON format in SearXNG settings.yml: search.formats: [html, json]"
+            )));
           }
         });
       },
     );
-    req.on("error", reject);
+    req.on("error", (err) => done(() => reject(err)));
     req.setTimeout(8000, () => {
       req.destroy();
-      reject(new Error("Search request timed out"));
+      done(() => reject(new Error("Search request timed out after 8s")));
     });
   });
 }
@@ -1038,8 +1049,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           }
         } catch (toolErr: any) {
           moduleManager.logger.error("Tool execution error", guildId, toolErr, "ai");
-          reply =
-            "❌ Something went wrong trying to do that. Please try again.";
+          reply = `❌ ${toolErr?.message ?? "Something went wrong trying to do that. Please try again."}`;
         }
       } else {
         // Normal chat response
