@@ -22,3 +22,6 @@ logs
 .env
 .env.*
 !.env.example
+
+# Cached font files (downloaded on-demand by render API)
+data/fonts/*.ttf

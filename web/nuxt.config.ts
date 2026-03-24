@@ -19,6 +19,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     appwriteApiKey: "", // Set via NUXT_APPWRITE_API_KEY
     discordBotToken: "", // Set via NUXT_DISCORD_BOT_TOKEN
+    renderApiKey: "", // Shared secret for bot→dashboard render API — Set via NUXT_RENDER_API_KEY
     // Base URL of the bot's HTTP server (server-side only, never sent to browser)
     // Docker: http://bot:3005  |  Non-Docker: https://modus-bot.ppo.gg
     botWebhookUrl: "http://bot:3005", // Set via NUXT_BOT_WEBHOOK_URL
@@ -31,6 +32,12 @@ export default defineNuxtConfig({
       botUrl: "", // Bot health check URL, set via NUXT_PUBLIC_BOT_URL
       discordClientId: "", // Discord bot client ID, set via NUXT_PUBLIC_DISCORD_CLIENT_ID
     },
+  },
+  routeRules: {
+    // Dashboard pages rely on the client-only Appwrite SDK and require
+    // authentication — SSR is impossible and causes 404/500 on refresh.
+    "/dashboard": { ssr: false },
+    "/dashboard/**": { ssr: false },
   },
   future: {
     compatibilityVersion: 4,
