@@ -5,35 +5,118 @@
 <h3 align="center">A modular Discord bot with a web dashboard.</h3>
 
 <p align="center">
-  Music, moderation, AI, anti-raid, recordings, tickets, and more — 20+ features you can toggle per server.
+  Music, moderation, AI, anti-raid, recordings, tickets, and more — 25+ features you can toggle per server.
 </p>
 
 ---
 
+## What is MODUS?
+
+MODUS is a Discord bot designed to replace the pile of single-purpose bots most servers end up with. Instead of running five different bots for moderation, music, welcome messages, tickets, and logging, MODUS handles all of it through independent modules that can be toggled on or off per server.
+
+It ships with a web dashboard (built on Nuxt 4) for configuring everything without touching slash commands, and uses Appwrite as its database backend.
+
 ## Features
 
-- **Music** — Spotify/YouTube playback with effects, queue management, and real-time dashboard sync
-- **Recording** — Multi-speaker voice recording with waveform visualization and segment playback
-- **AI Chat** — Multi-provider conversational AI with web search (SearXNG), per-guild config, and audit logging
-- **Moderation** — Kick/ban/mute, automod (spam & profanity rules), and audit trails
-- **Anti-Raid** — Join velocity detection to shut down raids automatically
-- **Tickets** — Thread-based ticket system with types, priorities, claims, and transcripts
-- **Reaction Roles** — Button panels and dropdown selectors
-- **Welcome** — Customizable join messages with server-rendered welcome images
-- **Polls** — Native Discord polls via modal
-- **Triggers** — Webhook router for external automation (GitHub, etc.)
-- **Temporary Voice** — Auto-created voice channels that clean up when empty
-- **Social Alerts** — Twitch go-live notifications via EventSub
-- **Events, Tags, Milestones, Verification** — and more
+### AI Chat
 
-## Project Structure
+Talk to LLMs directly in Discord. Supports multiple providers and models:
 
-```
-bot/          Discord bot (discord.js, modules, Appwrite service)
-web/          Web dashboard (Nuxt 4, API routes, OAuth)
-```
+- **Anthropic** — Claude 4 Sonnet, Claude 4 Opus
+- **OpenAI** — GPT-4o, GPT-4o Mini, o3-mini
+- **Google** — Gemini 2.5 Pro, Gemini 2.5 Flash
+- **Groq** — Llama 4 Scout, Llama 4 Maverick, Qwen QwQ
 
-## Setup
+Servers can bring their own API keys, set custom system prompts, adjust token limits, and configure per-user cooldowns. The AI module also has access to tools — it can control music playback, search the web, and more.
+
+### Music
+
+Full music player with queue management, playback controls, and audio filters. Supports YouTube and Spotify links out of the box through discord-player and yt-dlp.
+
+**Filters:** Bass Boost, Nightcore, Vaporwave, 8D Audio, Karaoke, Tremolo, Vibrato, Lo-Fi, Phaser, Chorus, Flanger, Treble Boost.
+
+### Voice Recording
+
+Record voice channels with per-user multitrack output. Each participant gets their own audio track with silence-padded timing so tracks stay aligned. Configurable bitrate and duration limits.
+
+### Moderation
+
+Standard mod toolkit — warn, kick, ban, timeout, purge — with case tracking, automatic escalation (e.g. 3 warnings triggers a timeout), DM notifications, and a modlog channel.
+
+### AutoMod
+
+Rule-based content filtering with flexible conditions (regex, contains, starts with, role checks) and configurable actions (delete, warn, timeout, kick, ban, DM, log). Rules support AND/OR logic, per-rule cooldowns, and channel/role exemptions.
+
+### Tickets
+
+Deployable ticket panels with button-based creation. Tickets are created as threads with full lifecycle management — open, claim, add/remove users, set priority, and auto-generate transcripts on close. Idle tickets can be swept automatically.
+
+### Welcome Messages
+
+Canvas-rendered welcome images with a visual editor on the dashboard. Place text, images, shapes, and user avatars on a customizable background. Supports fonts, shadows, opacity, rotation, and borders.
+
+### Reaction Roles
+
+Button and dropdown-based role assignment panels. Deploy to any channel with customizable button styles and embed formatting. No emoji reactions needed.
+
+### Temporary Voice Channels
+
+Lobby-based system where joining a designated channel spawns a personal voice channel. Supports naming templates (`{username}`, `{displayname}`), user limits, and category assignment. Channels auto-delete when empty.
+
+### Alerts
+
+Monitor external platforms and post updates to Discord:
+
+- **Twitch** — Stream go-live notifications via EventSub
+- **YouTube** — New video/upload alerts
+- **GitHub** — Repository activity
+- **RSS** — Any RSS feed
+
+### Logging
+
+Audit logging with per-category toggles: message edits/deletes, member joins/leaves, role changes, channel changes, and invite tracking. Everything goes to a designated log channel with timestamped embeds.
+
+### Anti-Raid
+
+Velocity-based join flood detection. Configurable thresholds (X joins in Y seconds) with automatic channel lockdown during detected raids.
+
+### And More
+
+- **Events** — Schedule server events with timezone support
+- **Tags** — Reusable text/embed snippets with autocomplete
+- **Polls** — Native Discord polls with visual result bars
+- **Milestones** — Track and celebrate member activity milestones
+- **Verification** — Button-based gate verification with role assignment
+- **Triggers** — Receive webhooks from GitHub, Twitch, or custom sources and post formatted embeds
+- **Embeds** — Build and send custom embeds via slash command or modal
+
+## Web Dashboard
+
+The dashboard runs as a separate service on Nuxt 4. It connects to the same Appwrite backend as the bot and lets server admins configure modules, preview welcome images, manage recordings, and monitor bot health — all through a browser.
+
+SSR is disabled for dashboard routes (they require Discord OAuth), while public pages like the landing page are server-rendered.
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| Bot | Discord.js 14, discord-player, Node 22, TypeScript |
+| Web | Nuxt 4, @nuxt/ui, Tailwind CSS, Pinia |
+| AI | Anthropic Claude, OpenAI, Groq, Google Gemini |
+| Database | Appwrite (collections + file storage) |
+| Infra | Docker Compose, GHCR, pnpm workspaces |
+
+## Self-Hosting
+
+### Requirements
+
+- Node.js 22+
+- pnpm 10.9+
+- An [Appwrite](https://appwrite.io/) instance
+- A Discord application with bot token
+- FFmpeg and yt-dlp (for music/recording — included in Docker image)
+
+### Setup
 
 Copy the example env files and fill in your credentials:
 
@@ -48,30 +131,40 @@ cp web/.env.example web/.env
 docker compose up -d
 ```
 
+This starts both services — the bot on port 3005 and the dashboard on port 3000.
+
 ### Local development
 
 ```sh
-pnpm install
-
 # Bot
-cd bot && pnpm dev
+cd bot
+pnpm install
+pnpm run setup-db    # first time only — creates Appwrite collections
+pnpm run dev
 
-# Web
-cd web && pnpm dev
+# Web (separate terminal)
+cd web
+pnpm install
+pnpm run dev
 ```
 
-The bot runs on port `3000` (health check) and the web dashboard on `3001` by default.
+## Project Structure
+
+```
+bot/                    Discord bot
+  modules/              Feature plugins (auto-loaded)
+  lib/                  Shared utilities
+  ModuleManager.ts      Plugin loader and interaction router
+  AppwriteService.ts    Database layer
+
+web/                    Nuxt 4 dashboard
+  app/pages/            File-based routing
+  app/composables/      Vue composition hooks
+  server/api/           Backend API routes
+```
+
+Modules are self-contained — drop a file in `bot/modules/` and it gets picked up automatically. No registration step required.
 
 ## License
 
-Source-available — not designed for self-hosting.
-
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| Bot | Discord.js 14, discord-player, Node 22, TypeScript |
-| Web | Nuxt 4, @nuxt/ui, Tailwind CSS, Pinia |
-| AI | Anthropic Claude, OpenAI, Groq, Google Gemini |
-| Database | Appwrite (collections + file storage) |
-| Infra | Docker Compose, GHCR, pnpm workspaces |
+ISC
