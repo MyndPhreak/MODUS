@@ -22,7 +22,7 @@ import {
   type TicketQuestionConfig,
 } from "../../../lib/schemas";
 import { parseSettings } from "../../../lib/validateSettings";
-import { formatTicketName, encodeMeta } from "../lib/utils";
+import { formatTicketName, buildMetaFooter } from "../lib/utils";
 import { PRIORITY_CONFIG, type TicketMeta } from "../lib/types";
 
 // ── Per-guild settings cache ──────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function buildInfoEmbed(
       { name: "🏷️ Priority", value: `${priority.emoji} ${priority.label}`, inline: true },
       { name: "👷 Claimed By", value: "Unclaimed", inline: true },
     )
-    .setFooter({ text: encodeMeta(meta) });
+    .setFooter(buildMetaFooter(meta));
 }
 
 // ── Pre-open modal ────────────────────────────────────────────────────────────

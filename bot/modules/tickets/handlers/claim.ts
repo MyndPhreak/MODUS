@@ -9,7 +9,7 @@ import {
 import type { ModuleManager } from "../../../ModuleManager";
 import { TicketsSettingsSchema } from "../../../lib/schemas";
 import { parseSettings } from "../../../lib/validateSettings";
-import { getThreadMeta, encodeMeta } from "../lib/utils";
+import { getThreadMeta, buildMetaFooter } from "../lib/utils";
 import { isStaff } from "../lib/permissions";
 import { PRIORITY_CONFIG } from "../lib/types";
 
@@ -95,7 +95,7 @@ export async function handleClaim(
         inline: true,
       },
     )
-    .setFooter({ text: encodeMeta(updatedMeta) });
+    .setFooter(buildMetaFooter(updatedMeta));
 
   // Edit the pinned info message in-place
   try {

@@ -6,6 +6,11 @@ import {
   MessageFlags,
   PollLayoutType,
   TextChannel,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+  ModalSubmitInteraction,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
 
@@ -49,56 +54,7 @@ const pollsModule: BotModule = {
     .addSubcommand((sub) =>
       sub
         .setName("create")
-        .setDescription("Create a new native Discord poll")
-        .addStringOption((opt) =>
-          opt
-            .setName("question")
-            .setDescription("The poll question (max 300 chars)")
-            .setRequired(true)
-            .setMaxLength(300),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option1").setDescription("Answer option 1").setRequired(true).setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option2").setDescription("Answer option 2").setRequired(true).setMaxLength(55),
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("duration")
-            .setDescription("How long the poll is open (1–168 hours). Default: 24")
-            .setMinValue(1)
-            .setMaxValue(168),
-        )
-        .addBooleanOption((opt) =>
-          opt
-            .setName("multiselect")
-            .setDescription("Allow members to vote for multiple options? Default: false"),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option3").setDescription("Answer option 3").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option4").setDescription("Answer option 4").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option5").setDescription("Answer option 5").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option6").setDescription("Answer option 6").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option7").setDescription("Answer option 7").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option8").setDescription("Answer option 8").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option9").setDescription("Answer option 9").setMaxLength(55),
-        )
-        .addStringOption((opt) =>
-          opt.setName("option10").setDescription("Answer option 10").setMaxLength(55),
-        ),
+        .setDescription("Create a new native Discord poll"),
     )
     .addSubcommand((sub) =>
       sub
@@ -132,28 +88,57 @@ const pollsModule: BotModule = {
 
     // ── /poll create ────────────────────────────────────────────────────────
     if (subcommand === "create") {
-      const question = interaction.options.getString("question", true);
-      const duration = interaction.options.getInteger("duration") ?? 24;
-      const multiselect = interaction.options.getBoolean("multiselect") ?? false;
+      const modal = new ModalBuilder()
+        .setCustomId("polls:create")
+        .setTitle("Create a Poll");
 
-      const answers: string[] = [];
-      for (let i = 1; i <= 10; i++) {
-        const val = interaction.options.getString(`option${i}`);
-        if (val) answers.push(val);
-      }
+      const makeRow = (input: TextInputBuilder) =>
+        new ActionRowBuilder<TextInputBuilder>().addComponents(input);
 
-      // Build raw poll payload — PollBuilder is not yet in the installed
-      // discord.js version, but discord.js accepts the raw API shape.
-      const poll = {
-        question: { text: question },
-        duration,
-        allow_multiselect: multiselect,
-        layout_type: PollLayoutType.Default,
-        answers: answers.map((text) => ({ poll_media: { text } })),
-      };
+      modal.addComponents(
+        makeRow(
+          new TextInputBuilder()
+            .setCustomId("question")
+            .setLabel("Question")
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(300)
+            .setRequired(true),
+        ),
+        makeRow(
+          new TextInputBuilder()
+            .setCustomId("option1")
+            .setLabel("Option 1")
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(55)
+            .setRequired(true),
+        ),
+        makeRow(
+          new TextInputBuilder()
+            .setCustomId("option2")
+            .setLabel("Option 2")
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(55)
+            .setRequired(true),
+        ),
+        makeRow(
+          new TextInputBuilder()
+            .setCustomId("option3")
+            .setLabel("Option 3 (optional)")
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(55)
+            .setRequired(false),
+        ),
+        makeRow(
+          new TextInputBuilder()
+            .setCustomId("option4")
+            .setLabel("Option 4 (optional)")
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(55)
+            .setRequired(false),
+        ),
+      );
 
-      // Native poll MUST be the initial reply — not an editReply.
-      await interaction.reply({ poll } as any);
+      await interaction.showModal(modal);
       return;
     }
 
@@ -260,6 +245,33 @@ const pollsModule: BotModule = {
 
       await interaction.editReply({ embeds: [embed] });
     }
+  },
+
+  handleModal: async (
+    interaction: ModalSubmitInteraction,
+    _moduleManager: ModuleManager,
+  ) => {
+    if (interaction.customId !== "polls:create") return;
+
+    const question = interaction.fields.getTextInputValue("question");
+    const answers: string[] = [];
+    for (let i = 1; i <= 4; i++) {
+      const val = interaction.fields.getTextInputValue(`option${i}`).trim();
+      if (val) answers.push(val);
+    }
+
+    // Build raw poll payload — PollBuilder is not yet in the installed
+    // discord.js version, but discord.js accepts the raw API shape.
+    const poll = {
+      question: { text: question },
+      duration: 24,
+      allow_multiselect: false,
+      layout_type: PollLayoutType.Default,
+      answers: answers.map((text) => ({ poll_media: { text } })),
+    };
+
+    // Native poll MUST be the initial reply — not an editReply.
+    await interaction.reply({ poll } as any);
   },
 };
 

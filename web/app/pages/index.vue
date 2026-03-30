@@ -59,7 +59,7 @@
                 class="w-4 h-4 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all duration-300"
               />
             </a>
-            <NuxtLink to="/login" class="hero-btn-secondary">
+            <NuxtLink to="/dashboard" class="hero-btn-secondary">
               <UIcon
                 name="i-heroicons-arrow-right-on-rectangle"
                 class="w-5 h-5"

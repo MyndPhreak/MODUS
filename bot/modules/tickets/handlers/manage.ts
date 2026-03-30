@@ -9,7 +9,7 @@ import {
 import type { ModuleManager } from "../../../ModuleManager";
 import { TicketsSettingsSchema } from "../../../lib/schemas";
 import { parseSettings } from "../../../lib/validateSettings";
-import { getThreadMeta, encodeMeta, applyPriorityPrefix } from "../lib/utils";
+import { getThreadMeta, buildMetaFooter, applyPriorityPrefix } from "../lib/utils";
 import { isStaff } from "../lib/permissions";
 import { PRIORITY_CONFIG, type TicketPriority } from "../lib/types";
 
@@ -221,7 +221,7 @@ export async function handlePriority(
         inline: true,
       },
     )
-    .setFooter({ text: encodeMeta(updatedMeta) });
+    .setFooter(buildMetaFooter(updatedMeta));
 
   try {
     const pinnedMsg = await thread.messages.fetch(messageId);

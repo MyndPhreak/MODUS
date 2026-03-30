@@ -116,6 +116,7 @@ watch(
       router.push("/dashboard");
     }
   },
+  { immediate: true },
 );
 
 // Also watch isLoggedIn in case it changes after init

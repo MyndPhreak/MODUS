@@ -50,17 +50,38 @@ export function applyPriorityPrefix(
 
 // ── Metadata encode / decode ────────────────────────────────────────────────
 
-export function encodeMeta(meta: TicketMeta): string {
-  return META_PREFIX + JSON.stringify(meta);
+/**
+ * Builds a Discord embed footer that displays a friendly ticket number while
+ * encoding the full metadata in the icon URL query parameter (invisible to users).
+ */
+export function buildMetaFooter(meta: TicketMeta): { text: string; iconURL: string } {
+  const display = `Ticket #${String(meta.ticketId).padStart(4, "0")}`;
+  const encoded = Buffer.from(JSON.stringify(meta)).toString("base64url");
+  return {
+    text: display,
+    iconURL: `https://cdn.discordapp.com/embed/avatars/0.png?m=${encoded}`,
+  };
 }
 
-export function decodeMeta(footerText: string | null | undefined): TicketMeta | null {
-  if (!footerText?.startsWith(META_PREFIX)) return null;
-  try {
-    return JSON.parse(footerText.slice(META_PREFIX.length)) as TicketMeta;
-  } catch {
-    return null;
+export function decodeMeta(
+  footer: { text?: string | null; iconURL?: string | null } | null | undefined,
+): TicketMeta | null {
+  // New format: metadata encoded in iconURL query param
+  const iconURL = footer?.iconURL;
+  if (iconURL) {
+    try {
+      const match = iconURL.match(/[?&]m=([A-Za-z0-9_-]+)/);
+      if (match) return JSON.parse(Buffer.from(match[1], "base64url").toString()) as TicketMeta;
+    } catch {}
   }
+  // Legacy format: raw JSON in footer text
+  const text = footer?.text;
+  if (text?.startsWith(META_PREFIX)) {
+    try {
+      return JSON.parse(text.slice(META_PREFIX.length)) as TicketMeta;
+    } catch {}
+  }
+  return null;
 }
 
 // ── Thread metadata helpers ─────────────────────────────────────────────────
@@ -76,7 +97,7 @@ export async function getThreadMeta(
     const pinned = await thread.messages.fetchPinned();
     for (const msg of pinned.values()) {
       if (!msg.author.bot) continue;
-      const meta = decodeMeta(msg.embeds[0]?.footer?.text);
+      const meta = decodeMeta(msg.embeds[0]?.footer);
       if (meta) return { messageId: msg.id, meta };
     }
     return null;
