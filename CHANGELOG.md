@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.9.0...modus-v1.10.0) (2026-03-30)
+
+
+### ✨ Features
+
+* **bot,web:** use modal for poll creation and hide ticket metadata from footer text ([25197a9](https://github.com/MyndPhreak/MODUS/commit/25197a9d86cc2ff647f1fac19e26e71e21a1cb62))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** improve web search error handling and surface actionable messages ([19c2c0e](https://github.com/MyndPhreak/MODUS/commit/19c2c0ebb2e5a0bd06d46d716045c25a90a3db80))
+
 ## [1.9.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.8.0...modus-v1.9.0) (2026-03-24)
 
 
