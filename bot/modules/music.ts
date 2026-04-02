@@ -1466,6 +1466,9 @@ const musicModule: BotModule = {
     // Register player events on first use
     registerPlayerEvents(moduleManager);
 
+    // Defer publicly — music responses should be visible to everyone
+    await interaction.deferReply();
+
     // Dispatch based on the top-level command name
     const commandName = interaction.commandName;
 
