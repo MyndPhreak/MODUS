@@ -52,13 +52,6 @@
     "overrides": {
       "youtubei.js": "https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main"
     },
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "esbuild",
-      "ffmpeg-static",
-      "sodium-native",
-      "youtube-dl-exec"
-    ],
     "patchedDependencies": {
       "@discordjs/voice": "patches/@discordjs__voice.patch"
     }

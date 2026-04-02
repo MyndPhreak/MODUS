@@ -20,7 +20,8 @@ COPY patches ./patches
 # Running with scripts enabled is required so that packages like youtubei.js
 # (installed from the GitHub tarball, not npm) execute their postinstall build
 # step and produce their dist/ output.
-RUN pnpm install --frozen-lockfile
+# Skip youtube-dl-exec's Python check — the production stage installs yt-dlp via pip.
+RUN YOUTUBE_DL_SKIP_PYTHON_CHECK=1 pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
