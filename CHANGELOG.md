@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.10.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.9.0...modus-v1.10.0) (2026-04-05)
+
+
+### ✨ Features
+
+* **bot,web:** use modal for poll creation and hide ticket metadata from footer text ([25197a9](https://github.com/MyndPhreak/MODUS/commit/25197a9d86cc2ff647f1fac19e26e71e21a1cb62))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** add missing youtube-dl-exec dependency required by discord-player-youtubei 2.0.0 ([c412a0d](https://github.com/MyndPhreak/MODUS/commit/c412a0d4ea8e6a1fa579d17c9979fd65943410ce))
+* **bot:** defer interaction reply in music module to fix missing embeds and error responses ([c013c72](https://github.com/MyndPhreak/MODUS/commit/c013c720f10c754c5f608a8ada71258ebc0f9e01))
+* **bot:** disable default PCM compressor in discord-player causing audio squashing ([c28663a](https://github.com/MyndPhreak/MODUS/commit/c28663adf27ee118c285d6748185084a8a9d1dee))
+* **bot:** fix Docker build failure from youtube-dl-exec missing Python ([9751069](https://github.com/MyndPhreak/MODUS/commit/9751069435cfdded08e59fa834926985f6c87145))
+* **bot:** improve web search error handling and surface actionable messages ([19c2c0e](https://github.com/MyndPhreak/MODUS/commit/19c2c0ebb2e5a0bd06d46d716045c25a90a3db80))
+
+
+### 📖 Documentation
+
+* add project README ([2bda2ce](https://github.com/MyndPhreak/MODUS/commit/2bda2ceb950f7b8077dea7e3a9b85da047f6a61a))
+
 ## [1.9.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.8.0...modus-v1.9.0) (2026-03-24)
 
 
