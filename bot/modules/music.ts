@@ -195,6 +195,16 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
       // setInputArgs is not available on all discord-player builds — safe to skip
     }
 
+    // Disable the PCM compressor that discord-player enables by default.
+    // A bug in the dispatcher causes the disableCompressor queue option to be
+    // ignored, resulting in a -20 dB / 4:1 compressor being applied to all
+    // audio — making louder sections sound squashed.
+    try {
+      (queue.dispatcher as any)?.compressor?.disable();
+    } catch {
+      // safe to skip if unavailable
+    }
+
     // Update bot nickname to current track (if setting enabled)
     try {
       const settings = await getSettings(moduleManager, queue.guild.id);
