@@ -64,6 +64,7 @@ export default defineEventHandler(async (event) => {
       icon: doc.icon,
       owner_id: doc.owner_id,
       admin_user_ids: doc.admin_user_ids || [],
+      dashboard_role_ids: doc.dashboard_role_ids || [],
     }));
   } catch (err: any) {
     console.error("[By Guild IDs API] Error:", err.message || err);

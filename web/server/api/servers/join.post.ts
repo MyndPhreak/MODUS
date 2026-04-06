@@ -6,7 +6,8 @@ import { Client, Databases } from "node-appwrite";
  * Allows a Discord admin to join an existing server's admin list.
  * Validates that:
  *   1. The server already exists in the system.
- *   2. The user has ADMINISTRATOR permission on the Discord guild.
+ *   2. The user has ADMINISTRATOR permission on the Discord guild,
+ *      OR has one of the server's configured dashboard_role_ids.
  *   3. The user isn't already in admin_user_ids.
  *
  * Uses the admin API key so Appwrite collection-level permissions
@@ -71,15 +72,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!hasAdminPerm) {
-    throw createError({
-      statusCode: 403,
-      statusMessage:
-        "You do not have Administrator permission on this Discord server.",
-    });
-  }
-
-  // ── Update the server document ────────────────────────────────────────
+  // ── Set up Appwrite client ─────────────────────────────────────────────
   const client = new Client()
     .setEndpoint(config.public.appwriteEndpoint as string)
     .setProject(projectId)
@@ -88,6 +81,54 @@ export default defineEventHandler(async (event) => {
   const databases = new Databases(client);
   const DATABASE_ID = "discord_bot";
   const COLLECTION_ID = "servers";
+
+  // ── Check dashboard_role_ids if user lacks ADMINISTRATOR ──────────────
+  if (!hasAdminPerm) {
+    let hasDashboardRole = false;
+    try {
+      const serverDoc = await databases.getDocument(
+        DATABASE_ID,
+        COLLECTION_ID,
+        guild_id,
+      );
+      const dashboardRoles: string[] = Array.isArray(
+        serverDoc.dashboard_role_ids,
+      )
+        ? serverDoc.dashboard_role_ids
+        : [];
+
+      if (dashboardRoles.length > 0) {
+        const discordUid = getCookie(
+          event,
+          `discord_uid_${projectId}`,
+        );
+        if (discordUid) {
+          const botToken = config.discordBotToken as string;
+          if (botToken) {
+            const member: any = await $fetch(
+              `https://discord.com/api/v10/guilds/${guild_id}/members/${discordUid}`,
+              { headers: { Authorization: `Bot ${botToken}` } },
+            ).catch(() => null);
+            if (member?.roles) {
+              hasDashboardRole = member.roles.some((r: string) =>
+                dashboardRoles.includes(r),
+              );
+            }
+          }
+        }
+      }
+    } catch {
+      // Server doc not found — will be caught below
+    }
+
+    if (!hasDashboardRole) {
+      throw createError({
+        statusCode: 403,
+        statusMessage:
+          "You do not have Administrator permission or a dashboard role on this Discord server.",
+      });
+    }
+  }
 
   try {
     // Fetch the existing server document
