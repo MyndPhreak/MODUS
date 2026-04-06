@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.10.0...modus-v1.11.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **api:** add role-based dashboard access endpoints ([22baa09](https://github.com/MyndPhreak/MODUS/commit/22baa092f00d60633f6ce66325dd4c71f4222334))
+* **bot:** add dashboard_role_ids field to servers collection schema ([11e20c2](https://github.com/MyndPhreak/MODUS/commit/11e20c2dc1e62c199907710ea4dbb52ee62678eb))
+* **web:** add granular role-based dashboard access control ([7e356dc](https://github.com/MyndPhreak/MODUS/commit/7e356dc791be01698326b34b3b2f62e1822ca967))
+
 ## [1.10.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.9.0...modus-v1.10.0) (2026-04-05)
 
 
