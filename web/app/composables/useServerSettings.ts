@@ -10,6 +10,8 @@ export interface ServerSettingsState {
   rolesLoading: boolean;
   loading: boolean;
   unauthorized: boolean;
+  dashboardRoleIds: string[];
+  isServerOwnerOrAdmin: boolean;
 }
 
 const databaseId = "discord_bot";
@@ -30,6 +32,8 @@ export function useServerSettings(guildId: string) {
       rolesLoading: false,
       loading: true,
       unauthorized: false,
+      dashboardRoleIds: [],
+      isServerOwnerOrAdmin: false,
     }),
   );
 
@@ -283,30 +287,47 @@ export function useServerSettings(guildId: string) {
         discordGuilds = userStore.userGuilds;
       }
 
+      // Check Discord ADMINISTRATOR permission first
+      let currentGuild: any = null;
+      let hasDiscordAdmin = false;
       if (discordGuilds && discordGuilds.length > 0) {
-        const currentGuild = discordGuilds.find((g: any) => g.id === guildId);
+        currentGuild = discordGuilds.find((g: any) => g.id === guildId);
         if (currentGuild) {
           const ADMIN_PERMISSION = 0x8;
           const permissions = BigInt(currentGuild.permissions);
-          if (
+          hasDiscordAdmin =
             (permissions & BigInt(ADMIN_PERMISSION)) ===
-            BigInt(ADMIN_PERMISSION)
-          ) {
-            state.value.guild = currentGuild;
-            return;
-          } else {
-            state.value.unauthorized = true;
-            return;
-          }
+            BigInt(ADMIN_PERMISSION);
         }
       }
 
+      // Load Appwrite server document for ownership + dashboard role data
+      let serverDoc: any = null;
       try {
-        const serverDoc = await databases.getDocument(
+        serverDoc = await databases.getDocument(
           databaseId,
           "servers",
           guildId,
         );
+        // Populate dashboard role IDs for the settings UI
+        state.value.dashboardRoleIds = Array.isArray(
+          serverDoc.dashboard_role_ids,
+        )
+          ? serverDoc.dashboard_role_ids
+          : [];
+      } catch {
+        // Document not found or permission denied
+      }
+
+      // Discord ADMINISTRATOR → full access
+      if (hasDiscordAdmin) {
+        state.value.isServerOwnerOrAdmin = true;
+        state.value.guild = currentGuild;
+        return;
+      }
+
+      // Appwrite owner / admin_user_ids → full access
+      if (serverDoc) {
         const userId = userStore.user?.$id;
         const isOwner = serverDoc.owner_id === userId;
         const isAdmin =
@@ -315,7 +336,8 @@ export function useServerSettings(guildId: string) {
           serverDoc.admin_user_ids.includes(userId);
 
         if (isOwner || isAdmin) {
-          state.value.guild = {
+          state.value.isServerOwnerOrAdmin = true;
+          state.value.guild = currentGuild || {
             id: serverDoc.$id,
             name: serverDoc.name,
             icon: null,
@@ -324,8 +346,43 @@ export function useServerSettings(guildId: string) {
           };
           return;
         }
-      } catch {
-        // Document not found or permission denied
+
+        // Fallback: check dashboard_role_ids — specific Discord roles
+        // that the server owner has granted dashboard access to
+        if (
+          state.value.dashboardRoleIds.length > 0 &&
+          userStore.discordId
+        ) {
+          try {
+            const memberResponse = await $fetch<{ roles: string[] }>(
+              "/api/discord/member-roles",
+              {
+                params: {
+                  guild_id: guildId,
+                  discord_uid: userStore.discordId,
+                },
+              },
+            );
+
+            const userRoles = memberResponse.roles || [];
+            const hasRole = userRoles.some((r) =>
+              state.value.dashboardRoleIds.includes(r),
+            );
+
+            if (hasRole) {
+              state.value.guild = currentGuild || {
+                id: serverDoc.$id,
+                name: serverDoc.name,
+                icon: serverDoc.icon || null,
+                owner: false,
+                permissions: "0",
+              };
+              return;
+            }
+          } catch {
+            // Bot may not be in the guild or member not found
+          }
+        }
       }
 
       state.value.unauthorized = true;
@@ -359,6 +416,34 @@ export function useServerSettings(guildId: string) {
       console.error("Error initializing settings:", error);
     } finally {
       state.value.loading = false;
+    }
+  };
+
+  // ── Dashboard Roles ──
+  const saveDashboardRoles = async (roleIds: string[]) => {
+    try {
+      await $fetch("/api/servers/dashboard-roles", {
+        method: "PATCH",
+        body: {
+          guild_id: guildId,
+          dashboard_role_ids: roleIds,
+        },
+      });
+      state.value.dashboardRoleIds = roleIds;
+      toast.add({
+        title: "Dashboard Roles Updated",
+        description: "Users with the selected roles can now access this server's dashboard.",
+        color: "success",
+      });
+      return true;
+    } catch (error) {
+      console.error("Error saving dashboard roles:", error);
+      toast.add({
+        title: "Error",
+        description: "Failed to update dashboard roles.",
+        color: "error",
+      });
+      return false;
     }
   };
 
@@ -416,6 +501,8 @@ export function useServerSettings(guildId: string) {
     initialize,
     fetchModules,
     fetchGuildConfigs,
+    // Dashboard roles
+    saveDashboardRoles,
     // Danger
     removeServer,
   };

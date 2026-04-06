@@ -13,8 +13,8 @@
         </h1>
       </div>
       <p class="text-gray-400 font-medium ml-14">
-        Select a server where you have administrative privileges to add it to
-        your management dashboard.
+        Select a server where you have administrative privileges or a
+        dashboard role to add it to your management dashboard.
       </p>
     </div>
 
@@ -87,8 +87,8 @@
       </div>
       <h3 class="text-2xl font-bold text-white mb-2">No servers found</h3>
       <p class="text-gray-400 mb-8 max-w-sm mx-auto">
-        We couldn't find any servers where you have administrator privileges.
-        Try refreshing your session.
+        We couldn't find any servers where you have administrator privileges
+        or a dashboard role. Try refreshing your session.
       </p>
       <UButton
         class="rounded-2xl px-10 py-3 bg-gradient-to-r from-purple-600 to-pink-600 font-bold"
@@ -152,10 +152,18 @@
               >Owner</UBadge
             >
             <UBadge
+              v-if="!dashboardRoleGuildIds.has(guild.id)"
               color="primary"
               variant="subtle"
               class="rounded-lg text-[10px] uppercase font-black tracking-widest px-2 py-0.5"
               >Admin</UBadge
+            >
+            <UBadge
+              v-else
+              color="info"
+              variant="subtle"
+              class="rounded-lg text-[10px] uppercase font-black tracking-widest px-2 py-0.5"
+              >Dashboard Role</UBadge
             >
             <!-- Show "Managed" badge if server exists in system but user isn't linked yet -->
             <UBadge
@@ -368,12 +376,15 @@ const botPermissionsList = [
   "Speak (Voice)",
 ];
 
+// Guild IDs the user has dashboard role access to (resolved async)
+const dashboardRoleGuildIds = ref<Set<string>>(new Set());
+
 const adminGuilds = computed(() => {
   return guilds.value.filter((guild: any) => {
     const permissions = BigInt(guild.permissions);
-    return (
-      (permissions & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION)
-    );
+    const isAdmin =
+      (permissions & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION);
+    return isAdmin || dashboardRoleGuildIds.value.has(guild.id);
   });
 });
 
@@ -494,12 +505,13 @@ const fetchGuilds = async () => {
         "No servers found. Please try logging in again to refresh your Discord connection.";
     }
 
-    // Load existing servers separately — this should succeed even if Discord API failed
+    // Load existing servers for ALL guilds the user is in (not just admin ones)
+    // so we can check dashboard_role_ids for non-admin guilds too
     try {
-      if (adminGuilds.value.length > 0) {
-        const guildIds = adminGuilds.value.map((g: any) => g.id).join(",");
+      if (guilds.value.length > 0) {
+        const allGuildIds = guilds.value.map((g: any) => g.id).join(",");
         const response = await fetch(
-          `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildIds)}`,
+          `/api/servers/by-guild-ids?ids=${encodeURIComponent(allGuildIds)}`,
           { credentials: "include" },
         );
         if (response.ok) {
@@ -508,6 +520,55 @@ const fetchGuilds = async () => {
       }
     } catch (dbErr) {
       console.warn("[Discover] Failed to load existing servers:", dbErr);
+    }
+
+    // Check dashboard role access for non-admin guilds that have dashboard_role_ids
+    try {
+      const discordUid = userStore.discordId;
+      if (discordUid) {
+        const serversWithRoles = existingServers.value.filter(
+          (s: any) =>
+            Array.isArray(s.dashboard_role_ids) &&
+            s.dashboard_role_ids.length > 0,
+        );
+
+        // For each server with dashboard roles, check if the user has a matching role
+        const roleChecks = serversWithRoles.map(async (server: any) => {
+          // Skip if user already has admin on this guild
+          const guild = guilds.value.find((g: any) => g.id === server.$id);
+          if (guild) {
+            const perms = BigInt(guild.permissions);
+            if (
+              (perms & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION)
+            )
+              return;
+          }
+
+          try {
+            const memberRes = await $fetch<{ roles: string[] }>(
+              "/api/discord/member-roles",
+              {
+                params: {
+                  guild_id: server.$id,
+                  discord_uid: discordUid,
+                },
+              },
+            );
+            const userRoles = memberRes.roles || [];
+            if (
+              userRoles.some((r) => server.dashboard_role_ids.includes(r))
+            ) {
+              dashboardRoleGuildIds.value.add(server.$id);
+            }
+          } catch {
+            // Bot not in guild or member not found — skip
+          }
+        });
+
+        await Promise.all(roleChecks);
+      }
+    } catch {
+      // Non-critical — admin guilds still work
     }
   } catch (err: any) {
     console.error("Fetch error:", err);

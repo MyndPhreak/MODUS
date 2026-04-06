@@ -76,6 +76,79 @@
       </div>
     </section>
 
+    <!-- Dashboard Access Roles (only visible to owner/admin) -->
+    <section v-if="state.isServerOwnerOrAdmin">
+      <h2 class="text-xl font-semibold mb-1">Dashboard Access</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Grant specific Discord roles access to this server's dashboard settings,
+        without requiring Administrator permission.
+      </p>
+      <UCard
+        :ui="{
+          root: 'border border-white/10',
+        }"
+      >
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 mb-2">
+            <div
+              class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
+            >
+              <UIcon name="i-heroicons-user-group" class="text-indigo-400" />
+            </div>
+            <div>
+              <h3 class="font-semibold text-white">Dashboard Roles</h3>
+              <p class="text-[10px] text-gray-500">
+                Users with these roles can view and manage this server in the
+                dashboard
+              </p>
+            </div>
+          </div>
+
+          <div
+            v-if="state.rolesLoading"
+            class="flex items-center gap-2 py-2"
+          >
+            <UIcon
+              name="i-heroicons-arrow-path"
+              class="animate-spin text-indigo-400"
+            />
+            <span class="text-sm text-gray-400">Loading roles...</span>
+          </div>
+          <USelectMenu
+            v-else-if="dashboardRoleOptions.length > 0"
+            v-model="selectedDashboardRoles"
+            :items="dashboardRoleOptions"
+            value-key="value"
+            multiple
+            placeholder="Select roles..."
+            class="w-full"
+            @update:model-value="dashboardRolesDirty = true"
+          />
+          <p v-else class="text-sm text-gray-500 py-2">
+            No roles available. Make sure the bot is in this server.
+          </p>
+
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-500">
+              {{ selectedDashboardRoles.length }} role{{
+                selectedDashboardRoles.length !== 1 ? "s" : ""
+              }}
+              selected
+            </p>
+            <UButton
+              color="primary"
+              size="sm"
+              :loading="savingDashboardRoles"
+              :disabled="!dashboardRolesDirty"
+              @click="handleSaveDashboardRoles"
+            >
+              Save Roles
+            </UButton>
+          </div>
+        </div>
+      </UCard>
+    </section>
+
     <!-- Danger Zone -->
     <section>
       <h2 class="text-base font-semibold mb-3 text-red-400">Danger Zone</h2>
@@ -153,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, computed } from "vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -163,11 +236,45 @@ const {
   hasModuleSettings,
   toggleModule,
   removeServer,
+  loadRoles,
+  saveDashboardRoles,
 } = useServerSettings(guildId);
 
 const updating = ref<string | null>(null);
 const showRemoveConfirm = ref(false);
 const removing = ref(false);
+
+// Dashboard roles state
+const selectedDashboardRoles = ref<string[]>([]);
+const dashboardRolesDirty = ref(false);
+const savingDashboardRoles = ref(false);
+
+// Build role options for the select menu (exclude managed/bot roles)
+const dashboardRoleOptions = computed(() =>
+  state.value.roles
+    .filter((r) => !r.managed)
+    .map((r) => ({
+      label: `@${r.name}`,
+      value: r.id,
+    })),
+);
+
+// Load roles and init selected values when section is visible
+onMounted(async () => {
+  if (state.value.isServerOwnerOrAdmin) {
+    await loadRoles();
+    selectedDashboardRoles.value = [...state.value.dashboardRoleIds];
+  }
+});
+
+const handleSaveDashboardRoles = async () => {
+  savingDashboardRoles.value = true;
+  const success = await saveDashboardRoles(selectedDashboardRoles.value);
+  if (success) {
+    dashboardRolesDirty.value = false;
+  }
+  savingDashboardRoles.value = false;
+};
 
 const handleToggle = async (moduleName: string, enabled: boolean) => {
   updating.value = moduleName;

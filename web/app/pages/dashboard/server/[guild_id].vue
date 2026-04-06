@@ -16,7 +16,8 @@
       />
       <h1 class="text-3xl font-bold mb-2">Access Denied</h1>
       <p class="text-gray-500 mb-8">
-        You do not have administrative privileges for this server.
+        You do not have administrative privileges or a dashboard role for this
+        server.
       </p>
       <UButton to="/dashboard" color="primary">Back to Dashboard</UButton>
     </div>
