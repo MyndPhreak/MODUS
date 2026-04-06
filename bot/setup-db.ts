@@ -83,6 +83,13 @@ const collections: CollectionDef[] = [
         required: false,
         array: true,
       },
+      {
+        key: "dashboard_role_ids",
+        type: "string",
+        size: 64,
+        required: false,
+        array: true,
+      },
     ],
     indexes: [
       { key: "idx_guild_id", type: "unique", attributes: ["guild_id"] },
