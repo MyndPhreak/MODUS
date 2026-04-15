@@ -238,13 +238,37 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
     const pendingInteraction = metadata?.pendingInteraction;
     if (pendingInteraction) {
       metadata.pendingInteraction = null;
-      pendingInteraction
+      const msg = await pendingInteraction
         .editReply({
           content: "",
           embeds: [embed],
           components: [buildNowPlayingButtons(false)],
         })
-        .catch(() => {});
+        .catch(() => null);
+      // Always store the message so playlist tracks can edit it later
+      if (msg) {
+        metadata.nowPlayingMessage = msg;
+      }
+    } else if (metadata?.isPlaylist && metadata?.nowPlayingMessage) {
+      // Playlist: edit the existing Now Playing embed instead of flooding
+      // the channel with a new message for every track.
+      await metadata.nowPlayingMessage
+        .edit({
+          embeds: [embed],
+          components: [buildNowPlayingButtons(false)],
+        })
+        .catch(() => {
+          // Message was deleted — fall back to sending a fresh one
+          channel
+            .send({
+              embeds: [embed],
+              components: [buildNowPlayingButtons(false)],
+            })
+            .then((msg: any) => {
+              metadata.nowPlayingMessage = msg;
+            })
+            .catch(() => {});
+        });
     } else {
       channel
         .send({
@@ -645,6 +669,17 @@ async function handlePlay(
 
     // Check max queue size
     const queue = player.queues.get(interaction.guildId!);
+
+    // If the search result was a playlist, mark the queue so playerStart
+    // edits the Now Playing embed instead of sending a new one per track.
+    const searchResult = (result as any).searchResult;
+    if (
+      queue &&
+      (searchResult?.playlist || (isUrl && (searchResult?.tracks?.length ?? 0) > 1))
+    ) {
+      (queue.metadata as any).isPlaylist = true;
+    }
+
     if (queue && queue.tracks.size > settings.maxQueueSize) {
       await interaction.editReply({
         content: `⚠️ Queue limit reached (${settings.maxQueueSize} tracks). Remove some tracks first.`,
@@ -1231,6 +1266,7 @@ async function handlePlayQueue(
           nodeOptions: {
             metadata: {
               channel: interaction.channel,
+              isPlaylist: true,
               // First track: let playerStart update the loading reply
               ...(i === 0 && { pendingInteraction: interaction }),
             },
