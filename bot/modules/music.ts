@@ -341,14 +341,6 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
       queue.guild.id,
       "music",
     );
-    const channel = (queue.metadata as any)?.channel;
-    if (channel) {
-      channel
-        .send({
-          content: `⚠️ Skipped **${track?.title}** — could not extract stream.`,
-        })
-        .catch(() => {});
-    }
   });
 
   // Note: discord-player debug logging removed — too noisy for production
