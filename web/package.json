@@ -27,7 +27,7 @@
     "tailwindcss": "latest",
     "vue": "^3.5.32",
     "vue-konva": "^3.4.0",
-    "vue-router": "^4.6.3",
+    "vue-router": "^5.0.4",
     "wavesurfer.js": "^7.12.6"
   },
   "devDependencies": {
