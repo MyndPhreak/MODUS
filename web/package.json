@@ -10,27 +10,27 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "^0.89.0",
     "@napi-rs/canvas": "^0.1.97",
     "@nuxt/ui": "latest",
     "@pinia/nuxt": "^0.11.3",
     "@tailwindcss/vite": "latest",
     "appwrite": "^21.4.0",
     "jszip": "^3.10.1",
-    "konva": "^10.2.0",
+    "konva": "^10.2.5",
     "lucide-vue-next": "latest",
     "node-appwrite": "^14.1.0",
-    "nuxt": "^4.2.1",
-    "openai": "^6.22.0",
+    "nuxt": "^4.4.2",
+    "openai": "^6.34.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "tailwindcss": "latest",
-    "vue": "^3.5.25",
-    "vue-konva": "^3.3.0",
+    "vue": "^3.5.32",
+    "vue-konva": "^3.4.0",
     "vue-router": "^4.6.3",
-    "wavesurfer.js": "^7.12.1"
+    "wavesurfer.js": "^7.12.6"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0"
+    "@types/node": "^25.6.0"
   }
 }
