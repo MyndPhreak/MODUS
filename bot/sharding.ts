@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import { AppwriteService } from "./AppwriteService";
 import { AlertsWorker } from "./AlertsWorker";
+import { createRedisClients, closeRedisClients } from "./RedisClient";
+import { EventBus } from "./EventBus";
 
 dotenv.config();
 
@@ -55,8 +57,14 @@ manager.on("shardCreate", (shard) => {
 console.log(`[Sharding] Starting with totalShards: ${manager.totalShards}`);
 
 manager.spawn().then(() => {
-  // Start AlertsWorker in the manager process (once, not per shard)
-  const appwrite = new AppwriteService();
+  // AlertsWorker runs in the manager process — singleton by virtue of this
+  // entry point, so no leader election is needed here. Redis is still
+  // handed in so the parent's AppwriteService publishes cache
+  // invalidations (e.g. alert state writes) to the shard processes.
+  const redisClients = createRedisClients();
+  const eventBus = redisClients ? new EventBus(redisClients) : null;
+
+  const appwrite = new AppwriteService({ eventBus });
   const alertsWorker = new AlertsWorker(appwrite, 10); // 10-minute polling interval
   alertsWorker.start();
 
@@ -64,6 +72,7 @@ manager.spawn().then(() => {
   const shutdown = (signal: string) => {
     console.log(`[Sharding] ${signal} received — stopping alerts worker`);
     alertsWorker.stop();
+    closeRedisClients(redisClients).catch(() => {});
     process.exit(0);
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
