@@ -1,11 +1,12 @@
 /**
- * Server-side endpoint to update a trigger.
+ * Update a trigger.
  *
  * Body (JSON):
- *   - trigger_id: string (required — Appwrite document $id)
- *   - data: object with fields to update (enabled, embed_template, filters, etc.)
+ *   - trigger_id: string (required)
+ *   - data: object with fields to update
  */
 import { Client, Databases } from "node-appwrite";
+import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -16,6 +17,23 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing required fields: trigger_id, data.",
     });
+  }
+
+  const repos = getRepos();
+  if (repos) {
+    try {
+      await repos.triggers.update(body.trigger_id, body.data);
+      return { success: true };
+    } catch (error: any) {
+      console.error(
+        "[Triggers API] Postgres update failed:",
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to update trigger.",
+      });
+    }
   }
 
   const client = new Client()
