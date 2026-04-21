@@ -54,11 +54,24 @@ export const useUserStore = defineStore("user", {
       return this.discord?.guilds || [];
     },
     /**
-     * Check if the current user has the "admin" label in Appwrite.
-     * Labels are managed from the Appwrite console — no env vars needed.
+     * True when the current user is a bot admin.
+     *
+     * Legacy (Appwrite): uses the `admin` label on the Appwrite user.
+     * Native: Appwrite users don't exist, so we fall back to the
+     * comma-separated NUXT_PUBLIC_BOT_ADMIN_IDS env (also consulted as a
+     * fallback in legacy mode so an operator can grant admin without
+     * touching Appwrite).
      */
     isAdmin(): boolean {
-      return this.user?.labels?.includes("admin") ?? false;
+      if (this.user?.labels?.includes("admin")) return true;
+      const discordId = this.discord?.id;
+      if (!discordId) return false;
+      const config = useRuntimeConfig();
+      const adminIds = (config.public.botAdminIds || "")
+        .split(",")
+        .map((id: string) => id.trim())
+        .filter(Boolean);
+      return adminIds.includes(discordId);
     },
   },
 
@@ -149,6 +162,26 @@ export const useUserStore = defineStore("user", {
     async _fetchUserSessionImpl() {
       const { account, client } = this.getAppwrite();
       const config = useRuntimeConfig();
+
+      // ── Detect which auth backend owns the current request ────────────
+      // /api/auth/session returns { backend: "native" | "appwrite" | null }.
+      // Native mode skips the Appwrite SDK entirely.
+      let backend: "native" | "appwrite" | null = null;
+      try {
+        const status = await $fetch<{
+          backend: "native" | "appwrite" | null;
+          user: { id: string } | null;
+        }>("/api/auth/session", { credentials: "include" });
+        backend = status.backend;
+      } catch {
+        // /api/auth/session failure is non-fatal — fall through to Appwrite.
+        backend = null;
+      }
+
+      if (backend === "native") {
+        await this._hydrateFromNativeSession();
+        return;
+      }
 
       try {
         // Try to use the session secret from our cookie (set by server-side OAuth callback)
@@ -292,6 +325,70 @@ export const useUserStore = defineStore("user", {
       }
     },
 
+    /**
+     * Hydrate from the native sealed-cookie session.
+     *
+     * No Appwrite SDK calls — the profile + guilds come from /api/discord/me
+     * which reads the sealed session server-side and pulls fresh data from
+     * Discord (with silent token refresh when needed). On native auth the
+     * Pinia `user` / `session` slots aren't populated; callers that need
+     * Appwrite-shaped user data should rely on the `discord` slot.
+     */
+    async _hydrateFromNativeSession() {
+      this.isLoggedIn = true;
+      this.user = null;
+      this.session = null;
+
+      let profileData: any = null;
+      let guildsData: any[] = [];
+
+      try {
+        const response = await fetch("/api/discord/me", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          profileData = data.profile;
+          guildsData = data.guilds || [];
+        }
+      } catch (err) {
+        console.warn("[UserStore] /api/discord/me failed (native):", err);
+      }
+
+      if (!profileData) {
+        this.clearState();
+        return;
+      }
+
+      const avatarHash = profileData.avatar || this.discord?.avatar;
+      const discordId = profileData.id;
+      const avatarUrl = avatarHash
+        ? `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.${avatarHash.startsWith("a_") ? "gif" : "webp"}?size=256`
+        : `https://cdn.discordapp.com/embed/avatars/${(parseInt(profileData.discriminator) || 0) % 5}.png`;
+
+      this.discord = {
+        id: discordId,
+        username:
+          profileData.username ||
+          profileData.global_name ||
+          this.discord?.username ||
+          "User",
+        discriminator: profileData.discriminator || "0",
+        avatar: avatarHash,
+        avatarUrl,
+        guilds:
+          guildsData.length > 0
+            ? guildsData.map((g: any) => ({
+                id: g.id,
+                name: g.name,
+                icon: g.icon,
+                owner: g.owner,
+                permissions: g.permissions,
+              }))
+            : [],
+      };
+    },
+
     syncCookies(sessionId: string, userId: string) {
       const config = useRuntimeConfig();
       const cookieOpts = {
@@ -345,12 +442,26 @@ export const useUserStore = defineStore("user", {
     },
 
     async logout() {
+      // Best-effort Appwrite server-side session delete — silently skipped
+      // in native mode (no active Appwrite session) but still attempted so
+      // a legacy session is torn down if one exists.
       const { account } = this.getAppwrite();
       try {
         await account.deleteSession("current");
-      } catch (error) {
-        console.error("Error deleting session:", error);
+      } catch {
+        // No active Appwrite session, or network blip — proceed either way.
       }
+
+      // Clear every cookie on our domain, native + legacy, in one server call.
+      try {
+        await $fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch (err) {
+        console.warn("[UserStore] /api/auth/logout failed:", err);
+      }
+
       this.clearState();
       this.clearCookies();
       navigateTo("/login");
