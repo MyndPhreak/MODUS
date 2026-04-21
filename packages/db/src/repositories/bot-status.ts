@@ -5,10 +5,35 @@
  * multi-shard fleets never collide on upserts.
  */
 import type { Database } from "../client";
-import { botStatus } from "../schema";
+import { botStatus, type BotStatus } from "../schema";
+
+export type BotStatusDoc = BotStatus & {
+  $id: string;
+  bot_id: string;
+  last_seen: string;
+  shard_id: number;
+  total_shards: number;
+};
+
+function toDoc(row: BotStatus): BotStatusDoc {
+  return {
+    ...row,
+    $id: row.id,
+    bot_id: row.botId,
+    last_seen: row.lastSeen.toISOString(),
+    shard_id: row.shardId,
+    total_shards: row.totalShards,
+  };
+}
 
 export class BotStatusRepository {
   constructor(private db: Database) {}
+
+  /** Used by the public /api/stats endpoint to count online shards. */
+  async listAll(limit = 50): Promise<BotStatusDoc[]> {
+    const rows = await this.db.select().from(botStatus).limit(limit);
+    return rows.map(toDoc);
+  }
 
   async updateHeartbeat(
     botId: string,
