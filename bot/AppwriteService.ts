@@ -26,51 +26,8 @@ import {
   TempVoiceChannelRepository,
   TriggerRepository,
 } from "@modus/db";
-
-// ── In-Memory TTL Cache ────────────────────────────────────────────
-
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
-
-class TTLCache<T> {
-  private store = new Map<string, CacheEntry<T>>();
-  private readonly ttlMs: number;
-
-  constructor(ttlSeconds = 60) {
-    this.ttlMs = ttlSeconds * 1000;
-  }
-
-  get(key: string): T | undefined {
-    const entry = this.store.get(key);
-    if (!entry) return undefined;
-    if (Date.now() > entry.expiresAt) {
-      this.store.delete(key);
-      return undefined;
-    }
-    return entry.data;
-  }
-
-  set(key: string, data: T): void {
-    this.store.set(key, { data, expiresAt: Date.now() + this.ttlMs });
-  }
-
-  invalidate(key: string): void {
-    this.store.delete(key);
-  }
-
-  /** Invalidate all entries whose key starts with the given prefix. */
-  invalidatePrefix(prefix: string): void {
-    for (const key of this.store.keys()) {
-      if (key.startsWith(prefix)) this.store.delete(key);
-    }
-  }
-
-  get size(): number {
-    return this.store.size;
-  }
-}
+import { CacheService } from "./CacheService";
+import type { EventBus } from "./EventBus";
 
 // ── Appwrite Service ──────────────────────────────────────────────
 
@@ -119,10 +76,22 @@ export class AppwriteService {
   public tempVoiceRepo: TempVoiceChannelRepository | null = null;
   public triggerRepo: TriggerRepository | null = null;
 
-  // TTL cache for guild config lookups (60s default)
-  private configCache = new TTLCache<any>(60);
+  /**
+   * TTL cache for guild config + tag lookups.
+   *
+   * When an EventBus is handed in (i.e. Redis is available), every
+   * invalidation fans out to other shards so writes on shard A become
+   * visible on shard B within a pub/sub round-trip. Without an EventBus,
+   * this behaves exactly like the previous in-process TTLCache.
+   */
+  private configCache: CacheService<any>;
 
-  constructor() {
+  constructor(opts: { eventBus?: EventBus | null } = {}) {
+    this.configCache = new CacheService<any>({
+      ttlSeconds: 60,
+      eventBus: opts.eventBus ?? null,
+    });
+
     this.client = new Client()
       .setEndpoint(process.env.APPWRITE_ENDPOINT!)
       .setProject(process.env.APPWRITE_PROJECT_ID!)
@@ -460,8 +429,7 @@ export class AppwriteService {
       this.configCache.invalidatePrefix(`enabled:${guildId}:`);
       this.configCache.invalidatePrefix(`settings:${guildId}:`);
     } else {
-      // Invalidate everything
-      this.configCache.invalidatePrefix("");
+      this.configCache.invalidateAll();
     }
   }
 
