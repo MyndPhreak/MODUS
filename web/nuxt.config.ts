@@ -33,6 +33,12 @@ export default defineNuxtConfig({
     r2Bucket: "modus-recordings", // Set via NUXT_R2_BUCKET
     r2Endpoint: "", // Set via NUXT_R2_ENDPOINT (optional override)
     r2PresignTtl: "300", // Set via NUXT_R2_PRESIGN_TTL
+    // ── Postgres (recordings) ─────────────────────────────────────────────
+    // When usePostgresRecordings is "true", recording list/delete endpoints
+    // read from Postgres instead of Appwrite. Must match the bot's
+    // USE_POSTGRES_RECORDINGS setting.
+    usePostgresRecordings: "false", // Set via NUXT_USE_POSTGRES_RECORDINGS
+    databaseUrl: "", // Set via NUXT_DATABASE_URL
     public: {
       appwriteEndpoint: "https://api.ppo.gg/v1", // Set via NUXT_PUBLIC_APPWRITE_ENDPOINT
       appwriteProjectId: "69266f6e00118a9f6b58", // Set via NUXT_PUBLIC_APPWRITE_PROJECT_ID

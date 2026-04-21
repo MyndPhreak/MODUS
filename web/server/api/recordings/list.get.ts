@@ -1,12 +1,15 @@
 /**
- * Server-side endpoint to list recordings for a guild.
- * Uses the Appwrite API key (server-side only) to bypass document-level
- * permissions, since recordings are created by the bot with no client permissions.
+ * List recordings for a guild.
+ *
+ * Routes to Postgres when NUXT_USE_POSTGRES_RECORDINGS=true, otherwise reads
+ * from Appwrite. The returned shape is identical either way (snake_case +
+ * `$id` fields) so the dashboard doesn't branch on backend.
  *
  * Query params:
  *   - guild_id: The Discord guild ID to filter by (required)
  */
 import { Client, Databases, Query } from "node-appwrite";
+import { getRecordingRepo } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -20,6 +23,23 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const repo = getRecordingRepo();
+  if (repo) {
+    try {
+      return await repo.listByGuild(guildId, 100);
+    } catch (error: any) {
+      console.error(
+        `[Recordings API] Postgres list failed for guild ${guildId}:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to fetch recordings.",
+      });
+    }
+  }
+
+  // Appwrite fallback.
   const client = new Client()
     .setEndpoint(config.public.appwriteEndpoint as string)
     .setProject(config.public.appwriteProjectId as string)
