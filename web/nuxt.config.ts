@@ -23,6 +23,16 @@ export default defineNuxtConfig({
     // Base URL of the bot's HTTP server (server-side only, never sent to browser)
     // Docker: http://bot:3005  |  Non-Docker: https://modus-bot.ppo.gg
     botWebhookUrl: "http://bot:3005", // Set via NUXT_BOT_WEBHOOK_URL
+    // ── Recording storage (R2) ────────────────────────────────────────────
+    // When useR2Storage is "true", stream/delete endpoints talk to R2 instead
+    // of Appwrite Storage. See web/.env.example for NUXT_R2_* details.
+    useR2Storage: "false", // Set via NUXT_USE_R2_STORAGE
+    r2AccountId: "", // Set via NUXT_R2_ACCOUNT_ID
+    r2AccessKeyId: "", // Set via NUXT_R2_ACCESS_KEY_ID
+    r2SecretAccessKey: "", // Set via NUXT_R2_SECRET_ACCESS_KEY
+    r2Bucket: "modus-recordings", // Set via NUXT_R2_BUCKET
+    r2Endpoint: "", // Set via NUXT_R2_ENDPOINT (optional override)
+    r2PresignTtl: "300", // Set via NUXT_R2_PRESIGN_TTL
     public: {
       appwriteEndpoint: "https://api.ppo.gg/v1", // Set via NUXT_PUBLIC_APPWRITE_ENDPOINT
       appwriteProjectId: "69266f6e00118a9f6b58", // Set via NUXT_PUBLIC_APPWRITE_PROJECT_ID

@@ -1,12 +1,31 @@
 /**
- * Server-side endpoint to fully delete a recording and all associated data.
- * Deletes: all per-user track files, track documents, mixed file, and recording document.
+ * Fully delete a recording and every file referenced by it.
+ * Deletes: all per-user track files, track documents, mixed file, and
+ * the recording document itself. Files are removed from whichever backend
+ * owns them (R2 or Appwrite) based on the shape of the stored file IDs.
  *
  * Body:
  *   - recording_id: The recording document ID (required)
  *   - guild_id: The guild ID for validation (required)
  */
 import { Client, Databases, Storage, Query } from "node-appwrite";
+import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
+
+async function removeFile(storage: Storage, fileId: string) {
+  if (getR2() && looksLikeR2Key(fileId)) {
+    try {
+      await deleteR2Object(fileId);
+    } catch {
+      // best-effort — already gone is fine
+    }
+    return;
+  }
+  try {
+    await storage.deleteFile("recordings", fileId);
+  } catch {
+    // best-effort
+  }
+}
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -31,7 +50,7 @@ export default defineEventHandler(async (event) => {
   const storage = new Storage(client);
 
   try {
-    // 1. Fetch the recording to verify it belongs to this guild
+    // 1. Verify ownership
     const recording = await databases.getDocument(
       "discord_bot",
       "recordings",
@@ -45,7 +64,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // 2. Delete all tracks and their files
+    // 2. Delete tracks (files + documents)
     const tracksRes = await databases.listDocuments(
       "discord_bot",
       "recording_tracks",
@@ -53,13 +72,7 @@ export default defineEventHandler(async (event) => {
     );
 
     for (const track of tracksRes.documents) {
-      // Delete the audio file from storage
-      try {
-        await storage.deleteFile("recordings", track.file_id);
-      } catch {
-        // File may already be deleted — continue
-      }
-      // Delete the track document
+      await removeFile(storage, track.file_id);
       await databases.deleteDocument(
         "discord_bot",
         "recording_tracks",
@@ -67,13 +80,9 @@ export default defineEventHandler(async (event) => {
       );
     }
 
-    // 3. Delete the mixed file if present
+    // 3. Delete the mixed file
     if (recording.mixed_file_id) {
-      try {
-        await storage.deleteFile("recordings", recording.mixed_file_id);
-      } catch {
-        // File may already be deleted
-      }
+      await removeFile(storage, recording.mixed_file_id);
     }
 
     // 4. Delete the recording document
@@ -81,7 +90,6 @@ export default defineEventHandler(async (event) => {
 
     return { success: true, deletedTracks: tracksRes.documents.length };
   } catch (error: any) {
-    // Re-throw if it's already a createError
     if (error.statusCode) throw error;
 
     console.error(

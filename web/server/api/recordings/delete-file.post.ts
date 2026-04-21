@@ -1,12 +1,15 @@
 /**
- * Server-side endpoint to delete a file from the recordings storage bucket.
- * Uses the Appwrite API key (server-side only) since client SDK lacks
- * storage file deletion permissions.
+ * Delete a single file from recording storage.
+ *
+ * Routes by key shape: "/"-containing keys go to R2 (when enabled), plain IDs
+ * go to Appwrite Storage. Keeps the same request contract so the dashboard
+ * doesn't need to know which backend a file lives on.
  *
  * Body:
- *   - fileId: The Appwrite storage file ID to delete
+ *   - fileId: Appwrite file ID or R2 object key
  */
 import { Client, Storage } from "node-appwrite";
+import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -20,6 +23,24 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // R2 path.
+  if (getR2() && looksLikeR2Key(fileId)) {
+    try {
+      await deleteR2Object(fileId);
+      return { success: true };
+    } catch (error: any) {
+      console.error(
+        `[Recordings API] Error deleting R2 object ${fileId}:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to delete recording file.",
+      });
+    }
+  }
+
+  // Appwrite fallback.
   const client = new Client()
     .setEndpoint(config.public.appwriteEndpoint as string)
     .setProject(config.public.appwriteProjectId as string)
