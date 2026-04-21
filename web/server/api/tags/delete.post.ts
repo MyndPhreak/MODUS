@@ -1,11 +1,12 @@
 /**
- * Server-side endpoint to delete a tag.
+ * Delete a tag.
  *
  * POST body:
- *   - tag_id: string (document ID)
+ *   - tag_id: string
  *   - guild_id: string
  */
 import { Client, Databases } from "node-appwrite";
+import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -18,6 +19,20 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing required fields: tag_id, guild_id.",
     });
+  }
+
+  const repos = getRepos();
+  if (repos) {
+    try {
+      await repos.tags.delete(tag_id);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[Tags API] Postgres delete failed:", error?.message || error);
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to delete tag.",
+      });
+    }
   }
 
   const client = new Client()

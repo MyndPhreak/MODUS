@@ -1,10 +1,14 @@
 /**
- * Server-side endpoint to list triggers for a guild.
+ * List triggers for a guild.
+ *
+ * Routes to Postgres when NUXT_USE_POSTGRES=true; otherwise reads from
+ * Appwrite.
  *
  * Query params:
  *   - guild_id: The Discord guild ID (required)
  */
 import { Client, Databases, Query } from "node-appwrite";
+import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -16,6 +20,23 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing guild_id query parameter.",
     });
+  }
+
+  const repos = getRepos();
+  if (repos) {
+    try {
+      const documents = await repos.triggers.listByGuild(guildId);
+      return { documents, total: documents.length };
+    } catch (error: any) {
+      console.error(
+        `[Triggers API] Postgres list failed for ${guildId}:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to fetch triggers.",
+      });
+    }
   }
 
   const client = new Client()

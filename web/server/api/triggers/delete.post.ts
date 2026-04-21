@@ -1,10 +1,11 @@
 /**
- * Server-side endpoint to delete a trigger.
+ * Delete a trigger.
  *
  * Body (JSON):
- *   - trigger_id: string (required — Appwrite document $id)
+ *   - trigger_id: string (required)
  */
 import { Client, Databases } from "node-appwrite";
+import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -15,6 +16,23 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing required field: trigger_id.",
     });
+  }
+
+  const repos = getRepos();
+  if (repos) {
+    try {
+      await repos.triggers.delete(body.trigger_id);
+      return { success: true };
+    } catch (error: any) {
+      console.error(
+        "[Triggers API] Postgres delete failed:",
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to delete trigger.",
+      });
+    }
   }
 
   const client = new Client()
