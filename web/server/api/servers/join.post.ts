@@ -13,6 +13,7 @@
  */
 import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
+import { getResolvedDiscordId, requireAuthedUserId } from "../../utils/session";
 
 const ADMIN_PERMISSION = BigInt(0x8);
 
@@ -20,16 +21,7 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  // Auth guard
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  const userId = getCookie(event, `a_user_${projectId}`);
-
-  if (!sessionSecret || !userId) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized: No session found.",
-    });
-  }
+  const { userId } = await requireAuthedUserId(event);
 
   const body = await readBody(event);
   const { guild_id } = body || {};
@@ -133,7 +125,7 @@ export default defineEventHandler(async (event) => {
     const dashboardRoles = existing.dashboard_role_ids;
 
     if (dashboardRoles.length > 0) {
-      const discordUid = getCookie(event, `discord_uid_${projectId}`);
+      const discordUid = await getResolvedDiscordId(event);
       if (discordUid) {
         const botToken = config.discordBotToken as string;
         if (botToken) {

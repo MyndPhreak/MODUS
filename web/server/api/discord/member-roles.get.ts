@@ -6,13 +6,22 @@
  *   - guild_id: The Discord guild ID
  *   - discord_uid: The Discord user ID
  */
+import { isNativeAuthEnabled } from "../../utils/session";
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  // ── Auth guard ─────────────────────────────────────────────────────────
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  if (!sessionSecret) {
+  // Auth guard: accept either a native session or the legacy Appwrite cookie.
+  let authenticated = false;
+  if (isNativeAuthEnabled()) {
+    const session = await getUserSession(event);
+    if (session.user?.id) authenticated = true;
+  }
+  if (!authenticated) {
+    authenticated = !!getCookie(event, `a_session_${projectId}`);
+  }
+  if (!authenticated) {
     throw createError({
       statusCode: 401,
       statusMessage: "Unauthorized: No session found.",

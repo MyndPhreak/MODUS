@@ -9,18 +9,13 @@
  */
 import { Client, Databases, Query } from "node-appwrite";
 import { getRepos } from "../../utils/db";
+import { requireAuthedUserId } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  if (!sessionSecret) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized: No session found.",
-    });
-  }
+  await requireAuthedUserId(event);
 
   const query = getQuery(event);
   const idsParam = (query.ids as string) || "";
