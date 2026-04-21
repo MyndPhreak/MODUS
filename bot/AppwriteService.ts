@@ -3,6 +3,14 @@ import { Client, Databases, Query, Storage, ID } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
 import { Client as AppwriteClient } from "appwrite";
 import WebSocket from "ws";
+import { Readable } from "stream";
+import {
+  StorageService,
+  trackKey,
+  mixedKey,
+  recordingPrefix,
+  looksLikeR2Key,
+} from "./StorageService";
 
 // ── In-Memory TTL Cache ────────────────────────────────────────────
 
@@ -72,6 +80,9 @@ export class AppwriteService {
   private triggersCollectionId = "triggers";
   public storage: Storage;
 
+  /** R2 storage for recordings. Null when USE_R2_STORAGE is not set. */
+  public r2: StorageService | null = null;
+
   // TTL cache for guild config lookups (60s default)
   private configCache = new TTLCache<any>(60);
 
@@ -83,6 +94,20 @@ export class AppwriteService {
 
     this.databases = new Databases(this.client);
     this.storage = new Storage(this.client);
+
+    // R2 object storage for recordings. Opt-in via USE_R2_STORAGE=true.
+    // Existing Appwrite-hosted recordings stay reachable because download
+    // helpers detect the key shape and route accordingly.
+    if (process.env.USE_R2_STORAGE === "true") {
+      const r2Config = StorageService.fromEnv();
+      if (r2Config) {
+        this.r2 = new StorageService(r2Config);
+      } else {
+        console.warn(
+          "[AppwriteService] USE_R2_STORAGE=true but R2_* env vars are incomplete — falling back to Appwrite Storage.",
+        );
+      }
+    }
 
     // Required for Appwrite Realtime in Node.js
     if (typeof global !== "undefined") {
@@ -473,7 +498,17 @@ export class AppwriteService {
   }
 
   // ── Recording Storage ──────────────────────────────────────────────────
+  //
+  // Dual-backend: when r2 is initialized, new uploads go to R2 and the
+  // returned "file ID" is actually an R2 object key. Legacy Appwrite file IDs
+  // keep working because the helpers detect the key shape (looksLikeR2Key).
 
+  /**
+   * Appwrite-only buffer upload. Use for paths that don't have guild/recording
+   * context (announce clips, legacy callers). The recording pipeline calls
+   * `uploadRecordingTrack` / `uploadRecordingMix` instead so keys can be
+   * organized by session.
+   */
   async uploadRecordingFile(
     fileBuffer: Buffer,
     fileName: string,
@@ -486,17 +521,99 @@ export class AppwriteService {
     return file.$id;
   }
 
+  /** Upload a per-user track. Streams from disk when R2 is enabled. */
+  async uploadRecordingTrack(params: {
+    guildId: string;
+    recordingId: string;
+    userId: string;
+    filePath: string;
+    fileBuffer?: Buffer;
+  }): Promise<string> {
+    if (this.r2) {
+      const key = trackKey(
+        params.guildId,
+        params.recordingId,
+        params.userId,
+        Date.now(),
+      );
+      const fs = await import("fs");
+      const body = params.fileBuffer
+        ? Readable.from(params.fileBuffer)
+        : fs.createReadStream(params.filePath);
+      await this.r2.uploadStream(key, body, "audio/ogg");
+      return key;
+    }
+    const fs = await import("fs");
+    const buffer = params.fileBuffer ?? fs.readFileSync(params.filePath);
+    return this.uploadRecordingFile(
+      buffer,
+      `${params.userId}_${params.guildId}_${Date.now()}.ogg`,
+    );
+  }
+
+  /** Upload a mixed session file. Streams from disk when R2 is enabled. */
+  async uploadRecordingMix(params: {
+    guildId: string;
+    recordingId: string;
+    filePath: string;
+    fileBuffer?: Buffer;
+  }): Promise<string> {
+    if (this.r2) {
+      const key = mixedKey(params.guildId, params.recordingId, Date.now());
+      const fs = await import("fs");
+      const body = params.fileBuffer
+        ? Readable.from(params.fileBuffer)
+        : fs.createReadStream(params.filePath);
+      await this.r2.uploadStream(key, body, "audio/ogg");
+      return key;
+    }
+    const fs = await import("fs");
+    const buffer = params.fileBuffer ?? fs.readFileSync(params.filePath);
+    return this.uploadRecordingFile(
+      buffer,
+      `mixed_${params.guildId}_${Date.now()}.ogg`,
+    );
+  }
+
   async deleteRecordingFile(fileId: string) {
+    if (this.r2 && looksLikeR2Key(fileId)) {
+      await this.r2.delete(fileId);
+      return;
+    }
     await this.storage.deleteFile(this.recordingsBucketId, fileId);
   }
 
+  /** Bulk delete every object under a recording's R2 prefix. */
+  async deleteRecordingPrefix(
+    guildId: string,
+    recordingId: string,
+  ): Promise<void> {
+    if (!this.r2) return;
+    const prefix = recordingPrefix(guildId, recordingId);
+    const keys = await this.r2.listPrefix(prefix);
+    await this.r2.deleteMany(keys);
+  }
+
   getRecordingFileUrl(fileId: string): string {
+    // Legacy helper — kept for non-streaming callers. R2 files need presigned
+    // URLs (see `getRecordingFileSignedUrl`), so this only handles Appwrite.
     const endpoint = process.env.APPWRITE_ENDPOINT!;
     const projectId = process.env.APPWRITE_PROJECT_ID!;
     return `${endpoint}/storage/buckets/${this.recordingsBucketId}/files/${fileId}/view?project=${projectId}`;
   }
 
+  /** Signed playback URL. Works for both R2 and Appwrite-backed files. */
+  async getRecordingFileSignedUrl(fileId: string): Promise<string> {
+    if (this.r2 && looksLikeR2Key(fileId)) {
+      return this.r2.presignGet(fileId);
+    }
+    return this.getRecordingFileUrl(fileId);
+  }
+
   async getRecordingFileBuffer(fileId: string): Promise<Buffer> {
+    if (this.r2 && looksLikeR2Key(fileId)) {
+      return this.r2.getBuffer(fileId);
+    }
     const result = await this.storage.getFileView(
       this.recordingsBucketId,
       fileId,
@@ -550,7 +667,39 @@ export class AppwriteService {
     return response.documents;
   }
 
+  /**
+   * Return recordings whose `started_at` is older than the given ISO cutoff.
+   * Used by the retention worker to find deletion candidates.
+   */
+  async getRecordingsOlderThan(
+    cutoffIso: string,
+    limit = 100,
+  ): Promise<any[]> {
+    const response = await this.databases.listDocuments(
+      this.databaseId,
+      this.recordingsCollectionId,
+      [
+        Query.lessThan("started_at", cutoffIso),
+        Query.orderAsc("started_at"),
+        Query.limit(limit),
+      ],
+    );
+    return response.documents;
+  }
+
   async deleteRecording(recordingId: string) {
+    // Fetch the recording up front so we have its guild id for R2 prefix deletes.
+    let recording: any;
+    try {
+      recording = await this.databases.getDocument(
+        this.databaseId,
+        this.recordingsCollectionId,
+        recordingId,
+      );
+    } catch {
+      recording = null;
+    }
+
     // Delete tracks first
     const tracks = await this.databases.listDocuments(
       this.databaseId,
@@ -559,7 +708,7 @@ export class AppwriteService {
     );
     for (const track of tracks.documents) {
       try {
-        await this.storage.deleteFile(this.recordingsBucketId, track.file_id);
+        await this.deleteRecordingFile(track.file_id);
       } catch {}
       await this.databases.deleteDocument(
         this.databaseId,
@@ -569,17 +718,17 @@ export class AppwriteService {
     }
 
     // Delete mixed file
-    const recording = await this.databases.getDocument(
-      this.databaseId,
-      this.recordingsCollectionId,
-      recordingId,
-    );
-    if (recording.mixed_file_id) {
+    if (recording?.mixed_file_id) {
       try {
-        await this.storage.deleteFile(
-          this.recordingsBucketId,
-          recording.mixed_file_id,
-        );
+        await this.deleteRecordingFile(recording.mixed_file_id);
+      } catch {}
+    }
+
+    // Sweep any orphaned R2 objects under this session's prefix (belt and
+    // suspenders — catches files whose DB rows were lost).
+    if (this.r2 && recording?.guild_id) {
+      try {
+        await this.deleteRecordingPrefix(recording.guild_id, recordingId);
       } catch {}
     }
 

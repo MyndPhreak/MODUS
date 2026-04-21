@@ -612,13 +612,15 @@ async function stopRecording(
           continue;
         }
 
-        const fileBuffer = fs.readFileSync(stream.tempFilePath);
-        const fileName = `${stream.username}_${session.guildId}_${Date.now()}.ogg`;
-
-        const fileId = await moduleManager.appwriteService.uploadRecordingFile(
-          fileBuffer,
-          fileName,
-        );
+        // Streams the temp file to storage — avoids buffering the whole OGG
+        // in memory. For R2, this becomes a multipart upload under a
+        // `recordings/<guildId>/<recordingId>/...` key.
+        const fileId = await moduleManager.appwriteService.uploadRecordingTrack({
+          guildId: session.guildId,
+          recordingId,
+          userId,
+          filePath: stream.tempFilePath,
+        });
 
         await moduleManager.appwriteService.createRecordingTrack({
           recording_id: recordingId,
@@ -747,11 +749,11 @@ async function generateMixedTrack(
   // Single file: encode and upload it directly (skip amix overhead)
   if (inputs.length === 1) {
     try {
-      const buffer = fs.readFileSync(inputs[0].tempPath);
-      const fileId = await moduleManager.appwriteService.uploadRecordingFile(
-        buffer,
-        `mixed_${session.guildId}_${Date.now()}.ogg`,
-      );
+      const fileId = await moduleManager.appwriteService.uploadRecordingMix({
+        guildId: session.guildId,
+        recordingId,
+        filePath: inputs[0].tempPath,
+      });
       if (inputs[0].ownsFile) {
         try {
           fs.unlinkSync(inputs[0].tempPath);
@@ -835,11 +837,11 @@ async function generateMixedTrack(
       }
 
       try {
-        const mixedBuffer = fs.readFileSync(mixedPath);
-        const fileId = await moduleManager.appwriteService.uploadRecordingFile(
-          mixedBuffer,
-          `mixed_${session.guildId}_${Date.now()}.ogg`,
-        );
+        const fileId = await moduleManager.appwriteService.uploadRecordingMix({
+          guildId: session.guildId,
+          recordingId,
+          filePath: mixedPath,
+        });
         fs.unlinkSync(mixedPath);
         resolve(fileId);
       } catch (err) {
