@@ -1,17 +1,16 @@
-import { Client, Databases } from "node-appwrite";
-
 /**
  * POST /api/servers/add
  *
- * Creates a new server document in Appwrite.
- * Uses the admin API key so we don't need broad client write permissions.
- * Sets the calling user as owner and initial admin.
+ * Registers a new server with the calling user as owner + initial admin.
+ * Returns 409 on duplicate.
  */
+import { Client, Databases } from "node-appwrite";
+import { getRepos } from "../../utils/db";
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  // ── Auth guard ─────────────────────────────────────────────────────────
   const sessionSecret = getCookie(event, `a_session_${projectId}`);
   const userId = getCookie(event, `a_user_${projectId}`);
 
@@ -30,6 +29,37 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing required fields: guild_id, name.",
     });
+  }
+
+  const repos = getRepos();
+  if (repos) {
+    try {
+      const doc = await repos.servers.createForGuild({
+        guild_id,
+        name,
+        icon: icon ?? null,
+        owner_id: userId,
+      });
+      return {
+        $id: doc.$id,
+        guild_id: doc.guild_id,
+        name: doc.name,
+        icon: doc.icon,
+        owner_id: doc.owner_id,
+      };
+    } catch (error: any) {
+      if (error?.code === "DUPLICATE_SERVER") {
+        throw createError({
+          statusCode: 409,
+          statusMessage: "This server is already registered.",
+        });
+      }
+      console.error("[Add Server API] Postgres error:", error?.message || error);
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to add server.",
+      });
+    }
   }
 
   const client = new Client()
@@ -65,7 +95,6 @@ export default defineEventHandler(async (event) => {
       owner_id: doc.owner_id,
     };
   } catch (err: any) {
-    // Duplicate key — server already exists
     if (err.code === 409) {
       throw createError({
         statusCode: 409,
