@@ -8,22 +8,16 @@
  */
 import { Client, Databases, Query } from "node-appwrite";
 import { getRepos } from "../../utils/db";
+import { requireAuthedUserId } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  // Auth guard — cookies still come from the Appwrite session for now.
-  // Phase 4 swaps this for nuxt-auth-utils; kept unchanged here.
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  const userId = getCookie(event, `a_user_${projectId}`);
-
-  if (!sessionSecret || !userId) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized: No session found.",
-    });
-  }
+  // Auth guard: native session first, legacy Appwrite cookie fallback.
+  // Data filtering uses whatever userId the active flow provides — see the
+  // note in .env.example about the key-space split between the two backends.
+  const { userId } = await requireAuthedUserId(event);
 
   const repos = getRepos();
   if (repos) {

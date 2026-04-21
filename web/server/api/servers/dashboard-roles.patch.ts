@@ -10,20 +10,13 @@
  */
 import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
+import { requireAuthedUserId } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  const userId = getCookie(event, `a_user_${projectId}`);
-
-  if (!sessionSecret || !userId) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized: No session found.",
-    });
-  }
+  const { userId } = await requireAuthedUserId(event);
 
   const body = await readBody(event);
   const { guild_id, dashboard_role_ids } = body || {};
