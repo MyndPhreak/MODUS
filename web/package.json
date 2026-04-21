@@ -24,6 +24,7 @@
     "lucide-vue-next": "latest",
     "node-appwrite": "^14.1.0",
     "nuxt": "^4.4.2",
+    "nuxt-auth-utils": "^0.5.25",
     "openai": "^6.34.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
