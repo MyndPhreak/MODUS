@@ -11,6 +11,7 @@ import {
   recordingPrefix,
   looksLikeR2Key,
 } from "./StorageService";
+import { createDb, RecordingRepository } from "@modus/db";
 
 // ── In-Memory TTL Cache ────────────────────────────────────────────
 
@@ -83,6 +84,9 @@ export class AppwriteService {
   /** R2 storage for recordings. Null when USE_R2_STORAGE is not set. */
   public r2: StorageService | null = null;
 
+  /** Postgres-backed recording repository. Null when USE_POSTGRES_RECORDINGS is off. */
+  public recordingRepo: RecordingRepository | null = null;
+
   // TTL cache for guild config lookups (60s default)
   private configCache = new TTLCache<any>(60);
 
@@ -106,6 +110,29 @@ export class AppwriteService {
         console.warn(
           "[AppwriteService] USE_R2_STORAGE=true but R2_* env vars are incomplete — falling back to Appwrite Storage.",
         );
+      }
+    }
+
+    // Postgres-backed recording metadata. Opt-in via USE_POSTGRES_RECORDINGS.
+    // When off, all recording CRUD keeps flowing through Appwrite exactly as
+    // before. When on, new recordings land in Postgres; historical Appwrite
+    // data is copied by packages/db/scripts/migrate-recordings.ts.
+    if (process.env.USE_POSTGRES_RECORDINGS === "true") {
+      if (!process.env.DATABASE_URL) {
+        console.warn(
+          "[AppwriteService] USE_POSTGRES_RECORDINGS=true but DATABASE_URL is unset — falling back to Appwrite.",
+        );
+      } else {
+        try {
+          const { db } = createDb();
+          this.recordingRepo = new RecordingRepository(db);
+        } catch (err) {
+          console.warn(
+            `[AppwriteService] Failed to init Postgres recording repo (${
+              err instanceof Error ? err.message : String(err)
+            }) — falling back to Appwrite.`,
+          );
+        }
       }
     }
 
@@ -622,6 +649,11 @@ export class AppwriteService {
   }
 
   // ── Recording Metadata ─────────────────────────────────────────────────
+  //
+  // All recording CRUD dispatches to the Postgres repository when it's
+  // initialized (USE_POSTGRES_RECORDINGS=true) and falls back to Appwrite
+  // otherwise. The `$id`/snake_case aliases on RecordingDoc keep callers
+  // that rely on Appwrite's document shape working unchanged.
 
   async createRecording(data: {
     guild_id: string;
@@ -636,6 +668,9 @@ export class AppwriteService {
     bitrate?: number;
     multitrack?: boolean;
   }): Promise<string> {
+    if (this.recordingRepo) {
+      return this.recordingRepo.create(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.recordingsCollectionId,
@@ -646,6 +681,10 @@ export class AppwriteService {
   }
 
   async updateRecording(recordingId: string, data: Record<string, any>) {
+    if (this.recordingRepo) {
+      await this.recordingRepo.update(recordingId, data);
+      return;
+    }
     await this.databases.updateDocument(
       this.databaseId,
       this.recordingsCollectionId,
@@ -655,6 +694,9 @@ export class AppwriteService {
   }
 
   async getRecordings(guildId: string, limit = 50): Promise<any[]> {
+    if (this.recordingRepo) {
+      return this.recordingRepo.listByGuild(guildId, limit);
+    }
     const response = await this.databases.listDocuments(
       this.databaseId,
       this.recordingsCollectionId,
@@ -675,6 +717,9 @@ export class AppwriteService {
     cutoffIso: string,
     limit = 100,
   ): Promise<any[]> {
+    if (this.recordingRepo) {
+      return this.recordingRepo.listOlderThan(cutoffIso, limit);
+    }
     const response = await this.databases.listDocuments(
       this.databaseId,
       this.recordingsCollectionId,
@@ -688,7 +733,33 @@ export class AppwriteService {
   }
 
   async deleteRecording(recordingId: string) {
-    // Fetch the recording up front so we have its guild id for R2 prefix deletes.
+    if (this.recordingRepo) {
+      // Postgres path: delete rows in a single transaction via FK cascade,
+      // then remove the referenced files from object storage. If file
+      // deletion fails we still return, because the DB side is authoritative
+      // — orphaned R2 objects get swept by the prefix delete below.
+      const { recording, tracks } =
+        await this.recordingRepo.deleteWithTracks(recordingId);
+
+      for (const track of tracks) {
+        try {
+          await this.deleteRecordingFile(track.file_id);
+        } catch {}
+      }
+      if (recording?.mixed_file_id) {
+        try {
+          await this.deleteRecordingFile(recording.mixed_file_id);
+        } catch {}
+      }
+      if (this.r2 && recording?.guild_id) {
+        try {
+          await this.deleteRecordingPrefix(recording.guild_id, recordingId);
+        } catch {}
+      }
+      return;
+    }
+
+    // Appwrite fallback (unchanged from prior behavior).
     let recording: any;
     try {
       recording = await this.databases.getDocument(
@@ -700,7 +771,6 @@ export class AppwriteService {
       recording = null;
     }
 
-    // Delete tracks first
     const tracks = await this.databases.listDocuments(
       this.databaseId,
       this.recordingTracksCollectionId,
@@ -717,22 +787,18 @@ export class AppwriteService {
       );
     }
 
-    // Delete mixed file
     if (recording?.mixed_file_id) {
       try {
         await this.deleteRecordingFile(recording.mixed_file_id);
       } catch {}
     }
 
-    // Sweep any orphaned R2 objects under this session's prefix (belt and
-    // suspenders — catches files whose DB rows were lost).
     if (this.r2 && recording?.guild_id) {
       try {
         await this.deleteRecordingPrefix(recording.guild_id, recordingId);
       } catch {}
     }
 
-    // Delete recording document
     await this.databases.deleteDocument(
       this.databaseId,
       this.recordingsCollectionId,
@@ -752,6 +818,9 @@ export class AppwriteService {
     start_offset?: number;
     segments?: string;
   }): Promise<string> {
+    if (this.recordingRepo) {
+      return this.recordingRepo.createTrack(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.recordingTracksCollectionId,
@@ -762,6 +831,9 @@ export class AppwriteService {
   }
 
   async getRecordingTracks(recordingId: string): Promise<any[]> {
+    if (this.recordingRepo) {
+      return this.recordingRepo.listTracks(recordingId);
+    }
     const response = await this.databases.listDocuments(
       this.databaseId,
       this.recordingTracksCollectionId,
