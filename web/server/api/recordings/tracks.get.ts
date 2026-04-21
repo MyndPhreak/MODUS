@@ -1,11 +1,14 @@
 /**
- * Server-side endpoint to list recording tracks for a specific recording.
- * Uses the Appwrite API key to bypass document-level permissions.
+ * List tracks for a recording.
+ *
+ * Routes to Postgres when NUXT_USE_POSTGRES_RECORDINGS=true, otherwise reads
+ * from Appwrite. Shape matches Appwrite's document model on both paths.
  *
  * Query params:
  *   - recording_id: The recording document ID (required)
  */
 import { Client, Databases, Query } from "node-appwrite";
+import { getRecordingRepo } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -17,6 +20,22 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Missing recording_id query parameter.",
     });
+  }
+
+  const repo = getRecordingRepo();
+  if (repo) {
+    try {
+      return await repo.listTracks(recordingId);
+    } catch (error: any) {
+      console.error(
+        `[Recordings API] Postgres track list failed for ${recordingId}:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to fetch recording tracks.",
+      });
+    }
   }
 
   const client = new Client()

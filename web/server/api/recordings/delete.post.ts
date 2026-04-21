@@ -1,8 +1,14 @@
 /**
  * Fully delete a recording and every file referenced by it.
- * Deletes: all per-user track files, track documents, mixed file, and
- * the recording document itself. Files are removed from whichever backend
- * owns them (R2 or Appwrite) based on the shape of the stored file IDs.
+ *
+ * Two DB backends:
+ *   - **Postgres** (NUXT_USE_POSTGRES_RECORDINGS=true): delete rows in a
+ *     transaction via FK cascade, then remove files from object storage.
+ *     Atomic — either all rows are gone or none are.
+ *   - **Appwrite** fallback: iterate tracks, delete each row + file, then
+ *     the recording document. Best-effort (non-transactional).
+ *
+ * File deletion routes per `file_id` shape: slash → R2, else Appwrite.
  *
  * Body:
  *   - recording_id: The recording document ID (required)
@@ -10,6 +16,7 @@
  */
 import { Client, Databases, Storage, Query } from "node-appwrite";
 import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
+import { getRecordingRepo } from "../../utils/db";
 
 async function removeFile(storage: Storage, fileId: string) {
   if (getR2() && looksLikeR2Key(fileId)) {
@@ -46,11 +53,50 @@ export default defineEventHandler(async (event) => {
     .setProject(config.public.appwriteProjectId as string)
     .setKey(config.appwriteApiKey as string);
 
-  const databases = new Databases(client);
   const storage = new Storage(client);
 
+  // Postgres path: single transaction, then file cleanup.
+  const repo = getRecordingRepo();
+  if (repo) {
+    try {
+      const existing = await repo.getById(recordingId);
+      if (!existing) {
+        throw createError({ statusCode: 404, statusMessage: "Recording not found." });
+      }
+      if (existing.guild_id !== guildId) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: "Recording does not belong to this guild.",
+        });
+      }
+
+      const { recording, tracks } = await repo.deleteWithTracks(recordingId);
+
+      for (const track of tracks) {
+        await removeFile(storage, track.file_id);
+      }
+      if (recording?.mixed_file_id) {
+        await removeFile(storage, recording.mixed_file_id);
+      }
+
+      return { success: true, deletedTracks: tracks.length };
+    } catch (error: any) {
+      if (error.statusCode) throw error;
+      console.error(
+        `[Recordings API] Postgres delete failed for ${recordingId}:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to delete recording.",
+      });
+    }
+  }
+
+  // Appwrite fallback.
+  const databases = new Databases(client);
+
   try {
-    // 1. Verify ownership
     const recording = await databases.getDocument(
       "discord_bot",
       "recordings",
@@ -64,7 +110,6 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // 2. Delete tracks (files + documents)
     const tracksRes = await databases.listDocuments(
       "discord_bot",
       "recording_tracks",
@@ -80,12 +125,10 @@ export default defineEventHandler(async (event) => {
       );
     }
 
-    // 3. Delete the mixed file
     if (recording.mixed_file_id) {
       await removeFile(storage, recording.mixed_file_id);
     }
 
-    // 4. Delete the recording document
     await databases.deleteDocument("discord_bot", "recordings", recordingId);
 
     return { success: true, deletedTracks: tracksRes.documents.length };
