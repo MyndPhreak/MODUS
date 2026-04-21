@@ -1,0 +1,4 @@
+packages:
+  - "bot"
+  - "web"
+  - "packages/*"
