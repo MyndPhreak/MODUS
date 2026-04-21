@@ -11,7 +11,21 @@ import {
   recordingPrefix,
   looksLikeR2Key,
 } from "./StorageService";
-import { createDb, RecordingRepository } from "@modus/db";
+import {
+  createDb,
+  RecordingRepository,
+  GuildConfigRepository,
+  ServerRepository,
+  ModuleRepository,
+  BotStatusRepository,
+  LogRepository,
+  MilestoneUserRepository,
+  AutomodRuleRepository,
+  AIUsageLogRepository,
+  TagRepository,
+  TempVoiceChannelRepository,
+  TriggerRepository,
+} from "@modus/db";
 
 // ── In-Memory TTL Cache ────────────────────────────────────────────
 
@@ -87,6 +101,24 @@ export class AppwriteService {
   /** Postgres-backed recording repository. Null when USE_POSTGRES_RECORDINGS is off. */
   public recordingRepo: RecordingRepository | null = null;
 
+  /**
+   * Postgres-backed repositories for everything else. All null unless
+   * USE_POSTGRES=true and DATABASE_URL is set. Populated together so we
+   * don't end up with half-Postgres / half-Appwrite reads within a single
+   * feature flag.
+   */
+  public guildConfigRepo: GuildConfigRepository | null = null;
+  public serverRepo: ServerRepository | null = null;
+  public moduleRepo: ModuleRepository | null = null;
+  public botStatusRepo: BotStatusRepository | null = null;
+  public logRepo: LogRepository | null = null;
+  public milestoneRepo: MilestoneUserRepository | null = null;
+  public automodRepo: AutomodRuleRepository | null = null;
+  public aiUsageRepo: AIUsageLogRepository | null = null;
+  public tagRepo: TagRepository | null = null;
+  public tempVoiceRepo: TempVoiceChannelRepository | null = null;
+  public triggerRepo: TriggerRepository | null = null;
+
   // TTL cache for guild config lookups (60s default)
   private configCache = new TTLCache<any>(60);
 
@@ -113,22 +145,46 @@ export class AppwriteService {
       }
     }
 
-    // Postgres-backed recording metadata. Opt-in via USE_POSTGRES_RECORDINGS.
-    // When off, all recording CRUD keeps flowing through Appwrite exactly as
-    // before. When on, new recordings land in Postgres; historical Appwrite
-    // data is copied by packages/db/scripts/migrate-recordings.ts.
-    if (process.env.USE_POSTGRES_RECORDINGS === "true") {
+    // Postgres-backed repositories.
+    //
+    // Two flags control the rollout:
+    //   - USE_POSTGRES=true  → every domain (recordings, configs, logs, …)
+    //   - USE_POSTGRES_RECORDINGS=true → recordings only (narrow opt-in,
+    //     kept for the users who migrated in the first phase)
+    //
+    // The repos share a single pg Pool; creating them all up-front avoids
+    // per-request connection churn.
+    const wantPostgres = process.env.USE_POSTGRES === "true";
+    const wantPostgresRecordings =
+      wantPostgres || process.env.USE_POSTGRES_RECORDINGS === "true";
+
+    if (wantPostgresRecordings || wantPostgres) {
       if (!process.env.DATABASE_URL) {
         console.warn(
-          "[AppwriteService] USE_POSTGRES_RECORDINGS=true but DATABASE_URL is unset — falling back to Appwrite.",
+          "[AppwriteService] USE_POSTGRES=true but DATABASE_URL is unset — falling back to Appwrite.",
         );
       } else {
         try {
           const { db } = createDb();
-          this.recordingRepo = new RecordingRepository(db);
+          if (wantPostgresRecordings) {
+            this.recordingRepo = new RecordingRepository(db);
+          }
+          if (wantPostgres) {
+            this.guildConfigRepo = new GuildConfigRepository(db);
+            this.serverRepo = new ServerRepository(db);
+            this.moduleRepo = new ModuleRepository(db);
+            this.botStatusRepo = new BotStatusRepository(db);
+            this.logRepo = new LogRepository(db);
+            this.milestoneRepo = new MilestoneUserRepository(db);
+            this.automodRepo = new AutomodRuleRepository(db);
+            this.aiUsageRepo = new AIUsageLogRepository(db);
+            this.tagRepo = new TagRepository(db);
+            this.tempVoiceRepo = new TempVoiceChannelRepository(db);
+            this.triggerRepo = new TriggerRepository(db);
+          }
         } catch (err) {
           console.warn(
-            `[AppwriteService] Failed to init Postgres recording repo (${
+            `[AppwriteService] Failed to init Postgres repositories (${
               err instanceof Error ? err.message : String(err)
             }) — falling back to Appwrite.`,
           );
@@ -157,6 +213,17 @@ export class AppwriteService {
   }
 
   async getGuildConfigs(guildId: string): Promise<any[]> {
+    if (this.guildConfigRepo) {
+      try {
+        return await this.guildConfigRepo.listByGuild(guildId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres listByGuild failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -177,6 +244,23 @@ export class AppwriteService {
     const cacheKey = `enabled:${guildId}:${moduleName.toLowerCase()}`;
     const cached = this.configCache.get(cacheKey);
     if (cached !== undefined) return cached as boolean;
+
+    if (this.guildConfigRepo) {
+      try {
+        const enabled = await this.guildConfigRepo.isModuleEnabled(
+          guildId,
+          moduleName,
+        );
+        this.configCache.set(cacheKey, enabled);
+        return enabled;
+      } catch (error: any) {
+        console.error(
+          `[AppwriteService] Postgres isModuleEnabled failed for ${guildId}/${moduleName}:`,
+          error?.message || error,
+        );
+        return true;
+      }
+    }
 
     try {
       const response = await this.databases.listDocuments(
@@ -201,13 +285,28 @@ export class AppwriteService {
   }
 
   async setModuleStatus(guildId: string, moduleName: string, enabled: boolean) {
+    const name = moduleName.toLowerCase();
+    if (this.guildConfigRepo) {
+      try {
+        await this.guildConfigRepo.setModuleStatus(guildId, name, enabled);
+        this.configCache.invalidate(`enabled:${guildId}:${name}`);
+        this.configCache.invalidate(`settings:${guildId}:${name}`);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres setModuleStatus failed for ${guildId}/${moduleName}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.guildConfigsCollectionId,
         [
           Query.equal("guildId", guildId),
-          Query.equal("moduleName", moduleName.toLowerCase()),
+          Query.equal("moduleName", name),
         ],
       );
 
@@ -225,20 +324,15 @@ export class AppwriteService {
           "unique()",
           {
             guildId,
-            moduleName: moduleName.toLowerCase(),
+            moduleName: name,
             enabled,
             settings: "{}",
           },
         );
       }
 
-      // Invalidate cache for this module
-      this.configCache.invalidate(
-        `enabled:${guildId}:${moduleName.toLowerCase()}`,
-      );
-      this.configCache.invalidate(
-        `settings:${guildId}:${moduleName.toLowerCase()}`,
-      );
+      this.configCache.invalidate(`enabled:${guildId}:${name}`);
+      this.configCache.invalidate(`settings:${guildId}:${name}`);
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module status for ${guildId}/${moduleName}:`,
@@ -254,6 +348,23 @@ export class AppwriteService {
     const cacheKey = `settings:${guildId}:${moduleName.toLowerCase()}`;
     const cached = this.configCache.get(cacheKey);
     if (cached !== undefined) return cached as Record<string, any>;
+
+    if (this.guildConfigRepo) {
+      try {
+        const settings = await this.guildConfigRepo.getModuleSettings(
+          guildId,
+          moduleName,
+        );
+        this.configCache.set(cacheKey, settings);
+        return settings;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getModuleSettings failed for ${guildId}/${moduleName}:`,
+          error,
+        );
+        return {};
+      }
+    }
 
     try {
       const response = await this.databases.listDocuments(
@@ -285,13 +396,28 @@ export class AppwriteService {
     moduleName: string,
     settings: Record<string, any>,
   ) {
+    const name = moduleName.toLowerCase();
+    if (this.guildConfigRepo) {
+      try {
+        await this.guildConfigRepo.setModuleSettings(guildId, name, settings);
+        this.configCache.invalidate(`settings:${guildId}:${name}`);
+        this.configCache.invalidate(`enabled:${guildId}:${name}`);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres setModuleSettings failed for ${guildId}/${moduleName}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
         this.guildConfigsCollectionId,
         [
           Query.equal("guildId", guildId),
-          Query.equal("moduleName", moduleName.toLowerCase()),
+          Query.equal("moduleName", name),
         ],
       );
 
@@ -311,20 +437,15 @@ export class AppwriteService {
           "unique()",
           {
             guildId,
-            moduleName: moduleName.toLowerCase(),
+            moduleName: name,
             enabled: true,
             settings: settingsJson,
           },
         );
       }
 
-      // Invalidate cache for this module
-      this.configCache.invalidate(
-        `settings:${guildId}:${moduleName.toLowerCase()}`,
-      );
-      this.configCache.invalidate(
-        `enabled:${guildId}:${moduleName.toLowerCase()}`,
-      );
+      this.configCache.invalidate(`settings:${guildId}:${name}`);
+      this.configCache.invalidate(`enabled:${guildId}:${name}`);
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module settings for ${guildId}/${moduleName}:`,
@@ -367,6 +488,14 @@ export class AppwriteService {
   }
 
   async getEnabledModules(): Promise<string[]> {
+    if (this.moduleRepo) {
+      try {
+        return await this.moduleRepo.listEnabled();
+      } catch (error) {
+        console.error("[AppwriteService] Postgres listEnabled failed:", error);
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -381,6 +510,14 @@ export class AppwriteService {
   }
 
   async getServers(): Promise<any[]> {
+    if (this.serverRepo) {
+      try {
+        return await this.serverRepo.listAll();
+      } catch (error) {
+        console.error("[AppwriteService] Postgres server list failed:", error);
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -402,6 +539,26 @@ export class AppwriteService {
     name: string,
     shardId: number,
   ) {
+    if (this.serverRepo) {
+      try {
+        await this.serverRepo.updateStatus(
+          serverId,
+          guildId,
+          status,
+          memberCount,
+          icon,
+          name,
+          shardId,
+        );
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres updateServerStatus failed for ${serverId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       await this.databases.updateDocument(
         this.databaseId,
@@ -432,6 +589,18 @@ export class AppwriteService {
     shardId?: number,
     source?: string,
   ) {
+    if (this.logRepo) {
+      try {
+        await this.logRepo.log({ guildId, message, level, shardId, source });
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres logServerMessage failed for ${guildId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const data: Record<string, any> = {
         guildId,
@@ -462,6 +631,20 @@ export class AppwriteService {
     shardId: number,
     totalShards: number,
   ) {
+    if (this.botStatusRepo) {
+      try {
+        await this.botStatusRepo.updateHeartbeat(
+          botId,
+          version,
+          shardId,
+          totalShards,
+        );
+        return;
+      } catch (error) {
+        console.error("[AppwriteService] Postgres heartbeat failed:", error);
+        return;
+      }
+    }
     try {
       const documentId = `shard-${shardId}`;
       const data = {
@@ -473,7 +656,6 @@ export class AppwriteService {
       };
 
       try {
-        // Try to update existing document by ID
         await this.databases.updateDocument(
           this.databaseId,
           this.botStatusCollectionId,
@@ -481,7 +663,6 @@ export class AppwriteService {
           data,
         );
       } catch (error: any) {
-        // If not found (404), create it
         if (error.code === 404) {
           await this.databases.createDocument(
             this.databaseId,
@@ -499,6 +680,18 @@ export class AppwriteService {
   }
 
   async ensureModuleRegistered(moduleName: string, description: string) {
+    if (this.moduleRepo) {
+      try {
+        await this.moduleRepo.ensureRegistered(moduleName, description);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres ensureRegistered failed for ${moduleName}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -845,6 +1038,17 @@ export class AppwriteService {
   // ── Milestone Tracking ──────────────────────────────────────────────────
 
   async getMilestoneUser(guildId: string, userId: string): Promise<any | null> {
+    if (this.milestoneRepo) {
+      try {
+        return await this.milestoneRepo.getByGuildAndUser(guildId, userId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getMilestoneUser failed for ${guildId}/${userId}:`,
+          error,
+        );
+        return null;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -874,6 +1078,9 @@ export class AppwriteService {
     notification_pref: string;
     opted_in: boolean;
   }): Promise<string> {
+    if (this.milestoneRepo) {
+      return this.milestoneRepo.create(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.milestoneUsersCollectionId,
@@ -887,6 +1094,10 @@ export class AppwriteService {
     docId: string,
     data: Record<string, any>,
   ): Promise<void> {
+    if (this.milestoneRepo) {
+      await this.milestoneRepo.update(docId, data);
+      return;
+    }
     await this.databases.updateDocument(
       this.databaseId,
       this.milestoneUsersCollectionId,
@@ -900,6 +1111,17 @@ export class AppwriteService {
     limit: number,
     offset: number,
   ): Promise<{ users: any[]; total: number }> {
+    if (this.milestoneRepo) {
+      try {
+        return await this.milestoneRepo.getLeaderboard(guildId, limit, offset);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres leaderboard failed for ${guildId}:`,
+          error,
+        );
+        return { users: [], total: 0 };
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -926,6 +1148,17 @@ export class AppwriteService {
     guildId: string,
     charCount: number,
   ): Promise<number> {
+    if (this.milestoneRepo) {
+      try {
+        return await this.milestoneRepo.getRank(guildId, charCount);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getRank failed for ${guildId}:`,
+          error,
+        );
+        return 0;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -950,6 +1183,17 @@ export class AppwriteService {
   // ── AutoMod Rules ──────────────────────────────────────────────────────
 
   async getAutoModRules(guildId: string, trigger?: string): Promise<any[]> {
+    if (this.automodRepo) {
+      try {
+        return await this.automodRepo.listByGuild(guildId, trigger);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres automod list failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const queries = [Query.equal("guild_id", guildId), Query.limit(100)];
       if (trigger) {
@@ -974,6 +1218,17 @@ export class AppwriteService {
     guildId: string,
     trigger: string,
   ): Promise<any[]> {
+    if (this.automodRepo) {
+      try {
+        return await this.automodRepo.listEnabledByTrigger(guildId, trigger);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres enabled automod list failed for ${guildId}/${trigger}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1008,6 +1263,9 @@ export class AppwriteService {
     cooldown?: number;
     created_by?: string;
   }): Promise<string> {
+    if (this.automodRepo) {
+      return this.automodRepo.create(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.automodRulesCollectionId,
@@ -1024,6 +1282,10 @@ export class AppwriteService {
     ruleId: string,
     data: Record<string, any>,
   ): Promise<void> {
+    if (this.automodRepo) {
+      await this.automodRepo.update(ruleId, data);
+      return;
+    }
     await this.databases.updateDocument(
       this.databaseId,
       this.automodRulesCollectionId,
@@ -1036,6 +1298,10 @@ export class AppwriteService {
   }
 
   async deleteAutoModRule(ruleId: string): Promise<void> {
+    if (this.automodRepo) {
+      await this.automodRepo.delete(ruleId);
+      return;
+    }
     await this.databases.deleteDocument(
       this.databaseId,
       this.automodRulesCollectionId,
@@ -1047,6 +1313,14 @@ export class AppwriteService {
   // Stored as guild_configs { guildId: "__global__", moduleName: "ai" }
 
   async getGlobalAIConfig(): Promise<Record<string, any> | null> {
+    if (this.guildConfigRepo) {
+      try {
+        return await this.guildConfigRepo.getGlobalAIConfig();
+      } catch (error) {
+        console.error("[AppwriteService] Postgres getGlobalAIConfig failed:", error);
+        return null;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1071,6 +1345,15 @@ export class AppwriteService {
   }
 
   async setGlobalAIConfig(config: Record<string, any>): Promise<void> {
+    if (this.guildConfigRepo) {
+      try {
+        await this.guildConfigRepo.setGlobalAIConfig(config);
+        return;
+      } catch (error) {
+        console.error("[AppwriteService] Postgres setGlobalAIConfig failed:", error);
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1120,6 +1403,15 @@ export class AppwriteService {
     action?: string;
     key_source: "guild" | "shared";
   }): Promise<void> {
+    if (this.aiUsageRepo) {
+      try {
+        await this.aiUsageRepo.log(data);
+        return;
+      } catch (error) {
+        console.error("[AppwriteService] Postgres logAIUsage failed:", error);
+        return;
+      }
+    }
     try {
       await this.databases.createDocument(
         this.databaseId,
@@ -1137,6 +1429,17 @@ export class AppwriteService {
   }
 
   async getAIUsageLogs(guildId: string, limit = 50): Promise<any[]> {
+    if (this.aiUsageRepo) {
+      try {
+        return await this.aiUsageRepo.listByGuild(guildId, limit);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getAIUsageLogs failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1160,6 +1463,17 @@ export class AppwriteService {
   // ── Premium Guild Management ─────────────────────────────────
 
   async isGuildPremium(guildId: string): Promise<boolean> {
+    if (this.serverRepo) {
+      try {
+        return await this.serverRepo.isPremium(guildId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres isPremium failed for ${guildId}:`,
+          error,
+        );
+        return false;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1180,6 +1494,18 @@ export class AppwriteService {
   }
 
   async setGuildPremium(guildId: string, premium: boolean): Promise<void> {
+    if (this.serverRepo) {
+      try {
+        await this.serverRepo.setPremium(guildId, premium);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres setPremium failed for ${guildId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1205,6 +1531,17 @@ export class AppwriteService {
   // ── Tags ─────────────────────────────────────────────────────────
 
   async getTags(guildId: string): Promise<any[]> {
+    if (this.tagRepo) {
+      try {
+        return await this.tagRepo.listByGuild(guildId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getTags failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1225,6 +1562,20 @@ export class AppwriteService {
     const cacheKey = `tag:${guildId}:${name.toLowerCase()}`;
     const cached = this.configCache.get(cacheKey);
     if (cached !== undefined) return cached;
+
+    if (this.tagRepo) {
+      try {
+        const tag = await this.tagRepo.getByName(guildId, name);
+        this.configCache.set(cacheKey, tag);
+        return tag;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getTagByName failed for ${guildId}/${name}:`,
+          error,
+        );
+        return null;
+      }
+    }
 
     try {
       const response = await this.databases.listDocuments(
@@ -1256,6 +1607,13 @@ export class AppwriteService {
     allowed_roles?: string;
     created_by?: string;
   }): Promise<string> {
+    if (this.tagRepo) {
+      const id = await this.tagRepo.create(data);
+      this.configCache.invalidate(
+        `tag:${data.guild_id}:${data.name.toLowerCase()}`,
+      );
+      return id;
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.tagsCollectionId,
@@ -1273,6 +1631,13 @@ export class AppwriteService {
   }
 
   async updateTag(tagId: string, data: Record<string, any>): Promise<void> {
+    if (this.tagRepo) {
+      await this.tagRepo.update(tagId, data);
+      if (data.guild_id) {
+        this.configCache.invalidatePrefix(`tag:${data.guild_id}:`);
+      }
+      return;
+    }
     await this.databases.updateDocument(
       this.databaseId,
       this.tagsCollectionId,
@@ -1282,13 +1647,19 @@ export class AppwriteService {
         updated_at: new Date().toISOString(),
       },
     );
-    // Invalidate tag cache for this guild
     if (data.guild_id) {
       this.configCache.invalidatePrefix(`tag:${data.guild_id}:`);
     }
   }
 
   async deleteTag(tagId: string, guildId?: string): Promise<void> {
+    if (this.tagRepo) {
+      await this.tagRepo.delete(tagId);
+      if (guildId) {
+        this.configCache.invalidatePrefix(`tag:${guildId}:`);
+      }
+      return;
+    }
     await this.databases.deleteDocument(
       this.databaseId,
       this.tagsCollectionId,
@@ -1307,6 +1678,9 @@ export class AppwriteService {
     owner_id: string;
     lobby_channel_id: string;
   }): Promise<string> {
+    if (this.tempVoiceRepo) {
+      return this.tempVoiceRepo.create(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.tempVoiceChannelsCollectionId,
@@ -1320,6 +1694,18 @@ export class AppwriteService {
   }
 
   async deleteTempChannel(channelId: string): Promise<void> {
+    if (this.tempVoiceRepo) {
+      try {
+        await this.tempVoiceRepo.deleteByChannelId(channelId);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres deleteTempChannel failed for ${channelId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1342,6 +1728,17 @@ export class AppwriteService {
   }
 
   async getTempChannels(guildId: string): Promise<any[]> {
+    if (this.tempVoiceRepo) {
+      try {
+        return await this.tempVoiceRepo.listByGuild(guildId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres getTempChannels failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1359,6 +1756,14 @@ export class AppwriteService {
   }
 
   async getAllTempChannels(): Promise<any[]> {
+    if (this.tempVoiceRepo) {
+      try {
+        return await this.tempVoiceRepo.listAll();
+      } catch (error) {
+        console.error("[AppwriteService] Postgres getAllTempChannels failed:", error);
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1379,6 +1784,18 @@ export class AppwriteService {
     channelId: string,
     newOwnerId: string,
   ): Promise<void> {
+    if (this.tempVoiceRepo) {
+      try {
+        await this.tempVoiceRepo.updateOwner(channelId, newOwnerId);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres updateTempChannelOwner failed for ${channelId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1413,6 +1830,9 @@ export class AppwriteService {
     filters?: string;
     created_by?: string;
   }): Promise<string> {
+    if (this.triggerRepo) {
+      return this.triggerRepo.create(data);
+    }
     const doc = await this.databases.createDocument(
       this.databaseId,
       this.triggersCollectionId,
@@ -1427,6 +1847,17 @@ export class AppwriteService {
   }
 
   async listTriggers(guildId: string): Promise<any[]> {
+    if (this.triggerRepo) {
+      try {
+        return await this.triggerRepo.listByGuild(guildId);
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres listTriggers failed for ${guildId}:`,
+          error,
+        );
+        return [];
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1444,6 +1875,17 @@ export class AppwriteService {
   }
 
   async getTriggerBySecret(secret: string): Promise<any | null> {
+    if (this.triggerRepo) {
+      try {
+        return await this.triggerRepo.getBySecret(secret);
+      } catch (error) {
+        console.error(
+          "[AppwriteService] Postgres getTriggerBySecret failed:",
+          error,
+        );
+        return null;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1461,6 +1903,10 @@ export class AppwriteService {
   }
 
   async deleteTrigger(triggerId: string): Promise<void> {
+    if (this.triggerRepo) {
+      await this.triggerRepo.delete(triggerId);
+      return;
+    }
     await this.databases.deleteDocument(
       this.databaseId,
       this.triggersCollectionId,
@@ -1472,6 +1918,10 @@ export class AppwriteService {
     triggerId: string,
     data: Record<string, any>,
   ): Promise<void> {
+    if (this.triggerRepo) {
+      await this.triggerRepo.update(triggerId, data);
+      return;
+    }
     await this.databases.updateDocument(
       this.databaseId,
       this.triggersCollectionId,
@@ -1487,6 +1937,17 @@ export class AppwriteService {
    * paginated across all guilds. Used exclusively by AlertsWorker.
    */
   async getAllAlertsConfigs(): Promise<Array<{ guildId: string; alerts: any[] }>> {
+    if (this.guildConfigRepo) {
+      try {
+        return await this.guildConfigRepo.getAllAlertsConfigs();
+      } catch (error) {
+        console.error(
+          "[AppwriteService] Postgres getAllAlertsConfigs failed:",
+          error,
+        );
+        return [];
+      }
+    }
     const results: Array<{ guildId: string; alerts: any[] }> = [];
     const pageSize = 100;
     let offset = 0;
@@ -1532,6 +1993,13 @@ export class AppwriteService {
    * Shape: Record<`${platform}:${handle}`, lastSeenId: string>
    */
   async getAlertsState(guildId: string): Promise<Record<string, string>> {
+    if (this.guildConfigRepo) {
+      try {
+        return await this.guildConfigRepo.getAlertsState(guildId);
+      } catch {
+        return {};
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
@@ -1555,6 +2023,18 @@ export class AppwriteService {
    * Persists the last-seen state for a guild's alerts.
    */
   async setAlertsState(guildId: string, state: Record<string, string>): Promise<void> {
+    if (this.guildConfigRepo) {
+      try {
+        await this.guildConfigRepo.setAlertsState(guildId, state);
+        return;
+      } catch (error) {
+        console.error(
+          `[AppwriteService] Postgres setAlertsState failed for ${guildId}:`,
+          error,
+        );
+        return;
+      }
+    }
     try {
       const response = await this.databases.listDocuments(
         this.databaseId,
