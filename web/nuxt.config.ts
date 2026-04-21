@@ -33,10 +33,11 @@ export default defineNuxtConfig({
     r2Bucket: "modus-recordings", // Set via NUXT_R2_BUCKET
     r2Endpoint: "", // Set via NUXT_R2_ENDPOINT (optional override)
     r2PresignTtl: "300", // Set via NUXT_R2_PRESIGN_TTL
-    // ── Postgres (recordings) ─────────────────────────────────────────────
-    // When usePostgresRecordings is "true", recording list/delete endpoints
-    // read from Postgres instead of Appwrite. Must match the bot's
-    // USE_POSTGRES_RECORDINGS setting.
+    // ── Postgres ──────────────────────────────────────────────────────────
+    // Two opt-in flags, matching the bot:
+    //   usePostgres          — full cutover, every collection on Postgres
+    //   usePostgresRecordings — narrow opt-in for recordings only
+    usePostgres: "false", // Set via NUXT_USE_POSTGRES
     usePostgresRecordings: "false", // Set via NUXT_USE_POSTGRES_RECORDINGS
     databaseUrl: "", // Set via NUXT_DATABASE_URL
     public: {
