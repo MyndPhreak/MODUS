@@ -1,7 +1,12 @@
 export default defineNuxtConfig({
   compatibilityDate: "2024-04-03",
   devtools: { enabled: true },
-  modules: ["@nuxt/ui", "@pinia/nuxt", "pinia-plugin-persistedstate/nuxt"],
+  modules: [
+    "@nuxt/ui",
+    "@pinia/nuxt",
+    "pinia-plugin-persistedstate/nuxt",
+    "nuxt-auth-utils",
+  ],
   app: {
     head: {
       title: "MODUS — Modular Discord Utility System",
@@ -20,6 +25,12 @@ export default defineNuxtConfig({
     appwriteApiKey: "", // Set via NUXT_APPWRITE_API_KEY
     discordBotToken: "", // Set via NUXT_DISCORD_BOT_TOKEN
     renderApiKey: "", // Shared secret for bot→dashboard render API — Set via NUXT_RENDER_API_KEY
+    // ── Native Discord OAuth (nuxt-auth-utils) ────────────────────────────
+    // When useNativeAuth is "true", /api/auth/discord + /api/auth/callback
+    // run a direct Discord OAuth flow with sealed cookie sessions instead of
+    // delegating to Appwrite.
+    useNativeAuth: "false", // Set via NUXT_USE_NATIVE_AUTH
+    discordClientSecret: "", // Set via NUXT_DISCORD_CLIENT_SECRET — required when useNativeAuth is on
     // Base URL of the bot's HTTP server (server-side only, never sent to browser)
     // Docker: http://bot:3005  |  Non-Docker: https://modus-bot.ppo.gg
     botWebhookUrl: "http://bot:3005", // Set via NUXT_BOT_WEBHOOK_URL
