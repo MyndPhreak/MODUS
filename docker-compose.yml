@@ -13,6 +13,31 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
+  # ── Redis (optional) ─────────────────────────────────────────────────────
+  # Enabled via the `redis` profile. Used by the bot for:
+  #   - cross-shard cache invalidation (CacheService pub/sub)
+  #   - leader election for background workers (RecordingRetentionWorker)
+  # Set REDIS_URL=redis://redis:6379 in bot/.env to use it.
+  #   docker compose --profile redis up -d redis
+  #   COMPOSE_PROFILES=redis,postgres docker compose up -d
+  redis:
+    image: redis:7-alpine
+    container_name: modus-redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - modus-redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - modus
+
   # ── Postgres (optional) ──────────────────────────────────────────────────
   # Enabled only when USE_POSTGRES_RECORDINGS=true (the default compose stack
   # still uses Appwrite). Bring it up on its own:
@@ -95,3 +120,5 @@ networks:
 volumes:
   modus-pgdata:
     name: modus-pgdata
+  modus-redisdata:
+    name: modus-redisdata
