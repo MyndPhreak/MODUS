@@ -10,6 +10,7 @@ import dotenv from "dotenv";
 import { ModuleManager } from "./ModuleManager";
 import { AppwriteService } from "./AppwriteService";
 import { ServerStatusService } from "./ServerStatusService";
+import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { Logger } from "./Logger";
 import {
   createYtDlpStreamFunction,
@@ -186,6 +187,16 @@ client.once("ready", async () => {
   registerEventsEvents(moduleManager);
   registerAlertsEvents(moduleManager);
   serverStatusService.start();
+
+  // Recording retention: run only on shard 0 so multiple shards don't race
+  // to delete the same rows. Disabled when RECORDING_RETENTION_DAYS is 0.
+  if (typeof shardId !== "number" || shardId === 0) {
+    const retentionDays = parseInt(
+      process.env.RECORDING_RETENTION_DAYS || "0",
+      10,
+    );
+    new RecordingRetentionWorker(appwriteService, logger, retentionDays).start();
+  }
 
   let botVersion = process.env.npm_package_version || "1.0.0";
   if (!process.env.npm_package_version) {
