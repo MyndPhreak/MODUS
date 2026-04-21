@@ -261,9 +261,10 @@ const welcomeModule: BotModule = {
             files: [attachment],
           });
         } catch (err) {
-          moduleManager.logger.error("Error generating test image", guildId, err, "welcome");
+          console.error("[Welcome] Failed to generate test image:", err);
+          await moduleManager.logger.error("Error generating test image", guildId, err, "welcome");
           await interaction.editReply(
-            "❌ Failed to generate test image. Please try again.",
+            `❌ Failed to generate test image: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
         break;
