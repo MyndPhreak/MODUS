@@ -13,6 +13,13 @@ import { ServerStatusService } from "./ServerStatusService";
 import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { Logger } from "./Logger";
 import {
+  createRedisClients,
+  closeRedisClients,
+  type RedisClients,
+} from "./RedisClient";
+import { EventBus } from "./EventBus";
+import { LeaderElection } from "./LeaderElection";
+import {
   createYtDlpStreamFunction,
   createSpotifyBridgeStreamFunction,
 } from "./lib/ytdlp-stream";
@@ -99,7 +106,14 @@ async function loadExtractors() {
 // Expect loadExtractors to be awaited in the init flow or use top-level await if module
 // For now, we'll keep it as a promise chain or await it in client.once("ready")
 
-const appwriteService = new AppwriteService();
+// Redis is optional: when REDIS_URL is unset, `clients` is null and
+// everything downstream falls back to in-process behavior (same as before).
+const redisClients: RedisClients | null = createRedisClients();
+const eventBus: EventBus | null = redisClients
+  ? new EventBus(redisClients)
+  : null;
+
+const appwriteService = new AppwriteService({ eventBus });
 const shardId = client.shard?.ids[0] ?? 0;
 const logger = new Logger(appwriteService, shardId);
 const moduleManager = new ModuleManager(client, logger, player);
@@ -188,14 +202,51 @@ client.once("ready", async () => {
   registerAlertsEvents(moduleManager);
   serverStatusService.start();
 
-  // Recording retention: run only on shard 0 so multiple shards don't race
-  // to delete the same rows. Disabled when RECORDING_RETENTION_DAYS is 0.
-  if (typeof shardId !== "number" || shardId === 0) {
-    const retentionDays = parseInt(
-      process.env.RECORDING_RETENTION_DAYS || "0",
-      10,
+  // ── Recording retention ──────────────────────────────────────────────
+  // Only one shard in the fleet should run this at a time — otherwise
+  // every shard would race to delete the same rows.
+  //
+  // With Redis: acquire a distributed lease; any shard can win, and if
+  // the leader dies, the lease TTL expires and another shard takes over.
+  // Without Redis: fall back to the previous shard-0 guard, since there's
+  // no cross-process coordination available.
+  const retentionDays = parseInt(
+    process.env.RECORDING_RETENTION_DAYS || "0",
+    10,
+  );
+  if (retentionDays > 0) {
+    const retentionWorker = new RecordingRetentionWorker(
+      appwriteService,
+      logger,
+      retentionDays,
     );
-    new RecordingRetentionWorker(appwriteService, logger, retentionDays).start();
+
+    if (redisClients) {
+      const ownerId = `${process.pid}:shard-${shardId}`;
+      new LeaderElection({
+        redis: redisClients.primary,
+        key: "modus:leader:recording-retention",
+        ownerId,
+        onAcquired: () => {
+          logger.info(
+            `Recording retention: leader election won (${ownerId})`,
+            undefined,
+            "retention",
+          );
+          retentionWorker.start();
+        },
+        onLost: () => {
+          logger.warn(
+            `Recording retention: lost leader lease (${ownerId}) — stopping worker`,
+            undefined,
+            "retention",
+          );
+          retentionWorker.stop();
+        },
+      }).start();
+    } else if (typeof shardId !== "number" || shardId === 0) {
+      retentionWorker.start();
+    }
   }
 
   let botVersion = process.env.npm_package_version || "1.0.0";
@@ -276,6 +327,11 @@ function gracefulShutdown(signal: string) {
 
   // Destroy the Discord client connection
   client.destroy();
+
+  // Best-effort Redis quiesce. Matters most for leader election — quitting
+  // lets the lease release via Lua CAS (inside LeaderElection.stop); without
+  // this, the next leader waits the full TTL before picking up.
+  closeRedisClients(redisClients).catch(() => {});
 
   // Force exit after a short grace period
   setTimeout(() => process.exit(0), 2000);
