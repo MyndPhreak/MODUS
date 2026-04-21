@@ -1,5 +1,3 @@
-import { Client, Databases } from "node-appwrite";
-
 /**
  * POST /api/servers/join
  *
@@ -10,14 +8,19 @@ import { Client, Databases } from "node-appwrite";
  *      OR has one of the server's configured dashboard_role_ids.
  *   3. The user isn't already in admin_user_ids.
  *
- * Uses the admin API key so Appwrite collection-level permissions
- * don't interfere — access is gated by Discord permission validation.
+ * Access is gated by Discord permission validation. DB routing: Postgres
+ * when NUXT_USE_POSTGRES=true, else Appwrite.
  */
+import { Client, Databases } from "node-appwrite";
+import { getRepos } from "../../utils/db";
+
+const ADMIN_PERMISSION = BigInt(0x8);
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const projectId = config.public.appwriteProjectId as string;
 
-  // ── Auth guard ─────────────────────────────────────────────────────────
+  // Auth guard
   const sessionSecret = getCookie(event, `a_session_${projectId}`);
   const userId = getCookie(event, `a_user_${projectId}`);
 
@@ -39,20 +42,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── Validate Discord ADMINISTRATOR permission ─────────────────────────
-  // Fetch the user's guilds from our server-side proxy (which uses the
-  // stored provider access token) and confirm they have admin perms.
-  const ADMIN_PERMISSION = BigInt(0x8);
-
   let hasAdminPerm = false;
   try {
-    // Use the internal Discord guilds endpoint which reads the user's
-    // OAuth token from cookies / Appwrite identity
     const guildsResponse = await $fetch("/api/discord/guilds", {
-      headers: {
-        cookie: event.headers.get("cookie") || "",
-      },
+      headers: { cookie: event.headers.get("cookie") || "" },
     });
-
     const guilds = Array.isArray(guildsResponse) ? guildsResponse : [];
     const targetGuild = guilds.find((g: any) => g.id === guild_id);
 
@@ -72,53 +66,88 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // ── Set up Appwrite client ─────────────────────────────────────────────
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(projectId)
-    .setKey(config.appwriteApiKey as string);
+  // ── Resolve dashboard role fallback check ─────────────────────────────
+  // Pulls the server row via whichever backend is active, then (if the
+  // user lacks ADMINISTRATOR) consults Discord for their role IDs.
+  const repos = getRepos();
 
-  const databases = new Databases(client);
-  const DATABASE_ID = "discord_bot";
-  const COLLECTION_ID = "servers";
-
-  // ── Check dashboard_role_ids if user lacks ADMINISTRATOR ──────────────
-  if (!hasAdminPerm) {
-    let hasDashboardRole = false;
+  const fetchServer = async (): Promise<{
+    admin_user_ids: string[];
+    dashboard_role_ids: string[];
+    $id: string;
+    name: string;
+    icon: string | null;
+    owner_id: string | null;
+  } | null> => {
+    if (repos) {
+      const row = await repos.servers.getByGuildId(guild_id);
+      if (!row) return null;
+      return {
+        admin_user_ids: row.admin_user_ids,
+        dashboard_role_ids: row.dashboard_role_ids,
+        $id: row.$id,
+        name: row.name,
+        icon: row.icon,
+        owner_id: row.owner_id,
+      };
+    }
+    const client = new Client()
+      .setEndpoint(config.public.appwriteEndpoint as string)
+      .setProject(projectId)
+      .setKey(config.appwriteApiKey as string);
+    const databases = new Databases(client);
     try {
-      const serverDoc = await databases.getDocument(
-        DATABASE_ID,
-        COLLECTION_ID,
+      const doc: any = await databases.getDocument(
+        "discord_bot",
+        "servers",
         guild_id,
       );
-      const dashboardRoles: string[] = Array.isArray(
-        serverDoc.dashboard_role_ids,
-      )
-        ? serverDoc.dashboard_role_ids
-        : [];
+      return {
+        admin_user_ids: Array.isArray(doc.admin_user_ids)
+          ? doc.admin_user_ids
+          : [],
+        dashboard_role_ids: Array.isArray(doc.dashboard_role_ids)
+          ? doc.dashboard_role_ids
+          : [],
+        $id: doc.$id,
+        name: doc.name,
+        icon: doc.icon ?? null,
+        owner_id: doc.owner_id ?? null,
+      };
+    } catch (err: any) {
+      if (err.code === 404) return null;
+      throw err;
+    }
+  };
 
-      if (dashboardRoles.length > 0) {
-        const discordUid = getCookie(
-          event,
-          `discord_uid_${projectId}`,
-        );
-        if (discordUid) {
-          const botToken = config.discordBotToken as string;
-          if (botToken) {
-            const member: any = await $fetch(
-              `https://discord.com/api/v10/guilds/${guild_id}/members/${discordUid}`,
-              { headers: { Authorization: `Bot ${botToken}` } },
-            ).catch(() => null);
-            if (member?.roles) {
-              hasDashboardRole = member.roles.some((r: string) =>
-                dashboardRoles.includes(r),
-              );
-            }
+  const existing = await fetchServer();
+  if (!existing) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Server not found. It may not be registered yet.",
+    });
+  }
+
+  if (!hasAdminPerm) {
+    let hasDashboardRole = false;
+    const dashboardRoles = existing.dashboard_role_ids;
+
+    if (dashboardRoles.length > 0) {
+      const discordUid = getCookie(event, `discord_uid_${projectId}`);
+      if (discordUid) {
+        const botToken = config.discordBotToken as string;
+        if (botToken) {
+          const member: any = await $fetch(
+            `https://discord.com/api/v10/guilds/${guild_id}/members/${discordUid}`,
+            { headers: { Authorization: `Bot ${botToken}` } },
+          ).catch(() => null);
+          if (member?.roles) {
+            hasDashboardRole = member.roles.some((r: string) =>
+              dashboardRoles.includes(r),
+            );
           }
         }
       }
-    } catch {
-      // Server doc not found — will be caught below
     }
 
     if (!hasDashboardRole) {
@@ -130,38 +159,58 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  try {
-    // Fetch the existing server document
-    const serverDoc = await databases.getDocument(
-      DATABASE_ID,
-      COLLECTION_ID,
+  // Already admin → idempotent success
+  if (existing.admin_user_ids.includes(userId)) {
+    return {
+      $id: existing.$id,
       guild_id,
-    );
+      name: existing.name,
+      icon: existing.icon,
+      owner_id: existing.owner_id,
+      already_member: true,
+    };
+  }
 
-    // Check if user is already an admin
-    const existingAdmins: string[] = Array.isArray(serverDoc.admin_user_ids)
-      ? serverDoc.admin_user_ids
-      : [];
-
-    if (existingAdmins.includes(userId)) {
-      // Already an admin — return success without modifying
+  if (repos) {
+    try {
+      const result = await repos.servers.addAdmin(guild_id, userId);
+      if (!result) {
+        throw createError({
+          statusCode: 404,
+          statusMessage: "Server not found.",
+        });
+      }
       return {
-        $id: serverDoc.$id,
-        guild_id: serverDoc.guild_id,
-        name: serverDoc.name,
-        icon: serverDoc.icon,
-        owner_id: serverDoc.owner_id,
-        already_member: true,
+        $id: result.server.$id,
+        guild_id,
+        name: result.server.name,
+        icon: result.server.icon,
+        owner_id: result.server.owner_id,
+        joined: !result.wasAlreadyAdmin,
+        already_member: result.wasAlreadyAdmin,
       };
+    } catch (error: any) {
+      if (error?.statusCode) throw error;
+      console.error("[Join Server API] Postgres error:", error?.message || error);
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to join server.",
+      });
     }
+  }
 
-    // Append the user to admin_user_ids
-    const updatedAdmins = [...existingAdmins, userId];
-    const updatedDoc = await databases.updateDocument(
-      DATABASE_ID,
-      COLLECTION_ID,
+  const client = new Client()
+    .setEndpoint(config.public.appwriteEndpoint as string)
+    .setProject(projectId)
+    .setKey(config.appwriteApiKey as string);
+  const databases = new Databases(client);
+
+  try {
+    const updatedDoc: any = await databases.updateDocument(
+      "discord_bot",
+      "servers",
       guild_id,
-      { admin_user_ids: updatedAdmins },
+      { admin_user_ids: [...existing.admin_user_ids, userId] },
     );
 
     return {
@@ -173,12 +222,6 @@ export default defineEventHandler(async (event) => {
       joined: true,
     };
   } catch (err: any) {
-    if (err.code === 404) {
-      throw createError({
-        statusCode: 404,
-        statusMessage: "Server not found. It may not be registered yet.",
-      });
-    }
     console.error("[Join Server API] Error:", err.message || err);
     throw createError({
       statusCode: 500,
