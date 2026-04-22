@@ -1,22 +1,28 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# MODUS — Continuous Deployment on Push to main
+# MODUS — Continuous Build on Push
 #
 # Selectively rebuilds only the service(s) that changed:
-#   - bot/**  → ghcr.io/<owner>/modus-bot:latest
-#   - web/**  → ghcr.io/<owner>/modus-web:latest
+#   - bot/**  → ghcr.io/<owner>/modus-bot:<branch>        (all branches)
+#               ghcr.io/<owner>/modus-bot:latest          (main only)
+#   - web/**  → ghcr.io/<owner>/modus-web:<branch>        (all branches)
+#               ghcr.io/<owner>/modus-web:latest          (main only)
 #
-# This runs independently of the release-please flow. Versioned/tagged images
-# are still produced by docker-publish.yml when a release is merged.
+# Also tags every build with :sha-<short-sha>. Can be triggered manually via
+# workflow_dispatch. Versioned/tagged images are still produced by
+# docker-publish.yml when a release is merged.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: CI — Selective Build & Deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "**"
     paths:
       - "bot/**"
       - "web/**"
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -73,7 +79,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-bot
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
             type=sha,prefix=sha-
 
       - name: Build and push Bot image
@@ -117,7 +124,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
             type=sha,prefix=sha-
 
       - name: Build and push Web image
