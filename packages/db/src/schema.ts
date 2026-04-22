@@ -391,6 +391,10 @@ export const tags = pgTable(
       .array()
       .notNull()
       .default(sql`ARRAY[]::text[]`),
+    // Template rows are saved embed presets shown on the embed builder page;
+    // they share the tags CRUD path but are not invocable via /tag.
+    isTemplate: boolean("is_template").notNull().default(false),
+    description: text("description"),
     createdBy: text("created_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -402,6 +406,7 @@ export const tags = pgTable(
   (t) => ({
     byGuildName: uniqueIndex("tags_guild_name_idx").on(t.guildId, t.name),
     byGuild: index("tags_guild_idx").on(t.guildId),
+    byGuildTemplate: index("tags_guild_template_idx").on(t.guildId, t.isTemplate),
   }),
 );
 
@@ -473,3 +478,78 @@ export const triggers = pgTable(
 
 export type TriggerRow = typeof triggers.$inferSelect;
 export type NewTriggerRow = typeof triggers.$inferInsert;
+
+// ── ticket_transcripts ────────────────────────────────────────────────────
+
+export const ticketTranscripts = pgTable(
+  "ticket_transcripts",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id").notNull(),
+    ticketId: integer("ticket_id").notNull(),
+    threadId: text("thread_id").notNull().unique(),
+    threadName: text("thread_name").notNull(),
+    openerId: text("opener_id").notNull(),
+    claimedById: text("claimed_by_id"),
+    closedById: text("closed_by_id").notNull(),
+    typeId: text("type_id"),
+    priority: text("priority").notNull(),
+    participantIds: text("participant_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    messageCount: integer("message_count").notNull().default(0),
+    hasSkippedAttachments: boolean("has_skipped_attachments")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildClosed: index("ticket_transcripts_guild_closed_idx").on(
+      t.guildId,
+      t.closedAt.desc(),
+    ),
+    byOpener: index("ticket_transcripts_opener_idx").on(t.openerId),
+    byExpires: index("ticket_transcripts_expires_idx")
+      .on(t.expiresAt)
+      .where(sql`expires_at IS NOT NULL`),
+  }),
+);
+
+export type TicketTranscript = typeof ticketTranscripts.$inferSelect;
+export type NewTicketTranscript = typeof ticketTranscripts.$inferInsert;
+
+// ── ticket_messages ───────────────────────────────────────────────────────
+
+export const ticketMessages = pgTable(
+  "ticket_messages",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    transcriptId: text("transcript_id")
+      .notNull()
+      .references(() => ticketTranscripts.id, { onDelete: "cascade" }),
+    discordMessageId: text("discord_message_id").notNull(),
+    authorId: text("author_id").notNull(),
+    authorTag: text("author_tag").notNull(),
+    authorAvatarUrl: text("author_avatar_url"),
+    authorIsBot: boolean("author_is_bot").notNull().default(false),
+    content: text("content").notNull().default(""),
+    embeds: jsonb("embeds").notNull().default(sql`'[]'::jsonb`),
+    attachments: jsonb("attachments").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => ({
+    byTranscript: index("ticket_messages_transcript_created_idx").on(
+      t.transcriptId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export type TicketMessage = typeof ticketMessages.$inferSelect;
+export type NewTicketMessage = typeof ticketMessages.$inferInsert;
