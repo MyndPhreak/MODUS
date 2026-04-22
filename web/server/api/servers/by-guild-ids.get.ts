@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
       owner_id: doc.owner_id,
       admin_user_ids: doc.admin_user_ids,
       dashboard_role_ids: doc.dashboard_role_ids,
+      premium: doc.premium,
     }));
   } catch (error: any) {
     console.error(
