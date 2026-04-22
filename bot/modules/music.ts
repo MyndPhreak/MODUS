@@ -166,7 +166,7 @@ async function updateBotNickname(queue: GuildQueue, trackTitle?: string) {
 
 let eventsRegistered = false;
 
-function registerPlayerEvents(moduleManager: ModuleManager) {
+async function registerPlayerEvents(moduleManager: ModuleManager) {
   if (eventsRegistered) return;
   eventsRegistered = true;
   _moduleManager = moduleManager;
@@ -346,16 +346,24 @@ function registerPlayerEvents(moduleManager: ModuleManager) {
   // Note: discord-player debug logging removed — too noisy for production
 
   // ─── Realtime Filter Sync from Dashboard ─────────────────────────────
-  moduleManager.appwriteService.subscribeToGuildConfigs(
+  // The EventBus payload carries only { kind, guildId, moduleName } — the
+  // settings themselves come from a follow-up read so every subscriber
+  // sees the same authoritative value. Falls back to no-op when Redis
+  // isn't configured; the dashboard filter changes will only take effect
+  // on the next /play or on bot restart in that case.
+  await moduleManager.appwriteService.subscribeToGuildConfigs(
     async (payload: any) => {
       try {
-        // Only react to music module config changes
-        if (payload.moduleName !== "music") return;
+        if (payload?.moduleName !== "music") return;
 
         const guildId = payload.guildId;
-        if (!guildId || !payload.settings) return;
+        if (!guildId) return;
 
-        const settings = JSON.parse(payload.settings);
+        const settings =
+          await moduleManager.appwriteService.getModuleSettings(
+            guildId,
+            "music",
+          );
         const newFilters: string[] = settings.activeFilters ?? [];
 
         // Check if there's an active queue for this guild
@@ -1501,8 +1509,15 @@ const musicModule: BotModule = {
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
   ) {
-    // Register player events on first use
-    registerPlayerEvents(moduleManager);
+    // Register player events on first use. Fire-and-forget — the registration
+    // is idempotent and the subscribe is best-effort realtime plumbing.
+    registerPlayerEvents(moduleManager).catch((err) => {
+      moduleManager.logger.warn(
+        `Failed to register music player events: ${(err as Error)?.message || err}`,
+        undefined,
+        "music",
+      );
+    });
 
     // Defer publicly — music responses should be visible to everyone
     await interaction.deferReply();

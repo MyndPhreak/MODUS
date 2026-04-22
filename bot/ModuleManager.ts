@@ -170,9 +170,11 @@ export class ModuleManager {
     // Register slash commands
     await this.registerCommands();
 
-    // Setup Realtime subscription
-    this.appwriteService.subscribeToModules((payload) => {
-      console.log("[ModuleManager] Realtime update detected for modules.");
+    // Hot-reload subscription: fires when another shard (or the dashboard)
+    // writes to the modules table. Falls back to a no-op when Redis isn't
+    // configured — restart is required to see new modules in that case.
+    await this.appwriteService.subscribeToModules(() => {
+      console.log("[ModuleManager] modules channel event — refreshing.");
       this.refreshEnabledModules();
     });
   }
