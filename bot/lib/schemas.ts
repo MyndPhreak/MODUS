@@ -314,12 +314,38 @@ export const TicketsSettingsSchema = z.object({
    */
   inactivityHours: z.number().default(0),
 
+  // ── Web transcripts ──────────────────────────────────────────────
+  /**
+   * Publish a Discord-authenticated web transcript at ticket close, in
+   * addition to the markdown attachment. Feature-flagged per guild.
+   */
+  webTranscripts: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** Null = retain forever. */
+      retentionDays: z.number().int().nullable().default(90),
+      mirrorAttachments: z.boolean().default(true),
+      attachmentMaxSizeBytes: z
+        .number()
+        .int()
+        .positive()
+        .default(8 * 1024 * 1024),
+    })
+    .default({
+      enabled: false,
+      retentionDays: 90,
+      mirrorAttachments: true,
+      attachmentMaxSizeBytes: 8 * 1024 * 1024,
+    }),
+
   // ── Internal ──────────────────────────────────────────────────────
   /** Ever-incrementing ticket serial number — do not expose in the UI */
   ticketCounter: z.number().default(0),
 });
 
 export type TicketsSettingsType = z.infer<typeof TicketsSettingsSchema>;
+/** Convenience alias — matches the other schemas' `<Name>Settings` exports. */
+export type TicketsSettings = TicketsSettingsType;
 
 // ── Button Roles (replaces Reaction Roles) ─────────────────────────
 //
