@@ -1,18 +1,17 @@
 /**
- * Server-side endpoint to upload an announcement sound clip
- * to the recordings storage bucket in Appwrite.
+ * Upload an announcement sound clip to R2.
  *
  * Accepts multipart/form-data with a single "file" field.
  * Validates:
  *   - File size ≤ 5 MB
- *   - Audio format decodable by FFmpeg (common formats)
+ *   - Audio MIME (audio/*, ogg variants)
  *   - Duration ≤ 10 seconds (via ffprobe)
  *
- * Returns: { fileId: string }
+ * Returns: { fileId: <R2 object key> }
  */
-import { Client, Storage, ID } from "node-appwrite";
-// @ts-ignore — subpath export resolves at runtime
-import { InputFile } from "node-appwrite/file";
+import { randomBytes } from "crypto";
+import { getR2, putR2Object } from "../../utils/r2";
+import { requireAuthedUserId } from "../../utils/session";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_DURATION_SECONDS = 10;
@@ -24,7 +23,14 @@ const ALLOWED_MIME_PREFIXES = [
 ];
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
+  await requireAuthedUserId(event);
+
+  if (!getR2()) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Object storage unavailable (R2 not configured).",
+    });
+  }
 
   // Parse multipart form data
   const formData = await readMultipartFormData(event);
@@ -114,31 +120,29 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Upload to Appwrite
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(config.public.appwriteProjectId as string)
-    .setKey(config.appwriteApiKey as string);
-
-  const storage = new Storage(client);
+  // Upload to R2 under announce/<rand>.<ext>. A random suffix avoids
+  // collisions without needing a metadata store for these short clips.
+  const extFromName = filePart.filename?.split(".").pop()?.toLowerCase();
+  const ext = (extFromName && /^[a-z0-9]{2,5}$/.test(extFromName))
+    ? extFromName
+    : (mimeType.split("/")[1] || "audio").replace(/[^a-z0-9]/gi, "") || "audio";
+  const key = `announce/${randomBytes(8).toString("hex")}.${ext}`;
 
   try {
-    const fileName = filePart.filename || `announce_${Date.now()}.audio`;
-    const file = await storage.createFile(
-      "recordings",
-      ID.unique(),
-      InputFile.fromBuffer(filePart.data, fileName),
-    );
-
-    return { fileId: file.$id };
+    await putR2Object({
+      key,
+      body: filePart.data,
+      contentType: mimeType || "audio/ogg",
+    });
+    return { fileId: key };
   } catch (error: any) {
     console.error(
-      "[Recordings API] Error uploading announce file:",
+      "[Recordings API] R2 announce upload failed:",
       error?.message || error,
     );
     throw createError({
-      statusCode: error?.code || 500,
-      statusMessage: error?.message || "Failed to upload announce file.",
+      statusCode: 500,
+      statusMessage: "Failed to upload announce file.",
     });
   }
 });

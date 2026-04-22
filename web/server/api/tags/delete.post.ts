@@ -1,15 +1,11 @@
 /**
  * Delete a tag.
  *
- * POST body:
- *   - tag_id: string
- *   - guild_id: string
+ * POST body: { tag_id, guild_id }
  */
-import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
   const body = await readBody(event);
 
   const { tag_id, guild_id } = body || {};
@@ -22,34 +18,21 @@ export default defineEventHandler(async (event) => {
   }
 
   const repos = getRepos();
-  if (repos) {
-    try {
-      await repos.tags.delete(tag_id);
-      return { success: true };
-    } catch (error: any) {
-      console.error("[Tags API] Postgres delete failed:", error?.message || error);
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Failed to delete tag.",
-      });
-    }
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
   }
 
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(config.public.appwriteProjectId as string)
-    .setKey(config.appwriteApiKey as string);
-
-  const databases = new Databases(client);
-
   try {
-    await databases.deleteDocument("discord_bot", "tags", tag_id);
+    await repos.tags.delete(tag_id);
     return { success: true };
   } catch (error: any) {
-    console.error(`[Tags API] Error deleting tag:`, error?.message || error);
+    console.error("[Tags API] Postgres delete failed:", error?.message || error);
     throw createError({
-      statusCode: error?.code || 500,
-      statusMessage: error?.message || "Failed to delete tag.",
+      statusCode: 500,
+      statusMessage: "Failed to delete tag.",
     });
   }
 });

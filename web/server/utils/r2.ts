@@ -1,9 +1,8 @@
 /**
- * R2 client helper for the dashboard server.
+ * R2 (S3-compatible) client for the dashboard.
  *
- * Mirrors bot/StorageService.ts so the web side can generate presigned GETs
- * and issue deletes without pulling the bot's module. Feature-flagged via
- * `NUXT_USE_R2_STORAGE`; when off, callers should fall back to Appwrite.
+ * Lazy-initialized. Returns null when credentials are missing so endpoints
+ * can surface a 503 rather than throwing on import.
  */
 import {
   S3Client,
@@ -15,24 +14,15 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 let cached: { client: S3Client; bucket: string; ttl: number } | null = null;
 
-/**
- * Lazy-initialized R2 client. Returns null when R2 is disabled or env vars
- * are missing — callers should treat that as "fall back to Appwrite".
- */
 export function getR2() {
   if (cached) return cached;
 
   const config = useRuntimeConfig();
-  if (String(config.useR2Storage) !== "true") return null;
-
   const accountId = config.r2AccountId as string;
   const accessKeyId = config.r2AccessKeyId as string;
   const secretAccessKey = config.r2SecretAccessKey as string;
   const bucket = config.r2Bucket as string;
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
-    console.warn(
-      "[r2] NUXT_USE_R2_STORAGE=true but NUXT_R2_* env vars are incomplete.",
-    );
     return null;
   }
 
@@ -52,7 +42,7 @@ export function getR2() {
   return cached;
 }
 
-/** Heuristic: "/" in the key → R2 object key, else Appwrite file ID. */
+/** "/" in the key → R2 object key. New uploads always produce this shape. */
 export function looksLikeR2Key(fileId: string): boolean {
   return fileId.includes("/");
 }
@@ -96,9 +86,8 @@ export async function putR2Object(params: {
 }
 
 /**
- * Fetch an object as `{ body, contentType }`. Used by the welcome-bg proxy
- * endpoint to stream the image bytes back to the client with the right
- * Content-Type. Returns null when the object doesn't exist.
+ * Fetch an object as `{ body, contentType }`. Returns null when the
+ * object doesn't exist.
  */
 export async function getR2Object(
   key: string,
