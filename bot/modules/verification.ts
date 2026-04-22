@@ -161,7 +161,7 @@ const verificationModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     if (subcommand === "deploy") {
       const channel = interaction.options.getChannel(
@@ -224,7 +224,7 @@ const verificationModule: BotModule = {
     const guildId = interaction.guildId;
     if (!guildId) return;
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const isEnabled = await appwrite.isModuleEnabled(guildId, "verification");
     if (!isEnabled) {
       await interaction.reply({

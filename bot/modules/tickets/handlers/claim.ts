@@ -31,7 +31,7 @@ export async function handleClaim(
   }
 
   const thread = channel as ThreadChannel;
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
   const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return;

@@ -2,7 +2,7 @@ import { ShardingManager } from "discord.js";
 import path from "path";
 import dotenv from "dotenv";
 import crypto from "crypto";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 import { AlertsWorker } from "./AlertsWorker";
 import { createRedisClients, closeRedisClients } from "./RedisClient";
 import { EventBus } from "./EventBus";
@@ -59,12 +59,12 @@ console.log(`[Sharding] Starting with totalShards: ${manager.totalShards}`);
 manager.spawn().then(() => {
   // AlertsWorker runs in the manager process — singleton by virtue of this
   // entry point, so no leader election is needed here. Redis is still
-  // handed in so the parent's AppwriteService publishes cache
+  // handed in so the parent's DatabaseService publishes cache
   // invalidations (e.g. alert state writes) to the shard processes.
   const redisClients = createRedisClients();
   const eventBus = redisClients ? new EventBus(redisClients) : null;
 
-  const appwrite = new AppwriteService({ eventBus });
+  const appwrite = new DatabaseService({ eventBus });
   const alertsWorker = new AlertsWorker(appwrite, 10); // 10-minute polling interval
   alertsWorker.start();
 

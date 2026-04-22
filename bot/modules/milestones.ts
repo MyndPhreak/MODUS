@@ -144,7 +144,7 @@ function getMedalEmoji(rank: number): string {
  * Falls back to DEFAULT_MILESTONES if the guild hasn't customised them.
  */
 async function getGuildMilestones(
-  appwrite: ModuleManager["appwriteService"],
+  appwrite: ModuleManager["databaseService"],
   guildId: string,
 ): Promise<MilestoneConfig[]> {
   const raw = await appwrite.getModuleSettings(guildId, "milestones");
@@ -187,7 +187,7 @@ function getCrossedMilestones(
 
 // ── Buffer Flush Logic ─────────────────────────────────────────────────
 
-async function flushBuffer(appwrite: ModuleManager["appwriteService"]) {
+async function flushBuffer(appwrite: ModuleManager["databaseService"]) {
   const entries = Array.from(userCache.entries()).filter(
     ([, state]) => state.pendingChars > 0 && state.docId && state.optedIn,
   );
@@ -211,7 +211,7 @@ async function flushBuffer(appwrite: ModuleManager["appwriteService"]) {
   await Promise.allSettled(promises);
 }
 
-function startFlushTimer(appwrite: ModuleManager["appwriteService"]) {
+function startFlushTimer(appwrite: ModuleManager["databaseService"]) {
   if (flushTimer) return;
   flushTimer = setInterval(() => flushBuffer(appwrite), FLUSH_INTERVAL_MS);
   _moduleManager?.logger.info(
@@ -503,7 +503,7 @@ const milestonesModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     switch (subcommand) {
       // ── Leaderboard ──
@@ -748,7 +748,7 @@ const milestonesModule: BotModule = {
 export function registerMilestoneEvents(moduleManager: ModuleManager) {
   _moduleManager = moduleManager;
   const client = moduleManager["client"];
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
 
   // Store appwrite reference on client for notification use
   (client as any).__milestoneAppwrite = appwrite;

@@ -135,7 +135,7 @@ async function getSettings(
   moduleManager: ModuleManager,
   guildId: string,
 ): Promise<RecordingSettings> {
-  const saved = await moduleManager.appwriteService.getModuleSettings(
+  const saved = await moduleManager.databaseService.getModuleSettings(
     guildId,
     "recording",
   );
@@ -227,7 +227,7 @@ async function playAnnounceSoundClip(
 
     // Download the file from Appwrite
     const fileBuffer =
-      await moduleManager.appwriteService.getRecordingFileBuffer(fileId);
+      await moduleManager.databaseService.getRecordingFileBuffer(fileId);
 
     _moduleManager?.logger.info(
       `Downloaded announce clip: ${fileBuffer.length} bytes`,
@@ -615,14 +615,14 @@ async function stopRecording(
         // Streams the temp file to storage — avoids buffering the whole OGG
         // in memory. For R2, this becomes a multipart upload under a
         // `recordings/<guildId>/<recordingId>/...` key.
-        const fileId = await moduleManager.appwriteService.uploadRecordingTrack({
+        const fileId = await moduleManager.databaseService.uploadRecordingTrack({
           guildId: session.guildId,
           recordingId,
           userId,
           filePath: stream.tempFilePath,
         });
 
-        await moduleManager.appwriteService.createRecordingTrack({
+        await moduleManager.databaseService.createRecordingTrack({
           recording_id: recordingId,
           guild_id: session.guildId,
           user_id: userId,
@@ -670,7 +670,7 @@ async function stopRecording(
   }
 
   // Update recording metadata
-  await moduleManager.appwriteService.updateRecording(recordingId, {
+  await moduleManager.databaseService.updateRecording(recordingId, {
     ended_at: endedAt.toISOString(),
     duration,
     participants: JSON.stringify(participants),
@@ -700,7 +700,7 @@ async function generateMixedTrack(
   if (session.multitrack) {
     // Multitrack: tracks were already uploaded — download them for mixing
     const tracks =
-      await moduleManager.appwriteService.getRecordingTracks(recordingId);
+      await moduleManager.databaseService.getRecordingTracks(recordingId);
 
     if (tracks.length === 0) return undefined;
     if (tracks.length === 1) return tracks[0].file_id;
@@ -709,7 +709,7 @@ async function generateMixedTrack(
     for (const track of tracks) {
       try {
         const buffer =
-          await moduleManager.appwriteService.getRecordingFileBuffer(
+          await moduleManager.databaseService.getRecordingFileBuffer(
             track.file_id,
           );
         const tempPath = path.join(tempDir, `mix_input_${track.user_id}.ogg`);
@@ -749,7 +749,7 @@ async function generateMixedTrack(
   // Single file: encode and upload it directly (skip amix overhead)
   if (inputs.length === 1) {
     try {
-      const fileId = await moduleManager.appwriteService.uploadRecordingMix({
+      const fileId = await moduleManager.databaseService.uploadRecordingMix({
         guildId: session.guildId,
         recordingId,
         filePath: inputs[0].tempPath,
@@ -837,7 +837,7 @@ async function generateMixedTrack(
       }
 
       try {
-        const fileId = await moduleManager.appwriteService.uploadRecordingMix({
+        const fileId = await moduleManager.databaseService.uploadRecordingMix({
           guildId: session.guildId,
           recordingId,
           filePath: mixedPath,
@@ -1037,7 +1037,7 @@ async function handleStart(
   let multitrack = false;
   if (wantsMultitrack) {
     const isPremium =
-      await moduleManager.appwriteService.isGuildPremium(guildId);
+      await moduleManager.databaseService.isGuildPremium(guildId);
     if (!isPremium) {
       await interaction.editReply({
         content:
@@ -1049,7 +1049,7 @@ async function handleStart(
   }
 
   // Create recording metadata in Appwrite
-  const recordingDocId = await moduleManager.appwriteService.createRecording({
+  const recordingDocId = await moduleManager.databaseService.createRecording({
     guild_id: guildId,
     channel_name: voiceChannel.name,
     recorded_by: member.id,
@@ -1227,7 +1227,7 @@ async function handleStop(
 
     // Update title if provided
     if (title) {
-      await moduleManager.appwriteService.updateRecording(result.recordingId, {
+      await moduleManager.databaseService.updateRecording(result.recordingId, {
         title,
       });
     }

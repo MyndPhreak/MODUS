@@ -52,7 +52,7 @@ async function getSettings(
   moduleManager: ModuleManager,
   guildId: string,
 ): Promise<TempVoiceSettings> {
-  const raw = await moduleManager.appwriteService.getModuleSettings(
+  const raw = await moduleManager.databaseService.getModuleSettings(
     guildId,
     "tempvoice",
   );
@@ -171,7 +171,7 @@ const tempvoiceModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const member = interaction.member as GuildMember;
 
     switch (subcommand) {
@@ -445,7 +445,7 @@ const tempvoiceModule: BotModule = {
 
 export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
   const client = (moduleManager as any).client;
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
 
   // ── Boot-time hydration: load all tracked temp channels from Appwrite ──
   try {

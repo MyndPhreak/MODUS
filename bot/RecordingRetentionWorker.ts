@@ -3,11 +3,11 @@
  *
  * Controls cost by ensuring stale files don't accumulate indefinitely. Works
  * the same whether recordings live in R2 or Appwrite Storage — delegates to
- * AppwriteService.deleteRecording which routes each file to its backend.
+ * DatabaseService.deleteRecording which routes each file to its backend.
  *
  * Set RECORDING_RETENTION_DAYS=0 (or unset) to disable.
  */
-import type { AppwriteService } from "./AppwriteService";
+import type { DatabaseService } from "./DatabaseService";
 import type { Logger } from "./Logger";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -20,7 +20,7 @@ export class RecordingRetentionWorker {
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
-    private appwrite: AppwriteService,
+    private appwrite: DatabaseService,
     private logger: Logger,
     private retentionDays: number,
   ) {}

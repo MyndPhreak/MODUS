@@ -168,7 +168,7 @@ async function getSettings(
   moduleManager: ModuleManager,
   guildId: string,
 ): Promise<ModerationSettings> {
-  const saved = await moduleManager.appwriteService.getModuleSettings(
+  const saved = await moduleManager.databaseService.getModuleSettings(
     guildId,
     "moderation",
   );
@@ -188,7 +188,7 @@ async function getNextCaseId(
   const settings = await getSettings(moduleManager, guildId);
   const currentCase = (settings as any).lastCaseId || 0;
   const nextCase = currentCase + 1;
-  await moduleManager.appwriteService.setModuleSettings(guildId, "moderation", {
+  await moduleManager.databaseService.setModuleSettings(guildId, "moderation", {
     ...settings,
     lastCaseId: nextCase,
   });
@@ -892,7 +892,7 @@ const moderationModule: BotModule = {
 
         // Store warning
         const currentSettings =
-          await moduleManager.appwriteService.getModuleSettings(
+          await moduleManager.databaseService.getModuleSettings(
             guildId,
             "moderation",
           );
@@ -914,7 +914,7 @@ const moderationModule: BotModule = {
         warnings.push(modCase);
 
         // Save updated warnings
-        await moduleManager.appwriteService.setModuleSettings(
+        await moduleManager.databaseService.setModuleSettings(
           guildId,
           "moderation",
           { ...currentSettings, warnings, lastCaseId: caseId },
@@ -997,7 +997,7 @@ const moderationModule: BotModule = {
         const targetUser = interaction.options.getUser("user", true);
 
         const currentSettings =
-          await moduleManager.appwriteService.getModuleSettings(
+          await moduleManager.databaseService.getModuleSettings(
             guildId,
             "moderation",
           );
@@ -1050,7 +1050,7 @@ const moderationModule: BotModule = {
         const targetUser = interaction.options.getUser("user", true);
 
         const currentSettings =
-          await moduleManager.appwriteService.getModuleSettings(
+          await moduleManager.databaseService.getModuleSettings(
             guildId,
             "moderation",
           );
@@ -1061,7 +1061,7 @@ const moderationModule: BotModule = {
 
         const removedCount = warnings.length - filtered.length;
 
-        await moduleManager.appwriteService.setModuleSettings(
+        await moduleManager.databaseService.setModuleSettings(
           guildId,
           "moderation",
           { ...currentSettings, warnings: filtered },
@@ -1229,12 +1229,12 @@ const moderationModule: BotModule = {
         const channel = interaction.options.getChannel("channel", true);
 
         const currentSettings =
-          await moduleManager.appwriteService.getModuleSettings(
+          await moduleManager.databaseService.getModuleSettings(
             guildId,
             "moderation",
           );
 
-        await moduleManager.appwriteService.setModuleSettings(
+        await moduleManager.databaseService.setModuleSettings(
           guildId,
           "moderation",
           {

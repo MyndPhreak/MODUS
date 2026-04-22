@@ -46,7 +46,7 @@ async function loadSettings(
   const cached = settingsCache.get(guildId);
   if (cached && Date.now() < cached.expiresAt) return cached;
 
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
   const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return null;
@@ -246,7 +246,7 @@ async function createTicketThread(
   thread.members.add(interaction.user.id).catch(() => {});
 
   // Persist incremented counter (fire-and-forget)
-  moduleManager.appwriteService
+  moduleManager.databaseService
     .setModuleSettings(guildId, "tickets", { ...rawSettings, ticketCounter: newCounter })
     .catch((err) =>
       moduleManager.logger.error("Failed to update ticket counter", guildId, err, "tickets"),

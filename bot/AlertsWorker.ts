@@ -12,14 +12,14 @@
  *   - twitch   → EventSub webhooks (stream.online / stream.offline)
  *
  * State persistence:
- *   Last-seen item IDs are written to Appwrite via AppwriteService.setAlertsState,
+ *   Last-seen item IDs are written to Appwrite via DatabaseService.setAlertsState,
  *   keyed as `${platform}:${handle}` per guild.
  */
 
 import https from "https";
 import http from "http";
 import crypto from "crypto";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -432,13 +432,13 @@ async function subscribeTwitchEventSub(
 // ── Main worker class ──────────────────────────────────────────────────────
 
 export class AlertsWorker {
-  private appwrite: AppwriteService;
+  private appwrite: DatabaseService;
   private intervalMs: number;
   private timer: NodeJS.Timeout | null = null;
   /** Track which Twitch broadcasterIds we've already subscribed for this session. */
   private twitchSubscribed = new Set<string>();
 
-  constructor(appwrite: AppwriteService, pollIntervalMinutes = 10) {
+  constructor(appwrite: DatabaseService, pollIntervalMinutes = 10) {
     this.appwrite = appwrite;
     this.intervalMs = pollIntervalMinutes * 60 * 1000;
   }

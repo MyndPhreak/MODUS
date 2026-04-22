@@ -8,7 +8,7 @@
  *   - Structured object keys: `recordings/<guildId>/<recordingId>/<file>.ogg`
  *     — groups a session's files together for bulk prefix deletes.
  *
- * Feature-flagged via USE_R2_STORAGE. When disabled, AppwriteService falls
+ * Feature-flagged via USE_R2_STORAGE. When disabled, DatabaseService falls
  * back to the existing Appwrite Storage path and this service is never
  * instantiated.
  */

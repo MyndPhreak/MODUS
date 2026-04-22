@@ -222,7 +222,7 @@ const welcomeModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     switch (subcommand) {
       case "channel": {
@@ -286,7 +286,7 @@ export function registerWelcomeEvents(moduleManager: ModuleManager) {
   client.on("guildMemberAdd", async (member: GuildMember) => {
     try {
       const guildId = member.guild.id;
-      const appwrite = moduleManager.appwriteService;
+      const appwrite = moduleManager.databaseService;
 
       // Check if module is enabled
       const isEnabled = await appwrite.isModuleEnabled(guildId, "welcome");

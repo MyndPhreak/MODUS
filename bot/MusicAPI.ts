@@ -3,25 +3,23 @@ import { URL } from "url";
 import { Player, useMainPlayer, QueryType } from "discord-player";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { Client } from "discord.js";
-import { AppwriteService } from "./AppwriteService";
-import { Databases, Query } from "node-appwrite";
+import { DatabaseService } from "./DatabaseService";
 
 const DEFAULT_MAX_QUEUE_SIZE = 200;
 
 /** Read the guild's maxQueueSize from its music config, falling back to default */
 async function getMaxQueueSize(guildId: string): Promise<number> {
   try {
-    const doc = await findMusicConfigDoc(guildId);
-    if (doc?.settings) {
-      const settings = JSON.parse(doc.settings);
-      if (
-        typeof settings.maxQueueSize === "number" &&
-        settings.maxQueueSize > 0
-      ) {
-        return settings.maxQueueSize;
-      }
+    const settings = await getDb().getModuleSettings(guildId, "music");
+    if (
+      typeof settings.maxQueueSize === "number" &&
+      settings.maxQueueSize > 0
+    ) {
+      return settings.maxQueueSize;
     }
-  } catch {}
+  } catch {
+    // fall through to default
+  }
   return DEFAULT_MAX_QUEUE_SIZE;
 }
 
@@ -134,100 +132,35 @@ function sendJson(res: http.ServerResponse, statusCode: number, data: any) {
 }
 
 // ─── Pre-Queue Helpers ──────────────────────────────────────────────────────
-// Pre-queue data is stored in a dedicated `preQueueData` column (100K chars)
-// on the guild_configs collection, separate from the 5000-char `settings` field.
+// Pre-queue lives inside the music module's settings.preQueue array. The old
+// dedicated `preQueueData` column was an Appwrite-era workaround for that
+// collection's 5000-char settings field cap; Postgres's JSONB has no such
+// limit so the separate column is gone.
 
-const DB_ID = "discord_bot";
-const GUILD_CONFIGS_COLLECTION = "guild_configs";
-
-let _preQueueAppwrite: AppwriteService | null = null;
-function getAppwrite(): AppwriteService {
-  if (!_preQueueAppwrite) _preQueueAppwrite = new AppwriteService();
-  return _preQueueAppwrite;
-}
-
-/** Lazily initialised Databases instance for direct column access */
-let _databases: Databases | null = null;
-function getDatabases(): Databases {
-  if (!_databases) {
-    // Re-use the same Client that AppwriteService creates internally
-    const { Client } = require("node-appwrite");
-    const client = new Client()
-      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
-      .setProject(process.env.APPWRITE_PROJECT_ID!)
-      .setKey(process.env.APPWRITE_API_KEY!);
-    _databases = new Databases(client);
-  }
-  return _databases!;
-}
-
-/** Find the guild_configs document for the music module */
-async function findMusicConfigDoc(guildId: string): Promise<any | null> {
-  const db = getDatabases();
-  const response = await db.listDocuments(DB_ID, GUILD_CONFIGS_COLLECTION, [
-    Query.equal("guildId", guildId),
-    Query.equal("moduleName", "music"),
-  ]);
-  return response.total > 0 ? response.documents[0] : null;
+let _db: DatabaseService | null = null;
+function getDb(): DatabaseService {
+  if (!_db) _db = new DatabaseService();
+  return _db;
 }
 
 async function getPreQueue(guildId: string): Promise<PreQueueItem[]> {
-  const doc = await findMusicConfigDoc(guildId);
-  if (!doc) return [];
-
-  // Read from the new dedicated column
-  if (doc.preQueueData) {
-    try {
-      const items = JSON.parse(doc.preQueueData);
-      if (Array.isArray(items)) return items;
-    } catch {
-      // corrupted JSON — fall through to legacy
-    }
+  try {
+    const settings = await getDb().getModuleSettings(guildId, "music");
+    const items = settings?.preQueue;
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
   }
-
-  // Legacy fallback: read from the old settings.preQueue field
-  // (one-time migration — next save will write to the new column)
-  if (doc.settings) {
-    try {
-      const settings = JSON.parse(doc.settings);
-      if (Array.isArray(settings?.preQueue)) return settings.preQueue;
-    } catch {}
-  }
-
-  return [];
 }
 
 async function savePreQueue(
   guildId: string,
   preQueue: PreQueueItem[],
 ): Promise<void> {
-  const db = getDatabases();
-  const doc = await findMusicConfigDoc(guildId);
-  const preQueueData = JSON.stringify(preQueue);
-
-  if (doc) {
-    // Also clear legacy settings.preQueue if present
-    const updates: Record<string, any> = { preQueueData };
-    if (doc.settings) {
-      try {
-        const settings = JSON.parse(doc.settings);
-        if (settings.preQueue) {
-          delete settings.preQueue;
-          updates.settings = JSON.stringify(settings);
-        }
-      } catch {}
-    }
-    await db.updateDocument(DB_ID, GUILD_CONFIGS_COLLECTION, doc.$id, updates);
-  } else {
-    // Create a new config document for this guild's music module
-    await db.createDocument(DB_ID, GUILD_CONFIGS_COLLECTION, "unique()", {
-      guildId,
-      moduleName: "music",
-      enabled: true,
-      settings: "{}",
-      preQueueData,
-    });
-  }
+  const db = getDb();
+  const settings = (await db.getModuleSettings(guildId, "music")) ?? {};
+  settings.preQueue = preQueue;
+  await db.setModuleSettings(guildId, "music", settings);
 }
 
 // ─── Music API ──────────────────────────────────────────────────────────────

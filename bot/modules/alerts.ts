@@ -92,7 +92,7 @@ const alertsModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const rawSettings = await appwrite.getModuleSettings(guildId, "alerts");
     const settings = parseSettings(AlertsSettingsSchema, rawSettings, "alerts", guildId) || { alerts: [] };
 
