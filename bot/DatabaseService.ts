@@ -26,6 +26,7 @@ import {
   TagRepository,
   TempVoiceChannelRepository,
   TriggerRepository,
+  TranscriptRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -56,6 +57,7 @@ export class DatabaseService {
   public readonly tags: TagRepository;
   public readonly tempVoice: TempVoiceChannelRepository;
   public readonly triggers: TriggerRepository;
+  public readonly transcripts: TranscriptRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -97,6 +99,7 @@ export class DatabaseService {
     this.tags = new TagRepository(db);
     this.tempVoice = new TempVoiceChannelRepository(db);
     this.triggers = new TriggerRepository(db);
+    this.transcripts = new TranscriptRepository(db);
   }
 
   // ── Cache invalidation ─────────────────────────────────────────────────
@@ -835,6 +838,25 @@ export class DatabaseService {
     data: Record<string, any>,
   ): Promise<void> {
     await this.triggers.update(triggerId, data);
+  }
+
+  // ── Transcripts ────────────────────────────────────────────────────────
+
+  /**
+   * Delete a transcript row and all its R2 assets. Retention worker owns
+   * the scheduling; this method owns the order (R2 first so a DB delete
+   * failure doesn't leak blobs).
+   */
+  async deleteTicketTranscript(transcriptId: string): Promise<void> {
+    try {
+      await this.storage.deleteTicketTranscriptAssets(transcriptId);
+    } catch (err) {
+      console.warn(
+        `[DatabaseService] Failed to delete R2 assets for transcript ${transcriptId}:`,
+        err,
+      );
+    }
+    await this.transcripts.deleteById(transcriptId);
   }
 
   // ── Alerts Worker helpers ──────────────────────────────────────────────
