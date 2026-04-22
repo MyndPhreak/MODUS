@@ -173,11 +173,27 @@ const ticketsModule: BotModule = {
           return;
         }
 
-        // Merge channel overrides into existing settings
+        // Merge channel overrides into existing settings.
+        // First-time configuration — default web transcripts on.
+        const hasExistingConfig =
+          rawSettings &&
+          typeof rawSettings === "object" &&
+          "panelChannelId" in rawSettings;
+
         const updatedSettings = {
           ...rawSettings,
           panelChannelId: panelCh.id,
           defaultParentChannelId: parentCh?.id ?? panelCh.id,
+          ...(hasExistingConfig
+            ? {}
+            : {
+                webTranscripts: {
+                  enabled: true,
+                  retentionDays: 90,
+                  mirrorAttachments: true,
+                  attachmentMaxSizeBytes: 8 * 1024 * 1024,
+                },
+              }),
         };
 
         try {

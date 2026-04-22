@@ -13,6 +13,7 @@ import { TicketsSettingsSchema } from "../../../lib/schemas";
 import { parseSettings } from "../../../lib/validateSettings";
 import { getThreadMeta } from "../lib/utils";
 import { generateMarkdownTranscript } from "../lib/transcript";
+import { snapshotTranscript } from "../lib/snapshot";
 import { isStaff } from "../lib/permissions";
 
 // ── Close handler ────────────────────────────────────────────────────────────
@@ -76,6 +77,29 @@ export async function handleClose(
     const filename = `${thread.name}-transcript.md`;
     const attachment = new AttachmentBuilder(transcriptBuffer, { name: filename });
 
+    // ── Snapshot to web transcript (optional, feature-flagged) ────────────
+    let webUrl: string | null = null;
+    try {
+      const snapshot = await snapshotTranscript(
+        thread,
+        meta,
+        settings,
+        moduleManager,
+        interaction.user.id,
+      );
+      if (snapshot) {
+        const base = process.env.PUBLIC_WEB_URL?.replace(/\/$/, "");
+        if (base) webUrl = `${base}/ticket/${snapshot.slug}`;
+      }
+    } catch (err) {
+      moduleManager.logger.error(
+        "Failed to snapshot ticket transcript",
+        guildId,
+        err,
+        "tickets",
+      );
+    }
+
     // ── Post transcript to log channel ────────────────────────────────────
     if (settings.transcriptChannelId) {
       const logChannel = guild.channels.cache.get(settings.transcriptChannelId) as
@@ -104,6 +128,9 @@ export async function handleClose(
               value: `<t:${Math.floor(new Date(meta.openedAt).getTime() / 1000)}:R>`,
               inline: true,
             },
+            ...(webUrl
+              ? [{ name: "🔗 Web Transcript", value: webUrl, inline: false }]
+              : []),
           )
           .setTimestamp();
 
@@ -126,10 +153,10 @@ export async function handleClose(
         const opener = await guild.members.fetch(meta.ownerId).catch(() => null);
         if (opener) {
           const dmAttachment = new AttachmentBuilder(transcriptBuffer, { name: filename });
-          await opener.send({
-            content: `Your ticket **${thread.name}** was closed. Here is your transcript:`,
-            files: [dmAttachment],
-          }).catch(() => {
+          const dmContent = webUrl
+            ? `Your ticket **${thread.name}** was closed. View online: ${webUrl}\n\nMarkdown copy attached below.`
+            : `Your ticket **${thread.name}** was closed. Here is your transcript:`;
+          await opener.send({ content: dmContent, files: [dmAttachment] }).catch(() => {
             // Silently ignore — user may have DMs disabled
           });
         }
