@@ -18,7 +18,6 @@
     "@nuxt/ui": "latest",
     "@pinia/nuxt": "^0.11.3",
     "@tailwindcss/vite": "latest",
-    "appwrite": "^21.4.0",
     "ioredis": "^5.10.1",
     "jszip": "^3.10.1",
     "konva": "^10.2.5",
