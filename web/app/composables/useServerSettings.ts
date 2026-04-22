@@ -1,4 +1,3 @@
-import { Query } from "appwrite";
 
 export interface ServerSettingsState {
   guild: any;
@@ -14,9 +13,6 @@ export interface ServerSettingsState {
   isServerOwnerOrAdmin: boolean;
 }
 
-const databaseId = "discord_bot";
-const modulesCollectionId = "modules";
-const guildConfigsCollectionId = "guild_configs";
 
 export function useServerSettings(guildId: string) {
   // Shared state keyed by guild ID so it persists across child pages
@@ -37,7 +33,6 @@ export function useServerSettings(guildId: string) {
     }),
   );
 
-  const { databases } = useAppwrite();
   const userStore = useUserStore();
   const toast = useToast();
 
@@ -71,37 +66,29 @@ export function useServerSettings(guildId: string) {
   };
 
   const toggleModule = async (moduleName: string, enabled: boolean) => {
+    const name = moduleName.toLowerCase();
     try {
-      const existingConfig = state.value.guildConfigs.find(
-        (c) => c.moduleName === moduleName.toLowerCase(),
+      await $fetch(
+        `/api/guild-configs/${encodeURIComponent(
+          guildId,
+        )}/${encodeURIComponent(name)}`,
+        { method: "PUT", body: { enabled } },
       );
-
-      if (existingConfig) {
-        const updated = await databases.updateDocument(
-          databaseId,
-          guildConfigsCollectionId,
-          existingConfig.$id,
-          { enabled },
-        );
-        const index = state.value.guildConfigs.findIndex(
-          (c) => c.$id === existingConfig.$id,
-        );
-        state.value.guildConfigs[index] = updated;
+      // Refresh the config locally — the PUT doesn't return the row.
+      const existing = state.value.guildConfigs.find(
+        (c) => c.moduleName === name,
+      );
+      if (existing) {
+        existing.enabled = enabled;
       } else {
-        const created = await databases.createDocument(
-          databaseId,
-          guildConfigsCollectionId,
-          "unique()",
-          {
-            guildId,
-            moduleName: moduleName.toLowerCase(),
-            enabled,
-            settings: "{}",
-          },
-        );
-        state.value.guildConfigs.push(created);
+        state.value.guildConfigs.push({
+          $id: `${guildId}:${name}`,
+          guildId,
+          moduleName: name,
+          enabled,
+          settings: "{}",
+        });
       }
-
       toast.add({
         title: "Success",
         description: `Module ${moduleName} ${enabled ? "enabled" : "disabled"} for this server.`,
@@ -122,38 +109,29 @@ export function useServerSettings(guildId: string) {
     moduleName: string,
     settingsPayload: Record<string, any>,
   ) => {
+    const name = moduleName.toLowerCase();
     try {
-      const config = state.value.guildConfigs.find(
-        (c) => c.moduleName === moduleName.toLowerCase(),
+      await $fetch(
+        `/api/guild-configs/${encodeURIComponent(
+          guildId,
+        )}/${encodeURIComponent(name)}`,
+        { method: "PUT", body: { settings: settingsPayload } },
+      );
+      const existing = state.value.guildConfigs.find(
+        (c) => c.moduleName === name,
       );
       const settingsJson = JSON.stringify(settingsPayload);
-
-      if (config) {
-        const updated = await databases.updateDocument(
-          databaseId,
-          guildConfigsCollectionId,
-          config.$id,
-          { settings: settingsJson },
-        );
-        const index = state.value.guildConfigs.findIndex(
-          (c) => c.$id === config.$id,
-        );
-        state.value.guildConfigs[index] = updated;
+      if (existing) {
+        existing.settings = settingsJson;
       } else {
-        const created = await databases.createDocument(
-          databaseId,
-          guildConfigsCollectionId,
-          "unique()",
-          {
-            guildId,
-            moduleName: moduleName.toLowerCase(),
-            enabled: true,
-            settings: settingsJson,
-          },
-        );
-        state.value.guildConfigs.push(created);
+        state.value.guildConfigs.push({
+          $id: `${guildId}:${name}`,
+          guildId,
+          moduleName: name,
+          enabled: true,
+          settings: settingsJson,
+        });
       }
-
       toast.add({
         title: "Settings Saved",
         description: `${moduleName} settings updated for this server.`,
@@ -247,11 +225,7 @@ export function useServerSettings(guildId: string) {
   // ── Initialization ──
   const fetchModules = async () => {
     try {
-      const response = await databases.listDocuments(
-        databaseId,
-        modulesCollectionId,
-      );
-      state.value.modules = response.documents;
+      state.value.modules = await $fetch<any[]>("/api/modules");
     } catch (error) {
       console.error("Error fetching modules:", error);
     }
@@ -259,12 +233,9 @@ export function useServerSettings(guildId: string) {
 
   const fetchGuildConfigs = async () => {
     try {
-      const response = await databases.listDocuments(
-        databaseId,
-        guildConfigsCollectionId,
-        [Query.equal("guildId", guildId)],
+      state.value.guildConfigs = await $fetch<any[]>(
+        `/api/guild-configs?guild_id=${encodeURIComponent(guildId)}`,
       );
-      state.value.guildConfigs = response.documents;
     } catch (error) {
       console.error("Error fetching guild configs:", error);
     }
@@ -301,22 +272,26 @@ export function useServerSettings(guildId: string) {
         }
       }
 
-      // Load Appwrite server document for ownership + dashboard role data
+      // Load the server row for ownership + dashboard role data. Uses
+      // /api/servers/by-guild-ids because it's already the shared
+      // projection the UI needs; a dedicated by-id endpoint would be
+      // marginal value.
       let serverDoc: any = null;
       try {
-        serverDoc = await databases.getDocument(
-          databaseId,
-          "servers",
-          guildId,
+        const rows = await $fetch<any[]>(
+          `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildId)}`,
         );
-        // Populate dashboard role IDs for the settings UI
-        state.value.dashboardRoleIds = Array.isArray(
-          serverDoc.dashboard_role_ids,
-        )
-          ? serverDoc.dashboard_role_ids
-          : [];
+        if (rows.length > 0) {
+          serverDoc = rows[0];
+          state.value.dashboardRoleIds = Array.isArray(
+            serverDoc.dashboard_role_ids,
+          )
+            ? serverDoc.dashboard_role_ids
+            : [];
+        }
       } catch {
-        // Document not found or permission denied
+        // Not registered yet or permission denied — fall through to the
+        // Discord-ADMIN check below.
       }
 
       // Discord ADMINISTRATOR → full access
@@ -326,7 +301,7 @@ export function useServerSettings(guildId: string) {
         return;
       }
 
-      // Appwrite owner / admin_user_ids → full access
+      // servers.owner_id / admin_user_ids → full access
       if (serverDoc) {
         const userId = userStore.user?.$id;
         const isOwner = serverDoc.owner_id === userId;
@@ -450,19 +425,9 @@ export function useServerSettings(guildId: string) {
   // ── Server Removal ──
   const removeServer = async () => {
     try {
-      for (const config of state.value.guildConfigs) {
-        try {
-          await databases.deleteDocument(
-            databaseId,
-            guildConfigsCollectionId,
-            config.$id,
-          );
-        } catch (err) {
-          console.warn("Failed to delete config:", config.$id, err);
-        }
-      }
-
-      await databases.deleteDocument(databaseId, "servers", guildId);
+      await $fetch(`/api/servers/${encodeURIComponent(guildId)}`, {
+        method: "DELETE",
+      });
 
       toast.add({
         title: "Server Removed",

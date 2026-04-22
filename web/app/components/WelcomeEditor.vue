@@ -716,7 +716,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
-import { Query } from "appwrite";
 import { useGoogleFonts } from "~/composables/useGoogleFonts";
 
 const { fontGroups, loadFont, loadTemplateFonts } = useGoogleFonts();
@@ -728,11 +727,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ (e: "saved"): void }>();
-const { databases } = useAppwrite();
 const toast = useToast();
 
-const databaseId = "discord_bot";
-const guildConfigsCollectionId = "guild_configs";
 
 // ── Types ──
 
@@ -1394,23 +1390,19 @@ function resetTemplate() {
 
 async function loadTemplate() {
   try {
-    const r = await databases.listDocuments(
-      databaseId,
-      guildConfigsCollectionId,
-      [
-        Query.equal("guildId", props.guildId),
-        Query.equal("moduleName", "welcome"),
-      ],
+    const cfg = await $fetch<{
+      enabled: boolean;
+      settings: Record<string, any>;
+    }>(
+      `/api/guild-configs/${encodeURIComponent(
+        props.guildId,
+      )}/${encodeURIComponent("welcome")}`,
     );
-    if (r.total > 0 && r.documents[0].settings) {
-      try {
-        template.value = {
-          ...JSON.parse(JSON.stringify(DEFAULT_TEMPLATE)),
-          ...JSON.parse(r.documents[0].settings),
-        };
-      } catch {
-        /* defaults */
-      }
+    if (cfg.settings && Object.keys(cfg.settings).length > 0) {
+      template.value = {
+        ...JSON.parse(JSON.stringify(DEFAULT_TEMPLATE)),
+        ...cfg.settings,
+      };
     }
   } catch (err) {
     console.error("[WelcomeEditor] load error:", err);
@@ -1420,35 +1412,15 @@ async function loadTemplate() {
 async function saveTemplate() {
   saving.value = true;
   try {
-    const r = await databases.listDocuments(
-      databaseId,
-      guildConfigsCollectionId,
-      [
-        Query.equal("guildId", props.guildId),
-        Query.equal("moduleName", "welcome"),
-      ],
+    await $fetch(
+      `/api/guild-configs/${encodeURIComponent(
+        props.guildId,
+      )}/${encodeURIComponent("welcome")}`,
+      {
+        method: "PUT",
+        body: { settings: template.value },
+      },
     );
-    const json = JSON.stringify(template.value);
-    if (r.total > 0) {
-      await databases.updateDocument(
-        databaseId,
-        guildConfigsCollectionId,
-        r.documents[0].$id,
-        { settings: json },
-      );
-    } else {
-      await databases.createDocument(
-        databaseId,
-        guildConfigsCollectionId,
-        "unique()",
-        {
-          guildId: props.guildId,
-          moduleName: "welcome",
-          enabled: true,
-          settings: json,
-        },
-      );
-    }
     toast.add({
       title: "Saved!",
       description: "Welcome template saved.",

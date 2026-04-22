@@ -156,8 +156,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { useAppwrite } from "~/composables/useAppwrite";
-import { Query } from "appwrite";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -207,13 +205,9 @@ const paginatedLogs = computed(() =>
 const fetchLogs = async () => {
   refreshing.value = true;
   try {
-    const { databases } = useAppwrite();
-    const res = await databases.listDocuments("discord_bot", "logs", [
-      Query.equal("guildId", guildId),
-      Query.orderDesc("timestamp"),
-      Query.limit(500),
-    ]);
-    logs.value = res.documents;
+    logs.value = await $fetch<any[]>(
+      `/api/logs?guild_id=${encodeURIComponent(guildId)}&limit=500`,
+    );
     currentPage.value = 1;
   } catch (error) {
     console.error("Error fetching logs:", error);

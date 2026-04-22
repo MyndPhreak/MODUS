@@ -90,9 +90,12 @@
         <h2 class="text-sm font-bold text-white">Admin Access</h2>
       </div>
       <p class="text-sm text-gray-400">
-        Admin access is managed via Appwrite user labels. Users with the
-        <UBadge color="primary" variant="soft" size="xs">admin</UBadge>
-        label have access to this dashboard.
+        Admin access is managed via the
+        <code class="text-xs bg-gray-800 px-1.5 py-0.5 rounded">
+          NUXT_PUBLIC_BOT_ADMIN_IDS
+        </code>
+        env var. Discord user IDs listed there get access to this
+        dashboard.
       </p>
     </div>
   </div>
@@ -101,21 +104,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 
-const { databases } = useAppwrite();
 const toast = useToast();
 
 const modulesLoading = ref(false);
 const modules = ref<any[]>([]);
 const updating = ref<string | null>(null);
 
-const databaseId = "discord_bot";
-const collectionId = "modules";
-
 const fetchModules = async () => {
   modulesLoading.value = true;
   try {
-    const response = await databases.listDocuments(databaseId, collectionId);
-    modules.value = response.documents;
+    modules.value = await $fetch<any[]>("/api/modules");
   } catch (error) {
     console.error("Error fetching modules:", error);
   } finally {
@@ -126,8 +124,9 @@ const fetchModules = async () => {
 const toggleModule = async (module: any) => {
   updating.value = module.$id;
   try {
-    await databases.updateDocument(databaseId, collectionId, module.$id, {
-      enabled: module.enabled,
+    await $fetch(`/api/modules/${encodeURIComponent(module.name)}`, {
+      method: "PATCH",
+      body: { enabled: module.enabled },
     });
     toast.add({
       title: "Success",
