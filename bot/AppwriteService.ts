@@ -27,7 +27,12 @@ import {
   TriggerRepository,
 } from "@modus/db";
 import { CacheService } from "./CacheService";
-import type { EventBus } from "./EventBus";
+import {
+  CHANNEL_GUILD_CONFIGS,
+  CHANNEL_LOGS,
+  CHANNEL_MODULES,
+  type EventBus,
+} from "./EventBus";
 
 // ── Appwrite Service ──────────────────────────────────────────────
 
@@ -86,10 +91,18 @@ export class AppwriteService {
    */
   private configCache: CacheService<any>;
 
+  /**
+   * Pub/sub for dashboard realtime + cross-shard cache. Null when Redis
+   * isn't configured. Publishers below use this; consumers (ModuleManager,
+   * music.ts, Nitro SSE bridge) subscribe to the matching channels.
+   */
+  private eventBus: EventBus | null;
+
   constructor(opts: { eventBus?: EventBus | null } = {}) {
+    this.eventBus = opts.eventBus ?? null;
     this.configCache = new CacheService<any>({
       ttlSeconds: 60,
-      eventBus: opts.eventBus ?? null,
+      eventBus: this.eventBus,
     });
 
     this.client = new Client()
@@ -260,6 +273,7 @@ export class AppwriteService {
         await this.guildConfigRepo.setModuleStatus(guildId, name, enabled);
         this.configCache.invalidate(`enabled:${guildId}:${name}`);
         this.configCache.invalidate(`settings:${guildId}:${name}`);
+        this.publishGuildConfigChange("status", guildId, name);
         return;
       } catch (error) {
         console.error(
@@ -302,6 +316,7 @@ export class AppwriteService {
 
       this.configCache.invalidate(`enabled:${guildId}:${name}`);
       this.configCache.invalidate(`settings:${guildId}:${name}`);
+      this.publishGuildConfigChange("status", guildId, name);
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module status for ${guildId}/${moduleName}:`,
@@ -371,6 +386,7 @@ export class AppwriteService {
         await this.guildConfigRepo.setModuleSettings(guildId, name, settings);
         this.configCache.invalidate(`settings:${guildId}:${name}`);
         this.configCache.invalidate(`enabled:${guildId}:${name}`);
+        this.publishGuildConfigChange("settings", guildId, name);
         return;
       } catch (error) {
         console.error(
@@ -415,6 +431,7 @@ export class AppwriteService {
 
       this.configCache.invalidate(`settings:${guildId}:${name}`);
       this.configCache.invalidate(`enabled:${guildId}:${name}`);
+      this.publishGuildConfigChange("settings", guildId, name);
     } catch (error) {
       console.error(
         `[AppwriteService] Error setting module settings for ${guildId}/${moduleName}:`,
@@ -433,26 +450,31 @@ export class AppwriteService {
     }
   }
 
-  subscribeToModules(callback: (payload: any) => void) {
-    return this.realtimeClient.subscribe(
-      [
-        `databases.${this.databaseId}.collections.${this.modulesCollectionId}.documents`,
-      ],
-      (response) => {
-        callback(response.payload);
-      },
-    );
+  /**
+   * Subscribe to global `modules` table changes. Replaces the old Appwrite
+   * Realtime websocket with a Redis pub/sub channel that the bot publishes
+   * to on its own writes.
+   *
+   * Returns a promise of an unsubscribe function. Falls back to a no-op
+   * unsubscribe when Redis isn't configured — callers that need hot reload
+   * should either run with REDIS_URL set or restart on module changes.
+   */
+  async subscribeToModules(
+    callback: (payload: any) => void,
+  ): Promise<() => Promise<void>> {
+    if (!this.eventBus) return async () => {};
+    return this.eventBus.subscribe(CHANNEL_MODULES, callback);
   }
 
-  subscribeToGuildConfigs(callback: (payload: any) => void) {
-    return this.realtimeClient.subscribe(
-      [
-        `databases.${this.databaseId}.collections.${this.guildConfigsCollectionId}.documents`,
-      ],
-      (response) => {
-        callback(response.payload);
-      },
-    );
+  /**
+   * Subscribe to per-guild `guild_configs` mutations (status or settings).
+   * Same semantics as `subscribeToModules`.
+   */
+  async subscribeToGuildConfigs(
+    callback: (payload: any) => void,
+  ): Promise<() => Promise<void>> {
+    if (!this.eventBus) return async () => {};
+    return this.eventBus.subscribe(CHANNEL_GUILD_CONFIGS, callback);
   }
 
   async getEnabledModules(): Promise<string[]> {
@@ -557,9 +579,19 @@ export class AppwriteService {
     shardId?: number,
     source?: string,
   ) {
+    const logDoc = {
+      guildId,
+      message,
+      level,
+      timestamp: new Date().toISOString(),
+      shardId: shardId ?? null,
+      source: source ?? null,
+    };
+
     if (this.logRepo) {
       try {
         await this.logRepo.log({ guildId, message, level, shardId, source });
+        this.publishLog(logDoc);
         return;
       } catch (error) {
         console.error(
@@ -570,14 +602,9 @@ export class AppwriteService {
       }
     }
     try {
-      const data: Record<string, any> = {
-        guildId,
-        message,
-        level,
-        timestamp: new Date().toISOString(),
-      };
-      if (shardId !== undefined) data.shardId = shardId;
-      if (source) data.source = source;
+      const data: Record<string, any> = { ...logDoc };
+      if (data.shardId === null) delete data.shardId;
+      if (data.source === null) delete data.source;
 
       await this.databases.createDocument(
         this.databaseId,
@@ -585,6 +612,7 @@ export class AppwriteService {
         "unique()",
         data,
       );
+      this.publishLog(logDoc);
     } catch (error) {
       console.error(
         `[AppwriteService] Error logging message for ${guildId}:`,
@@ -651,6 +679,7 @@ export class AppwriteService {
     if (this.moduleRepo) {
       try {
         await this.moduleRepo.ensureRegistered(moduleName, description);
+        this.publishModulesChange();
         return;
       } catch (error) {
         console.error(
@@ -679,10 +708,61 @@ export class AppwriteService {
           },
         );
         console.log(`Registered new module: ${moduleName}`);
+        this.publishModulesChange();
       }
     } catch (error) {
       console.error(`Error registering module ${moduleName}:`, error);
     }
+  }
+
+  // ── Realtime publishers ──────────────────────────────────────────────
+  //
+  // Fire-and-forget publishes to the dashboard SSE bridge + any bot-side
+  // subscribers (ModuleManager, music.ts). Failures are logged and
+  // swallowed — realtime is a nice-to-have on top of the durable write
+  // that already landed in Postgres / Appwrite.
+
+  private publishLog(log: Record<string, any>): void {
+    if (!this.eventBus) return;
+    this.eventBus
+      .publish(CHANNEL_LOGS, { kind: "create", log })
+      .catch((err) => {
+        console.warn(
+          `[AppwriteService] log publish failed: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      });
+  }
+
+  private publishModulesChange(): void {
+    if (!this.eventBus) return;
+    this.eventBus
+      .publish(CHANNEL_MODULES, { kind: "changed" })
+      .catch((err) => {
+        console.warn(
+          `[AppwriteService] modules publish failed: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      });
+  }
+
+  private publishGuildConfigChange(
+    kind: "status" | "settings",
+    guildId: string,
+    moduleName: string,
+  ): void {
+    if (!this.eventBus) return;
+    this.eventBus
+      .publish(CHANNEL_GUILD_CONFIGS, { kind, guildId, moduleName })
+      .catch((err) => {
+        console.warn(
+          `[AppwriteService] guild-configs publish failed: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      });
   }
 
   // ── Recording Storage ──────────────────────────────────────────────────

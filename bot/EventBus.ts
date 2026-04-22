@@ -15,6 +15,26 @@
 import { randomUUID } from "crypto";
 import type { RedisClients } from "./RedisClient";
 
+// ── Channel constants ────────────────────────────────────────────────────
+//
+// Shared between the bot (publisher + legacy subscribers) and the Nitro SSE
+// bridge (subscriber). Keep names in sync with `web/server/utils/eventbus.ts`.
+
+/** Cross-shard cache invalidation. Consumed by `CacheService`. */
+export const CHANNEL_CACHE_INVALIDATE = "modus:cache:invalidate";
+
+/** Dashboard log stream — `{ kind: "create", log: LogDoc }`. */
+export const CHANNEL_LOGS = "modus:realtime:logs";
+
+/** Global `modules` table changes — `{ kind: "changed" }`. */
+export const CHANNEL_MODULES = "modus:realtime:modules";
+
+/**
+ * Per-guild `guild_configs` mutations — shape:
+ *   { kind: "status"|"settings", guildId, moduleName }
+ */
+export const CHANNEL_GUILD_CONFIGS = "modus:realtime:guild-configs";
+
 export interface Envelope<T = unknown> {
   origin: string;
   ts: number;
