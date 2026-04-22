@@ -1,46 +1,55 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Discord Bot — Multi-stage Docker build
-# Optimized for Unraid / any Docker host
+# Discord Bot — Multi-stage Docker build (workspace-aware)
+#
+# Build context is the repo root so pnpm can resolve the full workspace
+# (root lockfile + workspace members). `pnpm deploy` then produces a
+# self-contained, pruned directory for the production stage.
+#
+#   docker build -f bot/Dockerfile -t modus-bot .
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:22-slim AS builder
 
-# Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.9.0 --activate
 
-WORKDIR /app
+WORKDIR /repo
 
-# Copy dependency manifests + patches first (Docker layer caching)
-# patches/ must be present before pnpm install because pnpm hashes patch files
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
+# Copy workspace manifests first (Docker layer caching).
+# patches/ must be present before pnpm install because pnpm hashes patch files.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY bot/package.json ./bot/
+COPY web/package.json ./web/
+COPY packages/db/package.json ./packages/db/
+COPY bot/patches ./bot/patches
 
-# Install ALL dependencies (including devDependencies for TypeScript build).
-# Running with scripts enabled is required so that packages like youtubei.js
-# (installed from the GitHub tarball, not npm) execute their postinstall build
-# step and produce their dist/ output.
-# Skip youtube-dl-exec's Python check — the production stage installs yt-dlp via pip.
+# The root postinstall hook compiles @modus/db (tsc), so we need its source
+# and tsconfig present before `pnpm install` runs.
+COPY packages/db/tsconfig.json ./packages/db/
+COPY packages/db/src ./packages/db/src
+
+# Install ALL workspace dependencies with the frozen root lockfile. Running
+# install with scripts enabled lets packages like youtubei.js produce their
+# postinstall dist/ output. YOUTUBE_DL_SKIP_PYTHON_CHECK stops youtube-dl-exec
+# from failing on this stage (yt-dlp is installed via pip in stage 2).
 RUN YOUTUBE_DL_SKIP_PYTHON_CHECK=1 pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
+# Copy bot source and compile TS → JS
+COPY bot/ ./bot/
+RUN pnpm --filter bot run build
 
-# Compile TypeScript → JavaScript
-RUN pnpm run build
-
-# Prune devDependencies from node_modules in-place so the production stage can
-# copy a lean, already-built node_modules without re-running any install.
-RUN pnpm prune --prod
+# Produce a deployable, production-pruned directory containing the bot plus
+# its resolved workspace dependencies (@modus/db built output included).
+RUN pnpm --filter bot deploy --prod --legacy /deploy/bot
 
 # ── Stage 2: Production ──────────────────────────────────────────────────────
 FROM node:22-slim AS production
 
-# Install system dependencies:
-#   - ffmpeg:   Audio transcoding + buffered streaming
-#   - python3:  Required by yt-dlp
+# System deps:
+#   - ffmpeg:   audio transcoding + buffered streaming
+#   - python3:  required by yt-dlp
 #   - yt-dlp:   YouTube audio URL resolution
-#   - ca-certs: HTTPS connections to YouTube/Discord
+#   - ca-certs: HTTPS to YouTube/Discord
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
@@ -54,24 +63,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy manifests (needed for pnpm/Node module resolution metadata at runtime)
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
+# Self-contained bot deployment: package.json + node_modules + dist.
+COPY --from=builder /deploy/bot ./
 
-# Copy the already-built, already-pruned node_modules from the builder stage.
-# This avoids re-running pnpm install and preserves all lifecycle-script output
-# (e.g. youtubei.js dist/) that --ignore-scripts would have silently dropped.
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy compiled JavaScript from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Health check — hits the bot's built-in health server
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "const http = require('http'); http.get('http://localhost:' + (process.env.BOT_PORT || 3000), (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-# Expose health check port (configurable via BOT_PORT env var)
 EXPOSE 3000
 
-# Run the bot
 CMD ["node", "dist/index.js"]

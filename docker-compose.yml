@@ -68,8 +68,8 @@ services:
   # ── Discord Bot ───────────────────────────────────────────────────────────
   bot:
     build:
-      context: ./bot
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: bot/Dockerfile
     image: ghcr.io/${GHCR_OWNER:-local}/modus-bot:latest
     container_name: modus-bot
     restart: unless-stopped
@@ -96,8 +96,8 @@ services:
   # ── Web Dashboard (Nuxt) ─────────────────────────────────────────────────
   web:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: web/Dockerfile
     image: ghcr.io/${GHCR_OWNER:-local}/modus-web:latest
     container_name: modus-web
     restart: unless-stopped

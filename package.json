@@ -3,6 +3,9 @@
   "version": "1.10.0",
   "private": true,
   "description": "MODUS — A modular Discord bot with web dashboard",
+  "scripts": {
+    "postinstall": "pnpm --filter @modus/db run build"
+  },
   "pnpm": {
     "patchedDependencies": {
       "@discordjs/voice": "bot/patches/@discordjs__voice.patch"
