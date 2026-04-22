@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.11.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.10.0...modus-v1.11.0) (2026-04-21)
+
+
+### ✨ Features
+
+* **api:** add role-based dashboard access endpoints ([22baa09](https://github.com/MyndPhreak/MODUS/commit/22baa092f00d60633f6ce66325dd4c71f4222334))
+* **bot:** add dashboard_role_ids field to servers collection schema ([11e20c2](https://github.com/MyndPhreak/MODUS/commit/11e20c2dc1e62c199907710ea4dbb52ee62678eb))
+* **bot:** edit Now Playing embed in-place for playlist tracks ([a25411c](https://github.com/MyndPhreak/MODUS/commit/a25411c08040a850f8281db070e3968edc8ea5c1))
+* **web:** add granular role-based dashboard access control ([7e356dc](https://github.com/MyndPhreak/MODUS/commit/7e356dc791be01698326b34b3b2f62e1822ca967))
+
+
+### 🐛 Bug Fixes
+
+* **music:** remove skip messages ([028542a](https://github.com/MyndPhreak/MODUS/commit/028542ad09d3e7ee68671c502ee9cdb989a4ac46))
+* **welcome:** add more descriptive error messages ([8ee377a](https://github.com/MyndPhreak/MODUS/commit/8ee377a1bf59aae61bcec758966764e5c33f58ba))
+
+
+### 📖 Documentation
+
+* add comprehensive CLAUDE.md for AI assistant guidance ([f513cfb](https://github.com/MyndPhreak/MODUS/commit/f513cfb9c5da7fb75ed58a3d1fe261a05946ac65))
+* add project README with features, setup, and tech overview ([d8bed15](https://github.com/MyndPhreak/MODUS/commit/d8bed15996b76e19276756d277fa19e8c81e1f1a))
+
 ## [1.10.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.9.0...modus-v1.10.0) (2026-04-05)
 
 
