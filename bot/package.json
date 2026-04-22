@@ -40,7 +40,7 @@
     "sodium-native": "^5.1.0",
     "ws": "^8.20.0",
     "youtube-dl-exec": "^3.1.5",
-    "youtubei.js": "https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main",
+    "youtubei.js": "^17.0.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -49,13 +49,5 @@
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2"
-  },
-  "pnpm": {
-    "overrides": {
-      "youtubei.js": "https://codeload.github.com/LuanRT/YouTube.js/legacy.tar.gz/refs/heads/main"
-    },
-    "patchedDependencies": {
-      "@discordjs/voice": "patches/@discordjs__voice.patch"
-    }
   }
 }
