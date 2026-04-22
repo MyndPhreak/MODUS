@@ -105,7 +105,7 @@ const antiraidModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     if (subcommand === "config") {
       const threshold = interaction.options.getInteger("threshold", true);
@@ -171,7 +171,7 @@ export function registerAntiRaidEvents(moduleManager: ModuleManager) {
   client.on("guildMemberAdd", async (member: GuildMember) => {
     try {
       const guildId = member.guild.id;
-      const appwrite = moduleManager.appwriteService;
+      const appwrite = moduleManager.databaseService;
 
       const isEnabled = await appwrite.isModuleEnabled(guildId, "antiraid");
       if (!isEnabled) return;

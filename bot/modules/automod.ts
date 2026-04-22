@@ -97,7 +97,7 @@ async function getRulesForGuild(
     return cached.rules;
   }
 
-  const docs = await moduleManager.appwriteService.getEnabledAutoModRules(
+  const docs = await moduleManager.databaseService.getEnabledAutoModRules(
     guildId,
     trigger,
   );
@@ -448,7 +448,7 @@ async function executeActions(
         case "warn_user": {
           // Store warning in moderation settings (reuses existing pattern)
           const modSettings =
-            await moduleManager.appwriteService.getModuleSettings(
+            await moduleManager.databaseService.getModuleSettings(
               guildId,
               "moderation",
             );
@@ -465,7 +465,7 @@ async function executeActions(
             reason: `AutoMod: Rule "${rule.name}" triggered`,
             timestamp: new Date().toISOString(),
           });
-          await moduleManager.appwriteService.setModuleSettings(
+          await moduleManager.databaseService.setModuleSettings(
             guildId,
             "moderation",
             { ...modSettings, warnings, lastCaseId },
@@ -557,7 +557,7 @@ async function executeActions(
 
         case "log_to_modlog": {
           const modSettings =
-            await moduleManager.appwriteService.getModuleSettings(
+            await moduleManager.databaseService.getModuleSettings(
               guildId,
               "moderation",
             );
@@ -644,7 +644,7 @@ async function evaluateMessage(
   const guildId = message.guildId;
 
   // Check if automod module is enabled for this guild
-  const isEnabled = await moduleManager.appwriteService.isModuleEnabled(
+  const isEnabled = await moduleManager.databaseService.isModuleEnabled(
     guildId,
     "automod",
   );
@@ -732,7 +732,7 @@ const automodModule: BotModule = {
       return;
     }
 
-    const rules = await moduleManager.appwriteService.getAutoModRules(guildId);
+    const rules = await moduleManager.databaseService.getAutoModRules(guildId);
     const enabledCount = rules.filter((r) => r.enabled).length;
 
     const embed = new EmbedBuilder()

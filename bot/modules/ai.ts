@@ -552,7 +552,7 @@ async function executeToolCall(
   }
 
   // All music tools require the music module to be enabled
-  const isMusicEnabled = await moduleManager.appwriteService.isModuleEnabled(
+  const isMusicEnabled = await moduleManager.databaseService.isModuleEnabled(
     guildId,
     "music",
   );
@@ -736,7 +736,7 @@ const aiModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     switch (subcommand) {
       case "status": {
@@ -798,7 +798,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       // DM handling — off by default
       if (!guildId) return;
 
-      const appwrite = moduleManager.appwriteService;
+      const appwrite = moduleManager.databaseService;
 
       // ─ Module enabled check ─────────────────────────────────────
       const isEnabled = await appwrite.isModuleEnabled(guildId, "ai");

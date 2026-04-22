@@ -164,7 +164,7 @@ const ticketsModule: BotModule = {
         const panelCh = interaction.options.getChannel("channel", true) as TextChannel;
         const parentCh = interaction.options.getChannel("parent_channel") as TextChannel | null;
 
-        const appwrite = moduleManager.appwriteService;
+        const appwrite = moduleManager.databaseService;
         const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
         const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
 
@@ -208,7 +208,7 @@ const ticketsModule: BotModule = {
       }
 
       if (sub === "disable") {
-        await moduleManager.appwriteService.setModuleStatus(guildId, "tickets", false);
+        await moduleManager.databaseService.setModuleStatus(guildId, "tickets", false);
         await interaction.editReply("✅ Ticketing system disabled.");
         return;
       }

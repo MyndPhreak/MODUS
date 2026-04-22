@@ -179,7 +179,7 @@ const triggersModule: BotModule = {
     if (!guildId) return interaction.respond([]);
 
     const focused = interaction.options.getFocused().toLowerCase();
-    const triggers = await moduleManager.appwriteService.listTriggers(guildId);
+    const triggers = await moduleManager.databaseService.listTriggers(guildId);
 
     const filtered = triggers
       .filter((t: any) => t.name.toLowerCase().includes(focused))
@@ -203,7 +203,7 @@ const triggersModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
 
     switch (subcommand) {
       // ── Create ──────────────────────────────────────────────────────

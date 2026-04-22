@@ -14,7 +14,7 @@ import {
 import { Player } from "discord-player";
 import fs from "fs";
 import path from "path";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
 
 export interface BotModule {
@@ -79,7 +79,7 @@ export class ModuleManager {
     return this.uniqueModules;
   }
   private modulesPath: string;
-  public appwriteService: AppwriteService;
+  public databaseService: DatabaseService;
   private enabledModules: Set<string> = new Set();
   public logger: Logger;
   public player: Player;
@@ -87,7 +87,7 @@ export class ModuleManager {
   constructor(client: Client, logger: Logger, player: Player) {
     this.client = client;
     this.modulesPath = path.join(__dirname, "modules");
-    this.appwriteService = new AppwriteService();
+    this.databaseService = new DatabaseService();
     this.logger = logger;
     this.player = player;
   }
@@ -151,7 +151,7 @@ export class ModuleManager {
           }
 
           // Register module in Appwrite if not exists
-          await this.appwriteService.ensureModuleRegistered(
+          await this.databaseService.ensureModuleRegistered(
             module.name,
             module.description || "No description",
           );
@@ -173,7 +173,7 @@ export class ModuleManager {
     // Hot-reload subscription: fires when another shard (or the dashboard)
     // writes to the modules table. Falls back to a no-op when Redis isn't
     // configured — restart is required to see new modules in that case.
-    await this.appwriteService.subscribeToModules(() => {
+    await this.databaseService.subscribeToModules(() => {
       console.log("[ModuleManager] modules channel event — refreshing.");
       this.refreshEnabledModules();
     });
@@ -220,7 +220,7 @@ export class ModuleManager {
   }
 
   private async refreshEnabledModules() {
-    const enabled = await this.appwriteService.getEnabledModules();
+    const enabled = await this.databaseService.getEnabledModules();
     this.enabledModules = new Set(enabled.map((n) => n.toLowerCase()));
     console.log("Updated enabled modules:", Array.from(this.enabledModules));
   }
@@ -422,7 +422,7 @@ export class ModuleManager {
       // 3. Check guild-specific enablement (network call, but interaction is already deferred)
       let isGuildEnabled = true;
       if (guildId) {
-        isGuildEnabled = await this.appwriteService.isModuleEnabled(
+        isGuildEnabled = await this.databaseService.isModuleEnabled(
           guildId,
           module.name,
         );

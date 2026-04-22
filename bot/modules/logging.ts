@@ -45,13 +45,13 @@ export async function sendAuditLog(
   eventType: keyof Omit<LoggingSettings, "auditChannelId">,
 ) {
   try {
-    const isEnabled = await moduleManager.appwriteService.isModuleEnabled(
+    const isEnabled = await moduleManager.databaseService.isModuleEnabled(
       guildId,
       "logging",
     );
     if (!isEnabled) return;
 
-    const saved = await moduleManager.appwriteService.getModuleSettings(
+    const saved = await moduleManager.databaseService.getModuleSettings(
       guildId,
       "logging",
     );
@@ -94,7 +94,7 @@ const loggingModule: BotModule = {
       return;
     }
 
-    const saved = await moduleManager.appwriteService.getModuleSettings(
+    const saved = await moduleManager.databaseService.getModuleSettings(
       guildId,
       "logging",
     );

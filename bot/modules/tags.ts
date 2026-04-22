@@ -103,7 +103,7 @@ async function handleTag(
     return;
   }
 
-  const tag = await moduleManager.appwriteService.getTagByName(guildId, name);
+  const tag = await moduleManager.databaseService.getTagByName(guildId, name);
   if (!tag) {
     await interaction.editReply({
       content: `❌ Tag \`${name}\` not found. Use \`/tag-list\` to see available tags.`,
@@ -210,7 +210,7 @@ async function handleTagCreate(
   }
 
   // Check if tag already exists
-  const existing = await moduleManager.appwriteService.getTagByName(
+  const existing = await moduleManager.databaseService.getTagByName(
     guildId,
     name,
   );
@@ -233,7 +233,7 @@ async function handleTagCreate(
   }
 
   try {
-    await moduleManager.appwriteService.createTag({
+    await moduleManager.databaseService.createTag({
       guild_id: guildId,
       name,
       content: content || undefined,
@@ -281,7 +281,7 @@ async function handleTagDelete(
     return;
   }
 
-  const tag = await moduleManager.appwriteService.getTagByName(guildId, name);
+  const tag = await moduleManager.databaseService.getTagByName(guildId, name);
   if (!tag) {
     await interaction.editReply({
       content: `❌ Tag \`${name}\` not found.`,
@@ -290,7 +290,7 @@ async function handleTagDelete(
   }
 
   try {
-    await moduleManager.appwriteService.deleteTag(tag.$id, guildId);
+    await moduleManager.databaseService.deleteTag(tag.$id, guildId);
     await interaction.editReply({
       content: `✅ Tag \`${name}\` has been deleted.`,
     });
@@ -314,7 +314,7 @@ async function handleTagList(
     return;
   }
 
-  const tags = await moduleManager.appwriteService.getTags(guildId);
+  const tags = await moduleManager.databaseService.getTags(guildId);
 
   if (tags.length === 0) {
     await interaction.editReply({
@@ -352,7 +352,7 @@ async function handleAutocomplete(
   if (!guildId) return;
 
   const focused = interaction.options.getFocused().toLowerCase();
-  const tags = await moduleManager.appwriteService.getTags(guildId);
+  const tags = await moduleManager.databaseService.getTags(guildId);
 
   const filtered = tags
     .filter((t) => t.name.includes(focused))

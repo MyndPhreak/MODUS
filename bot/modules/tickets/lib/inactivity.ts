@@ -30,7 +30,7 @@ const SWEEP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 // ── Main sweep ────────────────────────────────────────────────────────────────
 
 async function runSweep(client: Client, moduleManager: ModuleManager): Promise<void> {
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
 
   for (const guild of client.guilds.cache.values()) {
     try {

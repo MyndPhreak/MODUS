@@ -210,7 +210,7 @@ const buttonRolesModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const raw = await appwrite.getModuleSettings(guildId, "reaction-roles");
     const settings =
       parseSettings(ButtonRolesSettingsSchema, raw, "reaction-roles", guildId) ??
@@ -306,7 +306,7 @@ const buttonRolesModule: BotModule = {
     if (parts.length < 3) return;
     const [, panelId, entryId] = parts;
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const isEnabled = await appwrite.isModuleEnabled(guildId, "reaction-roles");
     if (!isEnabled) {
       await interaction.reply({
@@ -353,7 +353,7 @@ export function registerReactionRolesEvents(moduleManager: ModuleManager) {
     const guildId = interaction.guildId;
     if (!guildId) return;
 
-    const appwrite = moduleManager.appwriteService;
+    const appwrite = moduleManager.databaseService;
     const isEnabled = await appwrite.isModuleEnabled(guildId, "reaction-roles");
     if (!isEnabled) return;
 

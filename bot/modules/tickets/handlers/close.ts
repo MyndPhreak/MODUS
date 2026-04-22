@@ -36,7 +36,7 @@ export async function handleClose(
   const thread = channel as ThreadChannel;
 
   // Resolve settings
-  const appwrite = moduleManager.appwriteService;
+  const appwrite = moduleManager.databaseService;
   const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
 

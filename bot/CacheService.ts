@@ -9,7 +9,7 @@
  * be even if pub/sub is down.
  *
  * Drop-in replacement for the old in-line `TTLCache`: same method shapes
- * so AppwriteService call sites don't change. When constructed without an
+ * so DatabaseService call sites don't change. When constructed without an
  * EventBus, behavior is identical to the old single-process cache.
  */
 import type { EventBus } from "./EventBus";

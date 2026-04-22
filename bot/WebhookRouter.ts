@@ -12,7 +12,7 @@ import http from "http";
 import crypto from "crypto";
 import { URL } from "url";
 import { Client, TextChannel, EmbedBuilder } from "discord.js";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -310,7 +310,7 @@ function handleGenericWebhook(
 export function registerWebhookRoutes(
   server: http.Server,
   client: Client,
-  appwriteService: AppwriteService,
+  databaseService: DatabaseService,
 ) {
   const originalHandler = server.listeners("request")[0] as Function;
   server.removeAllListeners("request");
@@ -396,7 +396,7 @@ export function registerWebhookRoutes(
           const broadcasterName: string = event.broadcaster_user_name ?? broadcasterLogin;
 
           try {
-            const configs = await appwriteService.getAllAlertsConfigs();
+            const configs = await databaseService.getAllAlertsConfigs();
             for (const { guildId, alerts } of configs) {
               for (const alert of alerts) {
                 if (
@@ -488,7 +488,7 @@ export function registerWebhookRoutes(
         const secret = triggerMatch[1];
 
         try {
-          const trigger = await appwriteService.getTriggerBySecret(secret);
+          const trigger = await databaseService.getTriggerBySecret(secret);
 
           if (!trigger) {
             console.warn(

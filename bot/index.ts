@@ -8,7 +8,7 @@ import fs from "fs";
 import os from "os";
 import dotenv from "dotenv";
 import { ModuleManager } from "./ModuleManager";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 import { ServerStatusService } from "./ServerStatusService";
 import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { Logger } from "./Logger";
@@ -113,11 +113,11 @@ const eventBus: EventBus | null = redisClients
   ? new EventBus(redisClients)
   : null;
 
-const appwriteService = new AppwriteService({ eventBus });
+const databaseService = new DatabaseService({ eventBus });
 const shardId = client.shard?.ids[0] ?? 0;
-const logger = new Logger(appwriteService, shardId);
+const logger = new Logger(databaseService, shardId);
 const moduleManager = new ModuleManager(client, logger, player);
-const serverStatusService = new ServerStatusService(client, appwriteService);
+const serverStatusService = new ServerStatusService(client, databaseService);
 
 client.once("ready", async () => {
   const shardIdStr = client.shard?.ids[0] ?? "N/A";
@@ -216,7 +216,7 @@ client.once("ready", async () => {
   );
   if (retentionDays > 0) {
     const retentionWorker = new RecordingRetentionWorker(
-      appwriteService,
+      databaseService,
       logger,
       retentionDays,
     );
@@ -263,7 +263,7 @@ client.once("ready", async () => {
   }
 
   const updateHeartbeat = () => {
-    appwriteService.updateBotHeartbeat(
+    databaseService.updateBotHeartbeat(
       `bot-shard-${shardId}`,
       botVersion,
       typeof shardId === "number" ? shardId : 0,
@@ -307,7 +307,7 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
   registerMusicAPI(server, client);
-  registerWebhookRoutes(server, client, appwriteService);
+  registerWebhookRoutes(server, client, databaseService);
 });
 
 client.on("interactionCreate", async (interaction) => {

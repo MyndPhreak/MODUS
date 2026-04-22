@@ -21,7 +21,6 @@ import {
 } from "discord-player";
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
-import { Databases, Query } from "node-appwrite";
 import type { BotModule } from "../ModuleManager";
 import { activeSessions as recordingActiveSessions } from "./recording";
 import { MusicSettingsSchema, type MusicSettings } from "../lib/schemas";
@@ -124,7 +123,7 @@ async function getSettings(
   moduleManager: ModuleManager,
   guildId: string,
 ): Promise<MusicSettings> {
-  const saved = await moduleManager.appwriteService.getModuleSettings(
+  const saved = await moduleManager.databaseService.getModuleSettings(
     guildId,
     "music",
   );
@@ -351,7 +350,7 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
   // sees the same authoritative value. Falls back to no-op when Redis
   // isn't configured; the dashboard filter changes will only take effect
   // on the next /play or on bot restart in that case.
-  await moduleManager.appwriteService.subscribeToGuildConfigs(
+  await moduleManager.databaseService.subscribeToGuildConfigs(
     async (payload: any) => {
       try {
         if (payload?.moduleName !== "music") return;
@@ -360,7 +359,7 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
         if (!guildId) return;
 
         const settings =
-          await moduleManager.appwriteService.getModuleSettings(
+          await moduleManager.databaseService.getModuleSettings(
             guildId,
             "music",
           );
@@ -924,7 +923,7 @@ async function handleVolume(
   try {
     const settings = await getSettings(moduleManager, interaction.guildId!);
     settings.defaultVolume = level;
-    await moduleManager.appwriteService.setModuleSettings(
+    await moduleManager.databaseService.setModuleSettings(
       interaction.guildId!,
       "music",
       settings,
@@ -1083,7 +1082,7 @@ async function handleFilter(
             interaction.guildId!,
           );
           settings.activeFilters = [];
-          await moduleManager.appwriteService.setModuleSettings(
+          await moduleManager.databaseService.setModuleSettings(
             interaction.guildId!,
             "music",
             settings,
@@ -1147,7 +1146,7 @@ async function handleFilter(
       try {
         const settings = await getSettings(moduleManager, interaction.guildId!);
         settings.activeFilters = allActive;
-        await moduleManager.appwriteService.setModuleSettings(
+        await moduleManager.databaseService.setModuleSettings(
           interaction.guildId!,
           "music",
           settings,
@@ -1199,45 +1198,14 @@ async function handlePlayQueue(
   const player = useMainPlayer();
 
   try {
-    // Read pre-queue from the dedicated preQueueData column
-    const { Client: AClient } = require("node-appwrite");
-    const aClient = new AClient()
-      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
-      .setProject(process.env.APPWRITE_PROJECT_ID!)
-      .setKey(process.env.APPWRITE_API_KEY!);
-    const db = new Databases(aClient);
-    const configResponse = await db.listDocuments(
-      "discord_bot",
-      "guild_configs",
-      [
-        Query.equal("guildId", interaction.guildId!),
-        Query.equal("moduleName", "music"),
-      ],
+    // Pre-queue lives inside the music module's settings object.
+    const musicSettings = await moduleManager.databaseService.getModuleSettings(
+      interaction.guildId!,
+      "music",
     );
-
-    let preQueue: any[] = [];
-    let configDocId: string | null = null;
-
-    if (configResponse.total > 0) {
-      const doc = configResponse.documents[0];
-      configDocId = doc.$id;
-
-      // Try the new dedicated column first
-      if (doc.preQueueData) {
-        try {
-          const parsed = JSON.parse(doc.preQueueData);
-          if (Array.isArray(parsed)) preQueue = parsed;
-        } catch {}
-      }
-
-      // Legacy fallback: read from settings.preQueue
-      if (preQueue.length === 0 && doc.settings) {
-        try {
-          const s = JSON.parse(doc.settings);
-          if (Array.isArray(s?.preQueue)) preQueue = s.preQueue;
-        } catch {}
-      }
-    }
+    const preQueue: any[] = Array.isArray(musicSettings?.preQueue)
+      ? musicSettings.preQueue
+      : [];
 
     if (preQueue.length === 0) {
       await interaction.editReply({
@@ -1293,24 +1261,14 @@ async function handlePlayQueue(
       }
     }
 
-    // Clear the pre-queue after loading (new column + legacy)
-    if (configDocId) {
-      const updates: Record<string, any> = { preQueueData: "[]" };
-      // Also clear legacy settings.preQueue if it existed
-      if (configResponse.documents[0].settings) {
-        try {
-          const s = JSON.parse(configResponse.documents[0].settings);
-          if (s.preQueue) {
-            delete s.preQueue;
-            updates.settings = JSON.stringify(s);
-          }
-        } catch {}
-      }
-      await db.updateDocument(
-        "discord_bot",
-        "guild_configs",
-        configDocId,
-        updates,
+    // Clear the pre-queue after loading so the dashboard reflects the
+    // consumed state immediately.
+    if (musicSettings && Array.isArray(musicSettings.preQueue)) {
+      const next = { ...musicSettings, preQueue: [] };
+      await moduleManager.databaseService.setModuleSettings(
+        interaction.guildId!,
+        "music",
+        next,
       );
     }
 
@@ -1762,7 +1720,7 @@ export async function musicSetVolume(
   try {
     const settings = await getSettings(moduleManager, guildId);
     settings.defaultVolume = clamped;
-    await moduleManager.appwriteService.setModuleSettings(
+    await moduleManager.databaseService.setModuleSettings(
       guildId,
       "music",
       settings,

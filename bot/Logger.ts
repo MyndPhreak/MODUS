@@ -1,11 +1,11 @@
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 
 export class Logger {
-  private appwriteService: AppwriteService;
+  private databaseService: DatabaseService;
   private shardId: number;
 
-  constructor(appwriteService: AppwriteService, shardId: number = 0) {
-    this.appwriteService = appwriteService;
+  constructor(databaseService: DatabaseService, shardId: number = 0) {
+    this.databaseService = databaseService;
     this.shardId = shardId;
   }
 
@@ -22,7 +22,7 @@ export class Logger {
   public async info(message: string, guildId?: string, source?: string) {
     const formatted = this.format(message, guildId);
     console.log(`[INFO] ${formatted}`);
-    await this.appwriteService.logServerMessage(
+    await this.databaseService.logServerMessage(
       guildId || "global",
       message,
       "info",
@@ -34,7 +34,7 @@ export class Logger {
   public async warn(message: string, guildId?: string, source?: string) {
     const formatted = this.format(message, guildId);
     console.warn(`[WARN] ${formatted}`);
-    await this.appwriteService.logServerMessage(
+    await this.databaseService.logServerMessage(
       guildId || "global",
       message,
       "warn",
@@ -53,7 +53,7 @@ export class Logger {
     console.error(`[ERROR] ${formatted}`, error);
     const errorMessage =
       error instanceof Error ? `${message}: ${error.message}` : message;
-    await this.appwriteService.logServerMessage(
+    await this.databaseService.logServerMessage(
       guildId || "global",
       errorMessage,
       "error",

@@ -1,14 +1,14 @@
 import { Client } from "discord.js";
-import { AppwriteService } from "./AppwriteService";
+import { DatabaseService } from "./DatabaseService";
 
 export class ServerStatusService {
-  private appwriteService: AppwriteService;
+  private databaseService: DatabaseService;
   private client: Client;
   private checkInterval = 5 * 60 * 1000; // 5 minutes
 
-  constructor(client: Client, appwriteService: AppwriteService) {
+  constructor(client: Client, databaseService: DatabaseService) {
     this.client = client;
-    this.appwriteService = appwriteService;
+    this.databaseService = databaseService;
   }
 
   public start() {
@@ -18,7 +18,7 @@ export class ServerStatusService {
   }
 
   private async checkServers() {
-    const allServers = await this.appwriteService.getServers();
+    const allServers = await this.databaseService.getServers();
 
     // Filter servers that belong to this shard's guilds
     const servers = allServers.filter((server) =>
@@ -40,7 +40,7 @@ export class ServerStatusService {
         const name = guild?.name ?? server.name;
 
         const shardId = this.client.shard?.ids[0] ?? 0;
-        await this.appwriteService.updateServerStatus(
+        await this.databaseService.updateServerStatus(
           server.$id,
           server.guild_id,
           isOnline,
