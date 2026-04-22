@@ -45,8 +45,6 @@ export default defineNuxtConfig({
     // return 503 rather than silently degrading.
     databaseUrl: "", // Set via NUXT_DATABASE_URL
     public: {
-      appwriteEndpoint: "https://api.ppo.gg/v1", // Set via NUXT_PUBLIC_APPWRITE_ENDPOINT
-      appwriteProjectId: "69266f6e00118a9f6b58", // Set via NUXT_PUBLIC_APPWRITE_PROJECT_ID
       baseUrl: "https://modus.ppo.gg", // Set via NUXT_PUBLIC_BASE_URL
       webhookBaseUrl: "https://modus.ppo.gg", // Public origin for webhook trigger URLs — Set via NUXT_PUBLIC_WEBHOOK_BASE_URL
       botAdminIds: "", // Comma-separated Discord IDs, set via NUXT_PUBLIC_BOT_ADMIN_IDS
@@ -55,8 +53,9 @@ export default defineNuxtConfig({
     },
   },
   routeRules: {
-    // Dashboard pages rely on the client-only Appwrite SDK and require
-    // authentication — SSR is impossible and causes 404/500 on refresh.
+    // Dashboard pages hydrate after the Pinia user store probes
+    // /api/auth/session, so SSR would just render an empty shell.
+    // Keeping them SPA-only avoids 404/500 on hard refresh.
     "/dashboard": { ssr: false },
     "/dashboard/**": { ssr: false },
   },
