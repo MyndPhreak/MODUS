@@ -2,25 +2,22 @@
  * POST /api/servers/join
  *
  * Allows a Discord admin to join an existing server's admin list.
- * Validates that:
- *   1. The server already exists in the system.
- *   2. The user has ADMINISTRATOR permission on the Discord guild,
- *      OR has one of the server's configured dashboard_role_ids.
- *   3. The user isn't already in admin_user_ids.
- *
- * Access is gated by Discord permission validation. DB routing: Postgres
- * when NUXT_USE_POSTGRES=true, else Appwrite.
+ * Validates:
+ *   1. The server exists in our DB
+ *   2. The user has Discord ADMINISTRATOR on the guild OR one of the
+ *      server's configured dashboard_role_ids
+ *   3. The user isn't already in admin_user_ids
  */
-import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
-import { getResolvedDiscordId, requireAuthedUserId } from "../../utils/session";
+import {
+  getResolvedDiscordId,
+  requireAuthedUserId,
+} from "../../utils/session";
 
 const ADMIN_PERMISSION = BigInt(0x8);
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
-  const projectId = config.public.appwriteProjectId as string;
-
   const { userId } = await requireAuthedUserId(event);
 
   const body = await readBody(event);
@@ -33,7 +30,15 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // ── Validate Discord ADMINISTRATOR permission ─────────────────────────
+  const repos = getRepos();
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
+  }
+
+  // ── Discord ADMINISTRATOR check ──────────────────────────────────────
   let hasAdminPerm = false;
   try {
     const guildsResponse = await $fetch("/api/discord/guilds", {
@@ -58,61 +63,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // ── Resolve dashboard role fallback check ─────────────────────────────
-  // Pulls the server row via whichever backend is active, then (if the
-  // user lacks ADMINISTRATOR) consults Discord for their role IDs.
-  const repos = getRepos();
-
-  const fetchServer = async (): Promise<{
-    admin_user_ids: string[];
-    dashboard_role_ids: string[];
-    $id: string;
-    name: string;
-    icon: string | null;
-    owner_id: string | null;
-  } | null> => {
-    if (repos) {
-      const row = await repos.servers.getByGuildId(guild_id);
-      if (!row) return null;
-      return {
-        admin_user_ids: row.admin_user_ids,
-        dashboard_role_ids: row.dashboard_role_ids,
-        $id: row.$id,
-        name: row.name,
-        icon: row.icon,
-        owner_id: row.owner_id,
-      };
-    }
-    const client = new Client()
-      .setEndpoint(config.public.appwriteEndpoint as string)
-      .setProject(projectId)
-      .setKey(config.appwriteApiKey as string);
-    const databases = new Databases(client);
-    try {
-      const doc: any = await databases.getDocument(
-        "discord_bot",
-        "servers",
-        guild_id,
-      );
-      return {
-        admin_user_ids: Array.isArray(doc.admin_user_ids)
-          ? doc.admin_user_ids
-          : [],
-        dashboard_role_ids: Array.isArray(doc.dashboard_role_ids)
-          ? doc.dashboard_role_ids
-          : [],
-        $id: doc.$id,
-        name: doc.name,
-        icon: doc.icon ?? null,
-        owner_id: doc.owner_id ?? null,
-      };
-    } catch (err: any) {
-      if (err.code === 404) return null;
-      throw err;
-    }
-  };
-
-  const existing = await fetchServer();
+  const existing = await repos.servers.getByGuildId(guild_id);
   if (!existing) {
     throw createError({
       statusCode: 404,
@@ -120,6 +71,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // ── dashboard_role_ids fallback for non-admin Discord users ──────────
   if (!hasAdminPerm) {
     let hasDashboardRole = false;
     const dashboardRoles = existing.dashboard_role_ids;
@@ -163,58 +115,23 @@ export default defineEventHandler(async (event) => {
     };
   }
 
-  if (repos) {
-    try {
-      const result = await repos.servers.addAdmin(guild_id, userId);
-      if (!result) {
-        throw createError({
-          statusCode: 404,
-          statusMessage: "Server not found.",
-        });
-      }
-      return {
-        $id: result.server.$id,
-        guild_id,
-        name: result.server.name,
-        icon: result.server.icon,
-        owner_id: result.server.owner_id,
-        joined: !result.wasAlreadyAdmin,
-        already_member: result.wasAlreadyAdmin,
-      };
-    } catch (error: any) {
-      if (error?.statusCode) throw error;
-      console.error("[Join Server API] Postgres error:", error?.message || error);
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Failed to join server.",
-      });
-    }
-  }
-
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(projectId)
-    .setKey(config.appwriteApiKey as string);
-  const databases = new Databases(client);
-
   try {
-    const updatedDoc: any = await databases.updateDocument(
-      "discord_bot",
-      "servers",
-      guild_id,
-      { admin_user_ids: [...existing.admin_user_ids, userId] },
-    );
-
+    const result = await repos.servers.addAdmin(guild_id, userId);
+    if (!result) {
+      throw createError({ statusCode: 404, statusMessage: "Server not found." });
+    }
     return {
-      $id: updatedDoc.$id,
-      guild_id: updatedDoc.guild_id,
-      name: updatedDoc.name,
-      icon: updatedDoc.icon,
-      owner_id: updatedDoc.owner_id,
-      joined: true,
+      $id: result.server.$id,
+      guild_id,
+      name: result.server.name,
+      icon: result.server.icon,
+      owner_id: result.server.owner_id,
+      joined: !result.wasAlreadyAdmin,
+      already_member: result.wasAlreadyAdmin,
     };
-  } catch (err: any) {
-    console.error("[Join Server API] Error:", err.message || err);
+  } catch (error: any) {
+    if (error?.statusCode) throw error;
+    console.error("[Join Server API] Postgres error:", error?.message || error);
     throw createError({
       statusCode: 500,
       statusMessage: "Failed to join server.",

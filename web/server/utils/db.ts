@@ -1,14 +1,9 @@
 /**
  * Shared Postgres access for Nitro endpoints.
  *
- * Behavior mirrors web/server/utils/r2.ts: feature-flagged via
- * NUXT_USE_POSTGRES_RECORDINGS / NUXT_USE_POSTGRES, lazy-initialized,
- * returns null when disabled or misconfigured so every caller can fall
- * back to Appwrite cleanly.
- *
- * Two flags, matching the bot side:
- *   - NUXT_USE_POSTGRES=true            — every domain
- *   - NUXT_USE_POSTGRES_RECORDINGS=true — recordings only (legacy opt-in)
+ * Lazy-initialized; returns null when DATABASE_URL / NUXT_DATABASE_URL is
+ * unset so individual endpoints can surface a 503 instead of silently
+ * serving empty data.
  */
 import {
   createDb,
@@ -43,23 +38,18 @@ export interface Repos {
   triggers: TriggerRepository;
 }
 
-let cached: {
-  flag: "full" | "recordings-only";
-  repos: Repos;
-} | null = null;
+let cached: Repos | null = null;
 
-function init(flag: "full" | "recordings-only"): Repos | null {
+export function getRepos(): Repos | null {
+  if (cached) return cached;
+
   const config = useRuntimeConfig();
   const url = (config.databaseUrl as string) || process.env.DATABASE_URL;
-  if (!url) {
-    console.warn(
-      "[db] Postgres flag is set but DATABASE_URL / NUXT_DATABASE_URL is unset.",
-    );
-    return null;
-  }
+  if (!url) return null;
+
   try {
     const { db } = createDb({ url });
-    const repos: Repos = {
+    cached = {
       db,
       recordings: new RecordingRepository(db),
       guildConfigs: new GuildConfigRepository(db),
@@ -74,8 +64,7 @@ function init(flag: "full" | "recordings-only"): Repos | null {
       tempVoice: new TempVoiceChannelRepository(db),
       triggers: new TriggerRepository(db),
     };
-    cached = { flag, repos };
-    return repos;
+    return cached;
   } catch (err) {
     console.warn(
       `[db] Failed to initialize Postgres: ${
@@ -86,35 +75,7 @@ function init(flag: "full" | "recordings-only"): Repos | null {
   }
 }
 
-/**
- * Returns every repository when NUXT_USE_POSTGRES=true. The narrower
- * `getRecordingRepo()` below is the correct accessor when only the
- * recordings-only flag is set (legacy behavior).
- */
-export function getRepos(): Repos | null {
-  if (cached?.flag === "full") return cached.repos;
-  const config = useRuntimeConfig();
-  if (String(config.usePostgres) !== "true") return null;
-  return init("full");
-}
-
-/**
- * Recordings-only accessor. Honors both the narrow flag
- * (NUXT_USE_POSTGRES_RECORDINGS) and the full one (NUXT_USE_POSTGRES).
- * Kept as a separate function so recording endpoints can opt in earlier
- * than the rest of the stack.
- */
+/** Narrow accessor used by recording endpoints. */
 export function getRecordingRepo(): RecordingRepository | null {
-  if (cached?.repos) return cached.repos.recordings;
-  const config = useRuntimeConfig();
-  if (
-    String(config.usePostgresRecordings) !== "true" &&
-    String(config.usePostgres) !== "true"
-  ) {
-    return null;
-  }
-  const repos = init(
-    String(config.usePostgres) === "true" ? "full" : "recordings-only",
-  );
-  return repos?.recordings ?? null;
+  return getRepos()?.recordings ?? null;
 }

@@ -1,15 +1,11 @@
 /**
  * Update a trigger.
  *
- * Body (JSON):
- *   - trigger_id: string (required)
- *   - data: object with fields to update
+ * Body: { trigger_id, data: { ... } }
  */
-import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
   const body = await readBody(event);
 
   if (!body.trigger_id || !body.data) {
@@ -20,45 +16,24 @@ export default defineEventHandler(async (event) => {
   }
 
   const repos = getRepos();
-  if (repos) {
-    try {
-      await repos.triggers.update(body.trigger_id, body.data);
-      return { success: true };
-    } catch (error: any) {
-      console.error(
-        "[Triggers API] Postgres update failed:",
-        error?.message || error,
-      );
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Failed to update trigger.",
-      });
-    }
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
   }
 
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(config.public.appwriteProjectId as string)
-    .setKey(config.appwriteApiKey as string);
-
-  const databases = new Databases(client);
-
   try {
-    const doc = await databases.updateDocument(
-      "discord_bot",
-      "triggers",
-      body.trigger_id,
-      body.data,
-    );
-    return { success: true, document: doc };
+    await repos.triggers.update(body.trigger_id, body.data);
+    return { success: true };
   } catch (error: any) {
     console.error(
-      "[Triggers API] Error updating trigger:",
+      "[Triggers API] Postgres update failed:",
       error?.message || error,
     );
     throw createError({
-      statusCode: error?.code || 500,
-      statusMessage: error?.message || "Failed to update trigger.",
+      statusCode: 500,
+      statusMessage: "Failed to update trigger.",
     });
   }
 });

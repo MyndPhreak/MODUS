@@ -1,24 +1,12 @@
 /**
  * Update a tag.
  *
- * Routes to Postgres when NUXT_USE_POSTGRES=true; otherwise updates the
- * Appwrite document. Body payload is identical across both backends —
- * the repository's `update` handles lowercasing the name and parsing
- * the JSON-shaped inputs.
- *
  * PUT body:
- *   - tag_id: string
- *   - guild_id: string
- *   - name?: string
- *   - content?: string
- *   - embed_data?: object | string
- *   - allowed_roles?: string[]
+ *   - tag_id, guild_id, name?, content?, embed_data?, allowed_roles?
  */
-import { Client, Databases } from "node-appwrite";
 import { getRepos } from "../../utils/db";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
   const body = await readBody(event);
 
   const { tag_id, guild_id } = body || {};
@@ -60,47 +48,21 @@ export default defineEventHandler(async (event) => {
   }
 
   const repos = getRepos();
-  if (repos) {
-    try {
-      await repos.tags.update(tag_id, normalized);
-      return { success: true };
-    } catch (error: any) {
-      console.error("[Tags API] Postgres update failed:", error?.message || error);
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Failed to update tag.",
-      });
-    }
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
   }
 
-  const client = new Client()
-    .setEndpoint(config.public.appwriteEndpoint as string)
-    .setProject(config.public.appwriteProjectId as string)
-    .setKey(config.appwriteApiKey as string);
-
-  const databases = new Databases(client);
-
   try {
-    const data: Record<string, any> = { updated_at: new Date().toISOString() };
-    if (normalized.name !== undefined) data.name = normalized.name;
-    if (normalized.content !== undefined) data.content = normalized.content;
-    if (normalized.embed_data !== undefined)
-      data.embed_data = normalized.embed_data;
-    if (normalized.allowed_roles !== undefined)
-      data.allowed_roles = normalized.allowed_roles;
-
-    const doc = await databases.updateDocument(
-      "discord_bot",
-      "tags",
-      tag_id,
-      data,
-    );
-    return { success: true, tag: doc };
+    await repos.tags.update(tag_id, normalized);
+    return { success: true };
   } catch (error: any) {
-    console.error(`[Tags API] Error updating tag:`, error?.message || error);
+    console.error("[Tags API] Postgres update failed:", error?.message || error);
     throw createError({
-      statusCode: error?.code || 500,
-      statusMessage: error?.message || "Failed to update tag.",
+      statusCode: 500,
+      statusMessage: "Failed to update tag.",
     });
   }
 });

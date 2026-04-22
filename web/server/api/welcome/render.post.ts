@@ -20,7 +20,6 @@
  * Response: PNG image buffer (Content-Type: image/png)
  */
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { Client, Databases, Query } from "node-appwrite";
 import { ensureTemplateFonts } from "../../utils/font-manager";
 import { getRepos } from "../../utils/db";
 import { getR2, getR2Object } from "../../utils/r2";
@@ -438,11 +437,16 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── Load template ────────────────────────────────────────────────────
-  // Postgres primary path; Appwrite fallback so renders still work on
-  // deployments that haven't run the DB cutover yet.
   let template: WelcomeTemplate = DEFAULT_TEMPLATE;
   const repos = getRepos();
-  if (repos) {
+  if (!repos) {
+    // Fall back to default template when Postgres isn't configured. The
+    // endpoint still returns a rendered image so the bot's welcome event
+    // doesn't fail on a misconfigured deployment.
+    console.warn(
+      "[Welcome Render] Database unavailable — rendering default template.",
+    );
+  } else {
     try {
       const settings = await repos.guildConfigs.getModuleSettings(
         body.guildId,
@@ -453,32 +457,6 @@ export default defineEventHandler(async (event) => {
       }
     } catch (err) {
       console.error("[Welcome Render] Postgres template load failed:", err);
-    }
-  } else {
-    try {
-      const client = new Client()
-        .setEndpoint(config.public.appwriteEndpoint as string)
-        .setProject(config.public.appwriteProjectId as string)
-        .setKey(config.appwriteApiKey as string);
-
-      const databases = new Databases(client);
-      const result = await databases.listDocuments(
-        "discord_bot",
-        "guild_configs",
-        [
-          Query.equal("guildId", body.guildId),
-          Query.equal("moduleName", "welcome"),
-        ],
-      );
-
-      if (result.total > 0 && result.documents[0].settings) {
-        template = {
-          ...DEFAULT_TEMPLATE,
-          ...JSON.parse(result.documents[0].settings),
-        };
-      }
-    } catch (err) {
-      console.error("[Welcome Render] Appwrite template load failed:", err);
     }
   }
 
