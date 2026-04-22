@@ -11,6 +11,7 @@ import { ModuleManager } from "./ModuleManager";
 import { DatabaseService } from "./DatabaseService";
 import { ServerStatusService } from "./ServerStatusService";
 import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
+import { TranscriptRetentionWorker } from "./TranscriptRetentionWorker";
 import { Logger } from "./Logger";
 import {
   createRedisClients,
@@ -247,6 +248,40 @@ client.once("ready", async () => {
     } else if (typeof shardId !== "number" || shardId === 0) {
       retentionWorker.start();
     }
+  }
+
+  // Transcript retention sweep — independent of recordings. Cadence is
+  // fixed at 6h; expires_at is frozen at ticket close time.
+  const transcriptWorker = new TranscriptRetentionWorker(
+    databaseService,
+    logger,
+  );
+
+  if (redisClients) {
+    const ownerId = `${process.pid}:shard-${shardId}`;
+    new LeaderElection({
+      redis: redisClients.primary,
+      key: "modus:leader:transcript-retention",
+      ownerId,
+      onAcquired: () => {
+        logger.info(
+          `Transcript retention: leader election won (${ownerId})`,
+          undefined,
+          "transcripts",
+        );
+        transcriptWorker.start();
+      },
+      onLost: () => {
+        logger.warn(
+          `Transcript retention: lost leader lease (${ownerId}) — stopping worker`,
+          undefined,
+          "transcripts",
+        );
+        transcriptWorker.stop();
+      },
+    }).start();
+  } else if (typeof shardId !== "number" || shardId === 0) {
+    transcriptWorker.start();
   }
 
   let botVersion = process.env.npm_package_version || "1.0.0";
