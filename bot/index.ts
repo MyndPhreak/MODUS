@@ -42,6 +42,13 @@ import { registerWebhookRoutes } from "./WebhookRouter";
 
 dotenv.config();
 
+if (!process.env.PUBLIC_WEB_URL) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[startup] PUBLIC_WEB_URL is not set — ticket close messages will omit the web transcript link.",
+  );
+}
+
 // Silence verbose parsing warnings from youtubei.js
 import { Log } from "youtubei.js";
 Log.setLevel(Log.Level.ERROR);
