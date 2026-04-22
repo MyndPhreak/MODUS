@@ -19,6 +19,7 @@ import {
   TagRepository,
   TempVoiceChannelRepository,
   TriggerRepository,
+  TranscriptRepository,
   type Database,
 } from "@modus/db";
 
@@ -36,6 +37,7 @@ export interface Repos {
   tags: TagRepository;
   tempVoice: TempVoiceChannelRepository;
   triggers: TriggerRepository;
+  transcripts: TranscriptRepository;
 }
 
 let cached: Repos | null = null;
@@ -63,6 +65,7 @@ export function getRepos(): Repos | null {
       tags: new TagRepository(db),
       tempVoice: new TempVoiceChannelRepository(db),
       triggers: new TriggerRepository(db),
+      transcripts: new TranscriptRepository(db),
     };
     return cached;
   } catch (err) {
