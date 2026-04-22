@@ -1,46 +1,58 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Web Dashboard (Nuxt 4) — Multi-stage Docker build
-# Optimized for Unraid / any Docker host
+# Web Dashboard (Nuxt 4) — Multi-stage Docker build (workspace-aware)
+#
+# Build context is the repo root so pnpm can resolve the full workspace
+# (root lockfile + workspace members including @modus/db). Nuxt's build
+# produces a self-contained server bundle in .output/ which is all the
+# production stage needs.
+#
+#   docker build -f web/Dockerfile -t modus-web .
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:22-slim AS builder
 
-# Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.9.0 --activate
 
-WORKDIR /app
+WORKDIR /repo
 
-# Copy dependency manifests + .npmrc first (Docker layer caching)
-COPY package.json pnpm-lock.yaml .npmrc ./
+# Copy workspace manifests first (Docker layer caching).
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY web/package.json ./web/
+COPY bot/package.json ./bot/
+COPY packages/db/package.json ./packages/db/
+COPY bot/patches ./bot/patches
+COPY web/.npmrc ./web/
 
-# Install ALL dependencies (including devDependencies for Nuxt build)
+# The root postinstall hook builds @modus/db; it needs the db package's
+# source and tsconfig present before pnpm install runs.
+COPY packages/db/tsconfig.json ./packages/db/
+COPY packages/db/src ./packages/db/src
+
+# Install all workspace deps with frozen root lockfile.
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
-
-# Build the Nuxt application for production (outputs to .output/)
-RUN pnpm run build
+# Copy web source and build Nuxt. Output is .output/ — a self-contained Node
+# server bundle with all runtime dependencies pre-bundled.
+COPY web/ ./web/
+RUN pnpm --filter web run build
 
 # ── Stage 2: Production ──────────────────────────────────────────────────────
 FROM node:22-slim AS production
 
-# Install ffmpeg for ffprobe (used by upload-announce recording validation)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+# ffprobe (in ffmpeg) is used by upload-announce recording validation.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy the self-contained Nuxt server output
-COPY --from=builder /app/.output ./.output
+COPY --from=builder /repo/web/.output ./.output
 
-# Health check — hits the Nuxt Nitro server
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "const http = require('http'); http.get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 EXPOSE 3000
 
-# Nuxt production server entry point
 ENV HOST=0.0.0.0
 ENV PORT=3000
 CMD ["node", ".output/server/index.mjs"]

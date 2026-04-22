@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.output
+**/.nuxt
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/.git
+**/.gitignore
+**/Dockerfile
+**/docker-compose.yml
+docs
