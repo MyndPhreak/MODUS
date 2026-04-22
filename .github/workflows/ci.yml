@@ -22,6 +22,10 @@ on:
     paths:
       - "bot/**"
       - "web/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   workflow_dispatch:
 
 env:
@@ -44,9 +48,16 @@ jobs:
         uses: dorny/paths-filter@v4
         with:
           filters: |
+            shared: &shared
+              - "packages/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
             bot:
+              - *shared
               - "bot/**"
             web:
+              - *shared
               - "web/**"
 
   # ── Build Bot Image (only if bot/** changed) ──────────────────────────────
@@ -86,7 +97,7 @@ jobs:
       - name: Build and push Bot image
         uses: docker/build-push-action@v7
         with:
-          context: ./bot
+          context: .
           file: ./bot/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -131,7 +142,7 @@ jobs:
       - name: Build and push Web image
         uses: docker/build-push-action@v7
         with:
-          context: ./web
+          context: .
           file: ./web/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
