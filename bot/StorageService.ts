@@ -183,6 +183,79 @@ export class StorageService {
       { expiresIn: ttlSeconds ?? this.presignTtl },
     );
   }
+
+  /**
+   * Upload a ticket attachment to R2. Keys are structured as
+   * `transcripts/<transcriptId>/<discordMessageId>/<filename>` so retention
+   * cleanup can bulk-list-and-delete by transcript prefix.
+   */
+  async putTicketAttachment(
+    transcriptId: string,
+    discordMessageId: string,
+    filename: string,
+    body: Buffer,
+    contentType: string,
+  ): Promise<string> {
+    const safeName = filename.replace(/[^\w.\-]/g, "_");
+    const key = `transcripts/${transcriptId}/${discordMessageId}/${safeName}`;
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+    return key;
+  }
+
+  /** Presigned GET for a transcript attachment; caller chooses TTL. */
+  async getSignedTicketAttachmentUrl(
+    key: string,
+    ttlSeconds: number,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn: ttlSeconds },
+    );
+  }
+
+  /**
+   * List + batch-delete all R2 objects under a transcript prefix.
+   * Idempotent — missing objects are not an error.
+   */
+  async deleteTicketTranscriptAssets(transcriptId: string): Promise<number> {
+    const prefix = `transcripts/${transcriptId}/`;
+    let deleted = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const contents = list.Contents ?? [];
+      if (contents.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: contents.map((o) => ({ Key: o.Key! })),
+              Quiet: true,
+            },
+          }),
+        );
+        deleted += contents.length;
+      }
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return deleted;
+  }
 }
 
 // ── Key conventions ───────────────────────────────────────────────────────
