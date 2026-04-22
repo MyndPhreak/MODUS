@@ -13,6 +13,7 @@
  *   - clearNativeSession(event)     → logout
  */
 import type { H3Event } from "h3";
+import { getRepos } from "./db";
 
 // ── Session shape ────────────────────────────────────────────────────────
 
@@ -71,6 +72,72 @@ export async function tryAuthedUserId(
   } catch {
     return null;
   }
+}
+
+/**
+ * Require the caller to be a MODUS bot admin. Backed by the
+ * NUXT_PUBLIC_BOT_ADMIN_IDS env var (comma-separated Discord UIDs);
+ * no DB presence for this role. Throws 403 when the caller is
+ * authenticated but not on the list.
+ */
+export async function requireBotAdmin(
+  event: H3Event,
+): Promise<AuthedIdentity> {
+  const identity = await requireAuthedUserId(event);
+  const config = useRuntimeConfig();
+  const adminIds = (config.public.botAdminIds || "")
+    .split(",")
+    .map((id: string) => id.trim())
+    .filter(Boolean);
+  if (!adminIds.includes(identity.userId)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Bot admin role required.",
+    });
+  }
+  return identity;
+}
+
+/**
+ * Require the caller to own or be listed as an admin of the given guild
+ * in the `servers` table. 403 otherwise. Bot admins implicitly pass.
+ *
+ * Every endpoint that mutates per-guild config should gate on this so a
+ * logged-in user can't write to a guild they don't manage.
+ */
+export async function requireGuildManager(
+  event: H3Event,
+  guildId: string,
+): Promise<AuthedIdentity> {
+  const identity = await requireAuthedUserId(event);
+
+  const config = useRuntimeConfig();
+  const botAdminIds = (config.public.botAdminIds || "")
+    .split(",")
+    .map((id: string) => id.trim())
+    .filter(Boolean);
+  if (botAdminIds.includes(identity.userId)) return identity;
+
+  const repos = getRepos();
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
+  }
+  const server = await repos.servers.getByGuildId(guildId);
+  if (!server) {
+    throw createError({ statusCode: 404, statusMessage: "Server not found." });
+  }
+  const isOwner = server.owner_id === identity.userId;
+  const isAdmin = server.admin_user_ids.includes(identity.userId);
+  if (!isOwner && !isAdmin) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "You don't manage this server.",
+    });
+  }
+  return identity;
 }
 
 /** Return the Discord UID of the caller, or null when unauthenticated. */

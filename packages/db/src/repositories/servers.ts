@@ -228,6 +228,11 @@ export class ServerRepository {
     return row ? toDoc(row) : null;
   }
 
+  /** Delete a server row by guild_id. */
+  async deleteByGuildId(guildId: string): Promise<void> {
+    await this.db.delete(servers).where(eq(servers.guildId, guildId));
+  }
+
   async upsertMigrated(input: {
     id: string;
     guild_id: string;
