@@ -38,35 +38,41 @@ const { state, initialize } = useServerSettings(guildId);
 
 const basePath = `/dashboard/server/${guildId}`;
 
-// Determine active tab from current route
 const activeTab = computed(() => {
   const path = route.path;
-  if (path.includes("/modules/recording")) return "recording";
-  if (path.includes("/modules/music")) return "music";
+  // Moderation & Safety
   if (path.includes("/modules/moderation")) return "moderation";
   if (path.includes("/modules/automod")) return "automod";
   if (path.includes("/modules/logging")) return "logging";
-  if (path.includes("/modules/milestones")) return "milestones";
-  if (path.includes("/modules/triggers")) return "triggers";
-  if (path.includes("/modules/ai")) return "ai";
   if (path.includes("/modules/antiraid")) return "antiraid";
   if (path.includes("/modules/verification")) return "verification";
-  if (path.includes("/modules/tickets")) return "tickets";
-  if (path.includes("/modules/alerts")) return "alerts";
-  if (path.includes("/modules/tempvoice")) return "tempvoice";
+  // Engagement
+  if (path.includes("/modules/welcome")) return "welcome";
   if (path.includes("/modules/reaction-roles")) return "reaction-roles";
+  if (path.includes("/modules/milestones")) return "milestones";
+  if (path.includes("/modules/triggers")) return "triggers";
+  if (path.includes("/modules/alerts")) return "alerts";
+  // Community Tools
+  if (path.includes("/modules/tickets")) return "tickets";
   if (path.includes("/modules/events")) return "events";
   if (path.includes("/modules/polls")) return "polls";
   if (path.includes("/modules/embeds")) return "embeds";
   if (path.includes("/modules/tags")) return "tags";
-  if (path.includes("/modules/welcome")) return "welcome";
+  // Voice & Media
+  if (path.includes("/modules/music")) return "music";
+  if (path.includes("/modules/recording")) return "recording";
+  if (path.includes("/modules/tempvoice")) return "tempvoice";
+  // AI
+  if (path.includes("/modules/ai")) return "ai";
+  // Index + logs
   if (path.includes("/modules")) return "modules";
   if (path.includes("/logs")) return "logs";
   return "modules";
 });
 
-// Sidebar tab definitions — route-based
+// Sidebar tab definitions — route-based, grouped by category
 const sidebarTabs = computed(() => [
+  // Top-level navigation (no category)
   {
     id: "logs",
     label: "Server Logs",
@@ -78,20 +84,15 @@ const sidebarTabs = computed(() => [
     label: "Modules",
     icon: "i-heroicons-squares-2x2",
     to: `${basePath}/modules`,
-    separator: true,
   },
-  {
-    id: "music",
-    label: "Music",
-    icon: "i-heroicons-musical-note",
-    to: `${basePath}/modules/music`,
-    separator: true,
-  },
+
+  // Moderation & Safety
   {
     id: "moderation",
     label: "Moderation",
     icon: "i-heroicons-shield-exclamation",
     to: `${basePath}/modules/moderation`,
+    groupLabel: "Moderation & Safety",
   },
   {
     id: "automod",
@@ -106,16 +107,31 @@ const sidebarTabs = computed(() => [
     to: `${basePath}/modules/logging`,
   },
   {
-    id: "ai",
-    label: "AI Assistant",
-    icon: "i-heroicons-cpu-chip",
-    to: `${basePath}/modules/ai`,
+    id: "antiraid",
+    label: "Anti-Raid",
+    icon: "i-heroicons-shield-check",
+    to: `${basePath}/modules/antiraid`,
   },
   {
-    id: "recording",
-    label: "Recording",
-    icon: "i-heroicons-microphone",
-    to: `${basePath}/modules/recording`,
+    id: "verification",
+    label: "Verification",
+    icon: "i-heroicons-check-badge",
+    to: `${basePath}/modules/verification`,
+  },
+
+  // Engagement
+  {
+    id: "welcome",
+    label: "Welcome Image",
+    icon: "i-heroicons-sparkles",
+    to: `${basePath}/modules/welcome`,
+    groupLabel: "Engagement",
+  },
+  {
+    id: "reaction-roles",
+    label: "Reaction Roles",
+    icon: "i-heroicons-face-smile",
+    to: `${basePath}/modules/reaction-roles`,
   },
   {
     id: "milestones",
@@ -130,41 +146,19 @@ const sidebarTabs = computed(() => [
     to: `${basePath}/modules/triggers`,
   },
   {
-    id: "antiraid",
-    label: "Anti-Raid",
-    icon: "i-heroicons-shield-check",
-    to: `${basePath}/modules/antiraid`,
-    separator: true,
-  },
-  {
-    id: "verification",
-    label: "Verification",
-    icon: "i-heroicons-check-badge",
-    to: `${basePath}/modules/verification`,
-  },
-  {
-    id: "tickets",
-    label: "Tickets",
-    icon: "i-heroicons-ticket",
-    to: `${basePath}/modules/tickets`,
-  },
-  {
     id: "alerts",
     label: "Social Alerts",
     icon: "i-heroicons-bell-alert",
     to: `${basePath}/modules/alerts`,
   },
+
+  // Community Tools
   {
-    id: "tempvoice",
-    label: "Temp Voice",
-    icon: "i-heroicons-speaker-wave",
-    to: `${basePath}/modules/tempvoice`,
-  },
-  {
-    id: "reaction-roles",
-    label: "Reaction Roles",
-    icon: "i-heroicons-face-smile",
-    to: `${basePath}/modules/reaction-roles`,
+    id: "tickets",
+    label: "Tickets",
+    icon: "i-heroicons-ticket",
+    to: `${basePath}/modules/tickets`,
+    groupLabel: "Community Tools",
   },
   {
     id: "events",
@@ -190,11 +184,35 @@ const sidebarTabs = computed(() => [
     icon: "i-heroicons-tag",
     to: `${basePath}/modules/tags`,
   },
+
+  // Voice & Media
   {
-    id: "welcome",
-    label: "Welcome Image",
-    icon: "i-heroicons-sparkles",
-    to: `${basePath}/modules/welcome`,
+    id: "music",
+    label: "Music",
+    icon: "i-heroicons-musical-note",
+    to: `${basePath}/modules/music`,
+    groupLabel: "Voice & Media",
+  },
+  {
+    id: "recording",
+    label: "Recording",
+    icon: "i-heroicons-microphone",
+    to: `${basePath}/modules/recording`,
+  },
+  {
+    id: "tempvoice",
+    label: "Temp Voice",
+    icon: "i-heroicons-speaker-wave",
+    to: `${basePath}/modules/tempvoice`,
+  },
+
+  // AI
+  {
+    id: "ai",
+    label: "AI Assistant",
+    icon: "i-heroicons-cpu-chip",
+    to: `${basePath}/modules/ai`,
+    groupLabel: "AI",
   },
 ]);
 

@@ -276,9 +276,18 @@ const mainNavLinks = computed(() => {
             Configuration
           </p>
           <template v-for="tab in serverSidebar.tabs" :key="tab.id">
-            <!-- Separator -->
+            <!-- Category header (server sidebar) -->
             <div
-              v-if="tab.separator"
+              v-if="tab.groupLabel"
+              class="mt-4 mb-1 mx-3 pt-3 border-t border-white/5"
+            >
+              <span class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
+                {{ tab.groupLabel }}
+              </span>
+            </div>
+            <!-- Plain separator (admin sidebar) -->
+            <div
+              v-else-if="tab.separator"
               class="my-2 mx-3 border-t border-white/5"
             />
             <!-- Route-based tab (NuxtLink) -->

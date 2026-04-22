@@ -7,6 +7,7 @@ export interface ServerSidebarTab {
   disabled?: boolean;
   action?: () => void;
   separator?: boolean;
+  groupLabel?: string;
 }
 
 export interface ServerSidebarState {
