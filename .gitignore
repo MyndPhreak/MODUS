@@ -5,6 +5,7 @@ node_modules/
 bot/dist/
 web/.output/
 web/.nuxt/
+packages/*/dist/
 
 # ─── Environment variables ───────────────────────────────────────────────────
 .env

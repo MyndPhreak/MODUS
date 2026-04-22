@@ -3,15 +3,32 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shared Postgres schema, client, and repositories for MODUS",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema.ts",
-    "./client": "./src/client.ts",
-    "./repositories/recordings": "./src/repositories/recordings.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./dist/schema.js"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./dist/client.js"
+    },
+    "./repositories/recordings": {
+      "types": "./src/repositories/recordings.ts",
+      "default": "./dist/repositories/recordings.js"
+    }
   },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
+    "build": "tsc",
     "migrate": "ts-node scripts/run-migrations.ts",
     "migrate:recordings": "ts-node scripts/migrate-recordings.ts",
     "migrate:all": "ts-node scripts/migrate-appwrite.ts"
