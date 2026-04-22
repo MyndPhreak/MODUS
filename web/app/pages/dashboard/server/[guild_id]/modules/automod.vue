@@ -762,7 +762,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Query } from "appwrite";
 import ConditionGroupEditor from "~/components/automod/ConditionGroupEditor.vue";
 
 const route = useRoute();
@@ -775,11 +774,7 @@ const {
   roleOptions,
 } = useServerSettings(guildId);
 
-const { databases } = useAppwrite();
 const toast = useToast();
-
-const databaseId = "discord_bot";
-const collectionId = "automod_rules";
 
 // ── State ──
 const loading = ref(true);
@@ -984,11 +979,10 @@ const countConditions = (rule: any): number => {
 const fetchRules = async () => {
   loading.value = true;
   try {
-    const response = await databases.listDocuments(databaseId, collectionId, [
-      Query.equal("guild_id", guildId),
-      Query.limit(100),
-    ]);
-    rules.value = response.documents;
+    const { documents } = await $fetch<{ documents: any[]; total: number }>(
+      `/api/automod?guild_id=${encodeURIComponent(guildId)}`,
+    );
+    rules.value = documents;
   } catch (error) {
     console.error("Error fetching automod rules:", error);
     toast.add({
@@ -1123,11 +1117,9 @@ const saveRule = async () => {
 
   try {
     if (editingRule.value) {
-      await databases.updateDocument(
-        databaseId,
-        collectionId,
-        editingRule.value.$id,
-        payload,
+      await $fetch(
+        `/api/automod/${encodeURIComponent(editingRule.value.$id)}`,
+        { method: "PUT", body: payload },
       );
       toast.add({
         title: "Rule Updated",
@@ -1135,12 +1127,7 @@ const saveRule = async () => {
         color: "success",
       });
     } else {
-      await databases.createDocument(
-        databaseId,
-        collectionId,
-        "unique()",
-        payload,
-      );
+      await $fetch("/api/automod", { method: "POST", body: payload });
       toast.add({
         title: "Rule Created",
         description: `"${form.value.name}" has been created.`,
@@ -1164,9 +1151,9 @@ const saveRule = async () => {
 
 const toggleRule = async (rule: any, enabled: boolean) => {
   try {
-    await databases.updateDocument(databaseId, collectionId, rule.$id, {
-      enabled,
-      updated_at: new Date().toISOString(),
+    await $fetch(`/api/automod/${encodeURIComponent(rule.$id)}`, {
+      method: "PUT",
+      body: { enabled },
     });
     rule.enabled = enabled;
     toast.add({
@@ -1193,10 +1180,9 @@ const deleteRule = async () => {
   if (!deletingRule.value) return;
   deleting.value = true;
   try {
-    await databases.deleteDocument(
-      databaseId,
-      collectionId,
-      deletingRule.value.$id,
+    await $fetch(
+      `/api/automod/${encodeURIComponent(deletingRule.value.$id)}`,
+      { method: "DELETE" },
     );
     toast.add({
       title: "Rule Deleted",

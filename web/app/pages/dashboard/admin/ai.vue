@@ -99,7 +99,7 @@
             name="i-heroicons-information-circle"
             class="inline w-3.5 h-3.5 mb-0.5"
           />
-          Stored in Appwrite — never exposed to guild admins.
+          Stored server-side — never exposed to guild admins.
         </p>
         <UButton
           icon="i-heroicons-check"
@@ -115,9 +115,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
-import { Query } from "appwrite";
 
-const { databases } = useAppwrite();
 const toast = useToast();
 
 const globalAI = ref({
@@ -134,8 +132,6 @@ const globalAIModels = ref<string[]>([
 ]);
 const globalAIModelsLoading = ref(false);
 const globalAIModelsWarning = ref("");
-
-const databaseId = "discord_bot";
 
 const aiProviderOptions = [
   { label: "Groq (Free · Recommended)", value: "Groq" },
@@ -182,17 +178,8 @@ const fetchGlobalAIModels = async () => {
 
 const loadGlobalAI = async () => {
   try {
-    const response = await databases.listDocuments(
-      databaseId,
-      "guild_configs",
-      [
-        Query.equal("guildId", "__global__"),
-        Query.equal("moduleName", "ai"),
-        Query.limit(1),
-      ],
-    );
-    if (response.total > 0 && response.documents[0]!.settings) {
-      const saved = JSON.parse(response.documents[0]!.settings);
+    const saved = await $fetch<Record<string, any>>("/api/global-config/ai");
+    if (saved && Object.keys(saved).length > 0) {
       globalAI.value = { ...globalAI.value, ...saved };
       if (globalAI.value.aiApiKey) await fetchGlobalAIModels();
     }
@@ -204,30 +191,10 @@ const loadGlobalAI = async () => {
 const saveGlobalAI = async () => {
   savingGlobalAI.value = true;
   try {
-    const response = await databases.listDocuments(
-      databaseId,
-      "guild_configs",
-      [
-        Query.equal("guildId", "__global__"),
-        Query.equal("moduleName", "ai"),
-        Query.limit(1),
-      ],
-    );
-    if (response.total > 0) {
-      await databases.updateDocument(
-        databaseId,
-        "guild_configs",
-        response.documents[0]!.$id,
-        { settings: JSON.stringify(globalAI.value) },
-      );
-    } else {
-      await databases.createDocument(databaseId, "guild_configs", "unique()", {
-        guildId: "__global__",
-        moduleName: "ai",
-        enabled: true,
-        settings: JSON.stringify(globalAI.value),
-      });
-    }
+    await $fetch("/api/global-config/ai", {
+      method: "PUT",
+      body: { ...globalAI.value },
+    });
     toast.add({
       title: "Saved",
       description: "Global AI settings updated.",

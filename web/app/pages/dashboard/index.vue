@@ -424,15 +424,12 @@
 import { ref, onMounted, computed } from "vue";
 
 const userStore = useUserStore();
-const { databases } = useAppwrite();
-const botStatusCollectionId = "bot_status";
 
 const modules = ref([]);
 const servers = ref([]);
 const botStatus = ref(null);
 const loading = ref(true);
 const serversLoading = ref(false);
-const databaseId = "discord_bot";
 const config = useRuntimeConfig();
 
 const isBotAdmin = computed(() => userStore.isAdmin);
@@ -508,15 +505,11 @@ const isServerOnline = (server) => {
 
 const fetchBotStatus = async () => {
   try {
-    const response = await databases.listDocuments(
-      databaseId,
-      botStatusCollectionId,
-    );
-    allShards.value = response.documents;
-    if (response.total > 0) {
+    const shards = await $fetch("/api/bot-status");
+    allShards.value = shards;
+    if (shards.length > 0) {
       botStatus.value =
-        response.documents.find((d) => d.bot_id.includes("Shard 0")) ||
-        response.documents[0];
+        shards.find((d) => d.bot_id?.includes("Shard 0")) ?? shards[0];
     }
   } catch (error) {
     console.error("Error fetching bot status:", error);
@@ -527,35 +520,21 @@ const fetchServers = async () => {
   if (!userStore.user) return;
   serversLoading.value = true;
   try {
-    // Use server-side API — bypasses Appwrite collection permissions,
-    // guarantees only this user's servers are returned
-    const response = await fetch("/api/servers/my-servers", {
+    // Server-side API returns only this user's servers. Icon backfill
+    // from the user's Discord guild list happens display-time; the bot's
+    // updateServerStatus hook writes the real icon as guilds come in.
+    servers.value = await $fetch("/api/servers/my-servers", {
       credentials: "include",
     });
-    if (!response.ok) {
-      throw new Error(`Server API returned ${response.status}`);
-    }
-    servers.value = await response.json();
 
-    // Backfill missing icons from Discord guild data
     const discordGuilds = userStore.userGuilds || [];
     if (discordGuilds.length > 0) {
       for (const server of servers.value) {
         if (!server.icon) {
-          const guild = discordGuilds.find((g) => g.id === server.$id);
-          if (guild?.icon) {
-            try {
-              await databases.updateDocument(
-                "discord_bot",
-                "servers",
-                server.$id,
-                { icon: guild.icon },
-              );
-              server.icon = guild.icon;
-            } catch {
-              // Silently skip if update fails
-            }
-          }
+          const guild = discordGuilds.find(
+            (g) => g.id === (server.guild_id ?? server.$id),
+          );
+          if (guild?.icon) server.icon = guild.icon;
         }
       }
     }

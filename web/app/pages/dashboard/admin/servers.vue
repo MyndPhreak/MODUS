@@ -130,16 +130,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Query } from "appwrite";
 
-const { databases } = useAppwrite();
 const toast = useToast();
 
 const servers = ref<any[]>([]);
 const serversLoading = ref(false);
 const updatingPremium = ref<string | null>(null);
-
-const databaseId = "discord_bot";
 
 /** Handles both legacy full CDN URLs and icon hashes */
 const getIconUrl = (server: any): string => {
@@ -164,11 +160,11 @@ const formatDate = (iso: string): string => {
 const fetchServers = async () => {
   serversLoading.value = true;
   try {
-    const response = await databases.listDocuments(databaseId, "servers", [
-      Query.orderDesc("name"),
-      Query.limit(100),
-    ]);
-    servers.value = response.documents;
+    const rows = await $fetch<any[]>("/api/admin/servers");
+    // Admin servers list sorted client-side; the API returns insertion order.
+    servers.value = [...rows].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || ""),
+    );
   } catch (error) {
     console.error("Error fetching servers:", error);
   } finally {
@@ -179,9 +175,10 @@ const fetchServers = async () => {
 const togglePremium = async (server: any, premium: boolean) => {
   updatingPremium.value = server.$id;
   try {
-    await databases.updateDocument(databaseId, "servers", server.$id, {
-      premium,
-    });
+    await $fetch(
+      `/api/admin/servers/${encodeURIComponent(server.guild_id)}/premium`,
+      { method: "PATCH", body: { premium } },
+    );
     server.premium = premium;
     toast.add({
       title: premium ? "Premium Enabled" : "Premium Removed",

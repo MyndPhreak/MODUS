@@ -550,18 +550,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { Query } from "appwrite";
 
 const route = useRoute();
 const toast = useToast();
-const { databases } = useAppwrite();
 
 const guildId = computed(() => route.params.guild_id as string);
-
-const DATABASE_ID = "discord_bot";
-const GUILD_CONFIGS_COLLECTION = "guild_configs";
-const SERVERS_COLLECTION = "servers";
-const AI_USAGE_COLLECTION = "ai_usage_log";
 
 // ── State ──────────────────────────────────────────────────────────
 
@@ -601,8 +594,6 @@ const modelsWarning = ref("");
 
 const usageLogs = ref<any[]>([]);
 const usageLoading = ref(false);
-
-let guildConfigDocId: string | null = null;
 
 // ── Consts ─────────────────────────────────────────────────────────
 
@@ -710,38 +701,33 @@ const modelBreakdown = computed(() => {
 
 async function loadSettings() {
   try {
-    // Load module enabled state + settings
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      GUILD_CONFIGS_COLLECTION,
-      [
-        Query.equal("guildId", guildId.value),
-        Query.equal("moduleName", "ai"),
-        Query.limit(1),
-      ],
+    // Load module enabled state + settings via the guild-configs endpoint.
+    const cfg = await $fetch<{
+      enabled: boolean;
+      settings: Record<string, any>;
+    }>(
+      `/api/guild-configs/${encodeURIComponent(
+        guildId.value,
+      )}/${encodeURIComponent("ai")}`,
     );
+    moduleEnabled.value = cfg.enabled;
+    settings.value = { ...settings.value, ...(cfg.settings ?? {}) };
 
-    if (response.total > 0) {
-      const doc = response.documents[0];
-      guildConfigDocId = doc!.$id;
-      moduleEnabled.value = doc!.enabled;
-      if (doc!.settings) {
-        const saved = JSON.parse(doc!.settings);
-        settings.value = { ...settings.value, ...saved };
+    // Premium flag lives on the servers row. by-guild-ids returns just
+    // the public projection we need without paginating the whole list.
+    try {
+      const rows = await $fetch<any[]>(
+        `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildId.value)}`,
+      );
+      if (rows.length > 0) {
+        // admin_user_ids is returned but we only need `premium` here —
+        // fetch a detailed-server endpoint later if more fields are needed.
+        isPremium.value = (rows[0] as any).premium === true;
       }
+    } catch {
+      // non-fatal — premium-only UI gracefully falls back to standard
     }
 
-    // Check premium
-    const serverRes = await databases.listDocuments(
-      DATABASE_ID,
-      SERVERS_COLLECTION,
-      [Query.equal("guild_id", guildId.value), Query.limit(1)],
-    );
-    if (serverRes.total > 0) {
-      isPremium.value = serverRes.documents[0]!.premium === true;
-    }
-
-    // Auto-fetch models for current provider
     await fetchModels();
     await fetchUsage();
   } catch (err) {
@@ -752,31 +738,15 @@ async function loadSettings() {
 async function saveSettings() {
   saving.value = true;
   try {
-    const settingsJson = JSON.stringify(settings.value);
-
-    if (guildConfigDocId) {
-      await databases.updateDocument(
-        DATABASE_ID,
-        GUILD_CONFIGS_COLLECTION,
-        guildConfigDocId,
-        {
-          settings: settingsJson,
-        },
-      );
-    } else {
-      const doc = await databases.createDocument(
-        DATABASE_ID,
-        GUILD_CONFIGS_COLLECTION,
-        "unique()",
-        {
-          guildId: guildId.value,
-          moduleName: "ai",
-          enabled: moduleEnabled.value,
-          settings: settingsJson,
-        },
-      );
-      guildConfigDocId = doc.$id;
-    }
+    await $fetch(
+      `/api/guild-configs/${encodeURIComponent(
+        guildId.value,
+      )}/${encodeURIComponent("ai")}`,
+      {
+        method: "PUT",
+        body: { settings: settings.value },
+      },
+    );
 
     toast.add({
       title: "Saved",
@@ -798,29 +768,12 @@ async function saveSettings() {
 async function toggleModule(enabled: boolean) {
   savingEnabled.value = true;
   try {
-    if (guildConfigDocId) {
-      await databases.updateDocument(
-        DATABASE_ID,
-        GUILD_CONFIGS_COLLECTION,
-        guildConfigDocId,
-        {
-          enabled,
-        },
-      );
-    } else {
-      const doc = await databases.createDocument(
-        DATABASE_ID,
-        GUILD_CONFIGS_COLLECTION,
-        "unique()",
-        {
-          guildId: guildId.value,
-          moduleName: "ai",
-          enabled,
-          settings: JSON.stringify(settings.value),
-        },
-      );
-      guildConfigDocId = doc.$id;
-    }
+    await $fetch(
+      `/api/guild-configs/${encodeURIComponent(
+        guildId.value,
+      )}/${encodeURIComponent("ai")}`,
+      { method: "PUT", body: { enabled } },
+    );
     toast.add({
       title: enabled ? "Module Enabled" : "Module Disabled",
       color: enabled ? "success" : "neutral",
