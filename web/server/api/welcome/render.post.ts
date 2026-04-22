@@ -22,6 +22,8 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { Client, Databases, Query } from "node-appwrite";
 import { ensureTemplateFonts } from "../../utils/font-manager";
+import { getRepos } from "../../utils/db";
+import { getR2, getR2Object } from "../../utils/r2";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -83,6 +85,33 @@ function resolvePlaceholders(text: string, data: RenderRequest): string {
     .replace(/\{member_count\}/g, String(data.memberCount));
 }
 
+// ── Background image loader ─────────────────────────────────────────────
+//
+// Backgrounds in the new flow live in R2 and are referenced by the proxy
+// path `/api/welcome/bg/<key>`. When we see that shape we skip the HTTP
+// round-trip and read the object directly. Legacy templates (full Appwrite
+// URLs) fall through to loadImage() which resolves them over HTTP.
+
+const WELCOME_PROXY_PREFIX = "/api/welcome/bg/";
+
+async function loadWelcomeBackground(reference: string): Promise<any | null> {
+  if (reference.startsWith(WELCOME_PROXY_PREFIX) && getR2()) {
+    const key = reference.slice(WELCOME_PROXY_PREFIX.length);
+    try {
+      const object = await getR2Object(key);
+      if (!object) return null;
+      return await loadImage(object.body);
+    } catch (err) {
+      console.warn(
+        "[Welcome Render] R2 background load failed, falling back to URL:",
+        err,
+      );
+      // Fall through to the HTTP path as a safety net.
+    }
+  }
+  return loadImage(reference);
+}
+
 // ── Gradient Parsing ─────────────────────────────────────────────────
 
 function parseGradient(
@@ -133,8 +162,10 @@ async function renderWelcomeImage(
   // Background image
   if (template.backgroundImage) {
     try {
-      const bgImage = await loadImage(template.backgroundImage);
-      ctx.drawImage(bgImage, 0, 0, canvasWidth, canvasHeight);
+      const bgImage = await loadWelcomeBackground(template.backgroundImage);
+      if (bgImage) {
+        ctx.drawImage(bgImage, 0, 0, canvasWidth, canvasHeight);
+      }
     } catch (err) {
       console.warn("[Welcome Render] Failed to load background image:", err);
     }
@@ -406,35 +437,49 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // ── Load template from Appwrite ──
-  let template: WelcomeTemplate;
-  try {
-    const client = new Client()
-      .setEndpoint(config.public.appwriteEndpoint as string)
-      .setProject(config.public.appwriteProjectId as string)
-      .setKey(config.appwriteApiKey as string);
-
-    const databases = new Databases(client);
-    const result = await databases.listDocuments(
-      "discord_bot",
-      "guild_configs",
-      [
-        Query.equal("guildId", body.guildId),
-        Query.equal("moduleName", "welcome"),
-      ],
-    );
-
-    if (result.total > 0 && result.documents[0].settings) {
-      template = {
-        ...DEFAULT_TEMPLATE,
-        ...JSON.parse(result.documents[0].settings),
-      };
-    } else {
-      template = DEFAULT_TEMPLATE;
+  // ── Load template ────────────────────────────────────────────────────
+  // Postgres primary path; Appwrite fallback so renders still work on
+  // deployments that haven't run the DB cutover yet.
+  let template: WelcomeTemplate = DEFAULT_TEMPLATE;
+  const repos = getRepos();
+  if (repos) {
+    try {
+      const settings = await repos.guildConfigs.getModuleSettings(
+        body.guildId,
+        "welcome",
+      );
+      if (settings && Object.keys(settings).length > 0) {
+        template = { ...DEFAULT_TEMPLATE, ...settings };
+      }
+    } catch (err) {
+      console.error("[Welcome Render] Postgres template load failed:", err);
     }
-  } catch (err) {
-    console.error("[Welcome Render] Failed to load template:", err);
-    template = DEFAULT_TEMPLATE;
+  } else {
+    try {
+      const client = new Client()
+        .setEndpoint(config.public.appwriteEndpoint as string)
+        .setProject(config.public.appwriteProjectId as string)
+        .setKey(config.appwriteApiKey as string);
+
+      const databases = new Databases(client);
+      const result = await databases.listDocuments(
+        "discord_bot",
+        "guild_configs",
+        [
+          Query.equal("guildId", body.guildId),
+          Query.equal("moduleName", "welcome"),
+        ],
+      );
+
+      if (result.total > 0 && result.documents[0].settings) {
+        template = {
+          ...DEFAULT_TEMPLATE,
+          ...JSON.parse(result.documents[0].settings),
+        };
+      }
+    } catch (err) {
+      console.error("[Welcome Render] Appwrite template load failed:", err);
+    }
   }
 
   // ── Ensure fonts are downloaded/registered ──

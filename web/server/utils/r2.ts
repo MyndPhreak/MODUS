@@ -8,6 +8,7 @@
 import {
   S3Client,
   GetObjectCommand,
+  PutObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -75,4 +76,52 @@ export async function deleteR2Object(key: string): Promise<void> {
   await r2.client.send(
     new DeleteObjectCommand({ Bucket: r2.bucket, Key: key }),
   );
+}
+
+export async function putR2Object(params: {
+  key: string;
+  body: Buffer;
+  contentType: string;
+}): Promise<void> {
+  const r2 = getR2();
+  if (!r2) throw new Error("R2 is not configured");
+  await r2.client.send(
+    new PutObjectCommand({
+      Bucket: r2.bucket,
+      Key: params.key,
+      Body: params.body,
+      ContentType: params.contentType,
+    }),
+  );
+}
+
+/**
+ * Fetch an object as `{ body, contentType }`. Used by the welcome-bg proxy
+ * endpoint to stream the image bytes back to the client with the right
+ * Content-Type. Returns null when the object doesn't exist.
+ */
+export async function getR2Object(
+  key: string,
+): Promise<{ body: Buffer; contentType: string } | null> {
+  const r2 = getR2();
+  if (!r2) throw new Error("R2 is not configured");
+  try {
+    const res = await r2.client.send(
+      new GetObjectCommand({ Bucket: r2.bucket, Key: key }),
+    );
+    if (!res.Body) return null;
+    const chunks: Buffer[] = [];
+    for await (const chunk of res.Body as NodeJS.ReadableStream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return {
+      body: Buffer.concat(chunks),
+      contentType: res.ContentType ?? "application/octet-stream",
+    };
+  } catch (err: any) {
+    if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
 }

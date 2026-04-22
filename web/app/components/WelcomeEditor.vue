@@ -971,6 +971,7 @@ async function handleBgImageUpload(event: Event) {
   try {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("guild_id", props.guildId);
     const res = await fetch("/api/welcome/upload-bg", {
       method: "POST",
       body: formData,
