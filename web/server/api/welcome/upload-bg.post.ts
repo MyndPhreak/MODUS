@@ -1,35 +1,43 @@
 /**
- * Server-side endpoint to upload a welcome image background.
- * Accepts multipart/form-data with a single "file" field (image).
+ * Upload a welcome background image.
  *
- * Validates:
- *   - File size ≤ 8 MB
- *   - MIME type is image/*
+ * Stores under `welcome/<guild_id>/<rand>.<ext>` in R2 (primary path).
+ * Returns a stable proxy URL (`/api/welcome/bg/welcome/<guild_id>/<rand>.<ext>`)
+ * that the editor persists into the template. Legacy templates that store
+ * full Appwrite URLs keep working — the renderer's `loadImage` handles any
+ * HTTP URL.
  *
- * Stores in Appwrite Storage bucket "welcome_assets" and returns
- * the public download URL that the bot can fetch at render time.
- *
- * Returns: { url: string, fileId: string }
+ * Accepts multipart/form-data:
+ *   - file: image payload (required, ≤ 8 MB, MIME must start with image/)
+ *   - guild_id: Discord guild id (required, scopes the key namespace)
  */
 import { Client, Storage, ID } from "node-appwrite";
 // @ts-ignore — subpath export resolves at runtime
 import { InputFile } from "node-appwrite/file";
+import { randomBytes } from "crypto";
+import { getR2, putR2Object } from "../../utils/r2";
+import { requireAuthedUserId } from "../../utils/session";
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB
-const BUCKET_ID = "welcome_assets";
-
+const APPWRITE_BUCKET_ID = "welcome_assets";
 const ALLOWED_MIME_PREFIXES = ["image/"];
 
-export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
+function guildIdFromParts(parts: any[] | null): string | null {
+  const field = parts?.find((p) => p.name === "guild_id");
+  if (!field) return null;
+  // Non-file fields come through as a Buffer of the raw form value.
+  const value = field.data?.toString("utf8") ?? "";
+  return /^[0-9]{10,}$/.test(value) ? value : null;
+}
 
-  // Parse multipart form data
+export default defineEventHandler(async (event) => {
+  // Authenticate so only dashboard users can upload.
+  await requireAuthedUserId(event);
+
+  const config = useRuntimeConfig();
   const formData = await readMultipartFormData(event);
   if (!formData || formData.length === 0) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "No file uploaded.",
-    });
+    throw createError({ statusCode: 400, statusMessage: "No file uploaded." });
   }
 
   const filePart = formData.find((part) => part.name === "file");
@@ -40,7 +48,6 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Validate file size
   if (filePart.data.length > MAX_FILE_SIZE) {
     throw createError({
       statusCode: 400,
@@ -48,19 +55,52 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Validate MIME type
   const mimeType = filePart.type || "";
-  const isAllowed = ALLOWED_MIME_PREFIXES.some((prefix) =>
-    mimeType.startsWith(prefix),
-  );
-  if (!isAllowed) {
+  if (!ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))) {
     throw createError({
       statusCode: 400,
       statusMessage: `Invalid file type: ${mimeType}. Only image files are accepted.`,
     });
   }
 
-  // Upload to Appwrite Storage
+  const guildId = guildIdFromParts(formData);
+  if (!guildId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Missing or invalid guild_id in form data.",
+    });
+  }
+
+  const ext = (mimeType.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+  const rand = randomBytes(8).toString("hex");
+  const key = `welcome/${guildId}/${rand}.${ext}`;
+
+  // ── R2 primary path ─────────────────────────────────────────────────────
+  if (getR2()) {
+    try {
+      await putR2Object({
+        key,
+        body: filePart.data,
+        contentType: mimeType,
+      });
+      // Proxy URL — stable across deployments, works from the dashboard
+      // editor (browser) and the bot-side renderer (which passes through
+      // loadImage → HTTP fetch → this proxy).
+      const url = `/api/welcome/bg/${key}`;
+      return { url, fileId: key };
+    } catch (error: any) {
+      console.error(
+        "[Welcome API] R2 upload failed:",
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Failed to upload background image to R2.",
+      });
+    }
+  }
+
+  // ── Appwrite Storage fallback ──────────────────────────────────────────
   const client = new Client()
     .setEndpoint(config.public.appwriteEndpoint as string)
     .setProject(config.public.appwriteProjectId as string)
@@ -70,31 +110,28 @@ export default defineEventHandler(async (event) => {
 
   try {
     const fileId = ID.unique();
-    const ext = mimeType.split("/")[1] || "png";
     const fileName =
       filePart.filename || `welcome_bg_${Date.now()}.${ext}`;
 
     await storage.createFile(
-      BUCKET_ID,
+      APPWRITE_BUCKET_ID,
       fileId,
       InputFile.fromBuffer(filePart.data, fileName),
     );
 
-    // Build the public download URL
     const endpoint = config.public.appwriteEndpoint as string;
     const projectId = config.public.appwriteProjectId as string;
-    const url = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${fileId}/view?project=${projectId}`;
+    const url = `${endpoint}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${fileId}/view?project=${projectId}`;
 
     return { url, fileId };
   } catch (error: any) {
     console.error(
-      "[Welcome API] Error uploading background image:",
+      "[Welcome API] Appwrite upload failed:",
       error?.message || error,
     );
     throw createError({
       statusCode: error?.code || 500,
-      statusMessage:
-        error?.message || "Failed to upload background image.",
+      statusMessage: error?.message || "Failed to upload background image.",
     });
   }
 });
