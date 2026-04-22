@@ -1,33 +1,16 @@
 /**
- * Server-side endpoint to fetch a user's roles in a given guild.
- * Uses the bot token to access guild member data directly.
+ * Fetch a user's roles in a given guild via the bot token.
  *
  * Query params:
  *   - guild_id: The Discord guild ID
  *   - discord_uid: The Discord user ID
  */
-import { isNativeAuthEnabled } from "../../utils/session";
+import { requireAuthedUserId } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
+  await requireAuthedUserId(event);
+
   const config = useRuntimeConfig();
-  const projectId = config.public.appwriteProjectId as string;
-
-  // Auth guard: accept either a native session or the legacy Appwrite cookie.
-  let authenticated = false;
-  if (isNativeAuthEnabled()) {
-    const session = await getUserSession(event);
-    if (session.user?.id) authenticated = true;
-  }
-  if (!authenticated) {
-    authenticated = !!getCookie(event, `a_session_${projectId}`);
-  }
-  if (!authenticated) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized: No session found.",
-    });
-  }
-
   const query = getQuery(event);
   const guildId = query.guild_id as string;
   const discordUid = query.discord_uid as string;
@@ -50,16 +33,10 @@ export default defineEventHandler(async (event) => {
   try {
     const member: any = await $fetch(
       `https://discord.com/api/v10/guilds/${guildId}/members/${discordUid}`,
-      {
-        headers: {
-          Authorization: `Bot ${botToken}`,
-        },
-      },
+      { headers: { Authorization: `Bot ${botToken}` } },
     );
 
-    return {
-      roles: member.roles || [],
-    };
+    return { roles: member.roles || [] };
   } catch (error: any) {
     // 404 = user not in guild, 403 = bot not in guild
     if (error?.status === 404 || error?.statusCode === 404) {

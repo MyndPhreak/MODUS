@@ -1,26 +1,23 @@
 /**
- * Session helpers for the native Discord OAuth flow.
+ * Session helpers for Discord OAuth.
  *
- * Cookie-sealed sessions via nuxt-auth-utils (which wraps h3's session
- * primitives). No DB round-trip on every request — the session payload
- * is encrypted into the cookie itself and validated in-memory.
+ * Cookie-sealed sessions via nuxt-auth-utils (wraps h3's session primitives).
+ * No DB round-trip on every request — the session payload is encrypted into
+ * the cookie and validated in-memory.
  *
  * Public surface:
  *   - Session shape (user + secureTokens)
- *   - getResolvedUserId(event)       → best-effort user ID across backends
- *   - getDiscordAccessToken(event)   → fresh token, refreshing if needed
- *   - refreshNativeTokens(event)     → manual refresh entry point
- *   - clearNativeSession(event)      → logout
- *
- * Feature flag: NUXT_USE_NATIVE_AUTH. When off, `resolve*` helpers ignore
- * the native session entirely and callers fall back to Appwrite cookies.
+ *   - requireAuthedUserId(event)    → { userId } or 401
+ *   - getDiscordAccessToken(event)  → fresh token, refreshing if needed
+ *   - refreshNativeTokens(event)    → manual refresh entry point
+ *   - clearNativeSession(event)     → logout
  */
 import type { H3Event } from "h3";
 
 // ── Session shape ────────────────────────────────────────────────────────
 
 export interface SessionUser {
-  /** Discord user ID — canonical identifier in native mode. */
+  /** Discord user ID — canonical identifier. */
   id: string;
   username: string;
   discriminator: string;
@@ -44,52 +41,44 @@ declare module "#auth-utils" {
   }
 }
 
-// ── Resolvers ────────────────────────────────────────────────────────────
+// ── Auth guards ──────────────────────────────────────────────────────────
 
-/**
- * True when native auth is the active flow for this deployment. Callers
- * still check for a session on each request — this only gates the flow
- * selection.
- */
-export function isNativeAuthEnabled(): boolean {
-  const config = useRuntimeConfig();
-  return String(config.useNativeAuth) === "true";
+export interface AuthedIdentity {
+  /** Discord user ID governing data ownership checks. */
+  userId: string;
 }
 
-/**
- * Best-effort user ID that works regardless of which auth flow wrote the
- * session. Native mode → Discord UID. Legacy Appwrite mode → Appwrite user
- * ID cookie. Null when neither is present.
- *
- * Note: these two ID spaces are NOT interchangeable for data lookups —
- * callers should be aware of which backend owns the records they're
- * filtering. Stored `owner_id` / `admin_user_ids` values follow whichever
- * flow was active when the row was written.
- */
-export async function getResolvedUserId(event: H3Event): Promise<string | null> {
-  if (isNativeAuthEnabled()) {
-    const session = await getUserSession(event);
-    if (session.user?.id) return session.user.id;
+/** Throws 401 when no valid session is present. */
+export async function requireAuthedUserId(
+  event: H3Event,
+): Promise<AuthedIdentity> {
+  const session = await getUserSession(event);
+  if (session.user?.id) {
+    return { userId: session.user.id };
   }
-  const config = useRuntimeConfig();
-  const projectId = config.public.appwriteProjectId as string;
-  return getCookie(event, `a_user_${projectId}`) || null;
+  throw createError({
+    statusCode: 401,
+    statusMessage: "Unauthorized: No session found.",
+  });
 }
 
-/**
- * Best-effort Discord UID. In native mode, this is the session user ID.
- * Legacy mode reads the `discord_uid_<projectId>` cookie.
- */
+/** Same as `requireAuthedUserId` but returns null instead of throwing. */
+export async function tryAuthedUserId(
+  event: H3Event,
+): Promise<AuthedIdentity | null> {
+  try {
+    return await requireAuthedUserId(event);
+  } catch {
+    return null;
+  }
+}
+
+/** Return the Discord UID of the caller, or null when unauthenticated. */
 export async function getResolvedDiscordId(
   event: H3Event,
 ): Promise<string | null> {
-  if (isNativeAuthEnabled()) {
-    const session = await getUserSession(event);
-    if (session.user?.id) return session.user.id;
-  }
-  const config = useRuntimeConfig();
-  const projectId = config.public.appwriteProjectId as string;
-  return getCookie(event, `discord_uid_${projectId}`) || null;
+  const session = await getUserSession(event);
+  return session.user?.id ?? null;
 }
 
 // ── Discord OAuth token helpers ──────────────────────────────────────────
@@ -106,10 +95,6 @@ interface DiscordTokenResponse {
   token_type: string;
 }
 
-/**
- * Exchange an authorization `code` for access + refresh tokens. Used by
- * the callback handler on initial login.
- */
 export async function exchangeDiscordCode(params: {
   code: string;
   clientId: string;
@@ -172,14 +157,12 @@ export async function refreshDiscordTokens(
 
 /**
  * Return a valid Discord access token for the current session, refreshing
- * silently if it's near expiry. Returns null when there's no native
- * session (legacy Appwrite flow) or when refresh fails.
+ * silently if it's near expiry. Returns null when there's no session or
+ * when refresh fails.
  */
 export async function getDiscordAccessToken(
   event: H3Event,
 ): Promise<string | null> {
-  if (!isNativeAuthEnabled()) return null;
-
   const session = await getUserSession(event);
   const tokens = session.secure?.tokens;
   if (!tokens) return null;
@@ -200,7 +183,6 @@ export async function getDiscordAccessToken(
 export async function refreshNativeTokens(
   event: H3Event,
 ): Promise<DiscordTokens | null> {
-  if (!isNativeAuthEnabled()) return null;
   const session = await getUserSession(event);
   const tokens = session.secure?.tokens;
   if (!tokens) return null;
@@ -244,58 +226,4 @@ async function refreshAndPersist(
 
 export async function clearNativeSession(event: H3Event): Promise<void> {
   await clearUserSession(event);
-}
-
-// ── Auth guard helper ────────────────────────────────────────────────────
-
-export interface AuthedIdentity {
-  /** The userId governing data ownership checks (Discord UID in native mode,
-   *  Appwrite user ID in legacy mode). */
-  userId: string;
-  backend: "native" | "appwrite";
-}
-
-/**
- * Require an authenticated request. Throws 401 when neither a native
- * session nor a valid Appwrite session pair is present.
- *
- * Consolidates the cookie-wrangling that every server endpoint used to
- * repeat. Callers get a tagged identity so they can tell which backend
- * produced the userId (useful for audit logs and for interpreting data
- * written by the other flow — see the note on the server records key
- * space in .env.example).
- */
-export async function requireAuthedUserId(
-  event: H3Event,
-): Promise<AuthedIdentity> {
-  if (isNativeAuthEnabled()) {
-    const session = await getUserSession(event);
-    if (session.user?.id) {
-      return { userId: session.user.id, backend: "native" };
-    }
-  }
-
-  const config = useRuntimeConfig();
-  const projectId = config.public.appwriteProjectId as string;
-  const sessionSecret = getCookie(event, `a_session_${projectId}`);
-  const appwriteUserId = getCookie(event, `a_user_${projectId}`);
-  if (sessionSecret && appwriteUserId) {
-    return { userId: appwriteUserId, backend: "appwrite" };
-  }
-
-  throw createError({
-    statusCode: 401,
-    statusMessage: "Unauthorized: No session found.",
-  });
-}
-
-/** Same as `requireAuthedUserId` but returns null instead of throwing. */
-export async function tryAuthedUserId(
-  event: H3Event,
-): Promise<AuthedIdentity | null> {
-  try {
-    return await requireAuthedUserId(event);
-  } catch {
-    return null;
-  }
 }
