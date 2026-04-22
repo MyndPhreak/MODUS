@@ -33,6 +33,14 @@ export class ModuleRepository {
       .onConflictDoNothing({ target: modules.name });
   }
 
+  /** Toggle a module's global enabled flag. Used by admin/modules.vue. */
+  async setEnabled(name: string, enabled: boolean): Promise<void> {
+    await this.db
+      .update(modules)
+      .set({ enabled })
+      .where(eq(modules.name, name));
+  }
+
   async listAll(): Promise<ModuleDoc[]> {
     const rows = await this.db.select().from(modules);
     return rows.map(toDoc);

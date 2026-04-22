@@ -63,6 +63,15 @@ export class AutomodRuleRepository {
     return rows.map(toDoc);
   }
 
+  async getById(ruleId: string): Promise<AutomodRuleDoc | null> {
+    const rows = await this.db
+      .select()
+      .from(automodRules)
+      .where(eq(automodRules.id, ruleId))
+      .limit(1);
+    return rows[0] ? toDoc(rows[0]) : null;
+  }
+
   async listEnabledByTrigger(
     guildId: string,
     trigger: string,

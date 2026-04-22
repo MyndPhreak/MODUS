@@ -60,6 +60,13 @@ export class GuildConfigRepository {
     return rows.map(toDoc);
   }
 
+  /** Delete every guild_configs row for a guild. Used when un-registering. */
+  async deleteAllForGuild(guildId: string): Promise<void> {
+    await this.db
+      .delete(guildConfigs)
+      .where(eq(guildConfigs.guildId, guildId));
+  }
+
   async isModuleEnabled(
     guildId: string,
     moduleName: string,
