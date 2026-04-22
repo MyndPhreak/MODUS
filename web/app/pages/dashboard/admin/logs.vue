@@ -140,18 +140,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { Query } from "appwrite";
-
-const { databases, client } = useAppwrite();
 
 const botLogs = ref<any[]>([]);
 const logsRefreshing = ref(false);
-const logSubscription = ref<(() => void) | null>(null);
+const eventSource = ref<EventSource | null>(null);
 
 const adminLogScope = ref("all");
 const adminLogLevel = ref("all");
-
-const databaseId = "discord_bot";
 
 const logScopes = [
   { value: "all", label: "All Logs", color: "neutral" as const },
@@ -198,11 +193,10 @@ const getAdminLogCount = (level: string) => {
 const fetchInitialLogs = async () => {
   logsRefreshing.value = true;
   try {
-    const response = await databases.listDocuments(databaseId, "logs", [
-      Query.orderDesc("timestamp"),
-      Query.limit(100),
-    ]);
-    botLogs.value = response.documents;
+    // Admin logs endpoint returns all logs (no guild filter). The Postgres
+    // path orders by timestamp DESC and caps at 200 rows.
+    const docs = await $fetch<any[]>("/api/admin/logs");
+    botLogs.value = docs;
   } catch (error) {
     console.error("Error fetching logs:", error);
   } finally {
@@ -211,15 +205,24 @@ const fetchInitialLogs = async () => {
 };
 
 const setupRealtimeLogs = () => {
-  logSubscription.value = client.subscribe(
-    `databases.${databaseId}.collections.logs.documents`,
-    (response) => {
-      if (response.events.some((e: string) => e.includes(".create"))) {
-        const newLog = response.payload as any;
-        botLogs.value = [newLog, ...botLogs.value].slice(0, 200);
+  // SSE replaces the Appwrite Realtime subscription. EventSource reconnects
+  // automatically if the stream drops, so we don't need our own retry.
+  eventSource.value = new EventSource("/api/events/logs", {
+    withCredentials: true,
+  });
+  eventSource.value.onmessage = (ev) => {
+    try {
+      const { kind, log } = JSON.parse(ev.data);
+      if (kind === "create" && log) {
+        botLogs.value = [log, ...botLogs.value].slice(0, 200);
       }
-    },
-  );
+    } catch (err) {
+      console.warn("[admin/logs] malformed SSE payload:", err);
+    }
+  };
+  eventSource.value.onerror = (err) => {
+    console.warn("[admin/logs] SSE error (auto-reconnecting):", err);
+  };
 };
 
 const formatFullTime = (dateString: string) => {
@@ -239,7 +242,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (logSubscription.value) logSubscription.value();
+  if (eventSource.value) {
+    eventSource.value.close();
+    eventSource.value = null;
+  }
 });
 </script>
 
