@@ -117,7 +117,7 @@
             </p>
           </div>
           <span class="text-[10px] text-gray-600 whitespace-nowrap mt-1">
-            {{ formatDate(log.$createdAt) }}
+            {{ formatDate(log.timestamp) }}
           </span>
         </div>
       </div>
