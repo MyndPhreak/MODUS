@@ -22,22 +22,18 @@ export default defineNuxtConfig({
   },
   css: ["~/assets/css/main.css"],
   runtimeConfig: {
-    appwriteApiKey: "", // Set via NUXT_APPWRITE_API_KEY
     discordBotToken: "", // Set via NUXT_DISCORD_BOT_TOKEN
     renderApiKey: "", // Shared secret for bot→dashboard render API — Set via NUXT_RENDER_API_KEY
-    // ── Native Discord OAuth (nuxt-auth-utils) ────────────────────────────
-    // When useNativeAuth is "true", /api/auth/discord + /api/auth/callback
-    // run a direct Discord OAuth flow with sealed cookie sessions instead of
-    // delegating to Appwrite.
-    useNativeAuth: "false", // Set via NUXT_USE_NATIVE_AUTH
-    discordClientSecret: "", // Set via NUXT_DISCORD_CLIENT_SECRET — required when useNativeAuth is on
+    // ── Discord OAuth (nuxt-auth-utils) ───────────────────────────────────
+    // /api/auth/discord + /api/auth/callback run the OAuth flow directly;
+    // sessions are sealed into a cookie by nuxt-auth-utils. Set
+    // NUXT_SESSION_PASSWORD to a 32+ char random string.
+    discordClientSecret: "", // Set via NUXT_DISCORD_CLIENT_SECRET
     // Base URL of the bot's HTTP server (server-side only, never sent to browser)
     // Docker: http://bot:3005  |  Non-Docker: https://modus-bot.ppo.gg
     botWebhookUrl: "http://bot:3005", // Set via NUXT_BOT_WEBHOOK_URL
-    // ── Recording storage (R2) ────────────────────────────────────────────
-    // When useR2Storage is "true", stream/delete endpoints talk to R2 instead
-    // of Appwrite Storage. See web/.env.example for NUXT_R2_* details.
-    useR2Storage: "false", // Set via NUXT_USE_R2_STORAGE
+    // ── Object storage (Cloudflare R2) ────────────────────────────────────
+    // Required for recordings + welcome backgrounds.
     r2AccountId: "", // Set via NUXT_R2_ACCOUNT_ID
     r2AccessKeyId: "", // Set via NUXT_R2_ACCESS_KEY_ID
     r2SecretAccessKey: "", // Set via NUXT_R2_SECRET_ACCESS_KEY
@@ -45,11 +41,8 @@ export default defineNuxtConfig({
     r2Endpoint: "", // Set via NUXT_R2_ENDPOINT (optional override)
     r2PresignTtl: "300", // Set via NUXT_R2_PRESIGN_TTL
     // ── Postgres ──────────────────────────────────────────────────────────
-    // Two opt-in flags, matching the bot:
-    //   usePostgres          — full cutover, every collection on Postgres
-    //   usePostgresRecordings — narrow opt-in for recordings only
-    usePostgres: "false", // Set via NUXT_USE_POSTGRES
-    usePostgresRecordings: "false", // Set via NUXT_USE_POSTGRES_RECORDINGS
+    // Required for every server-side data endpoint. When unset the endpoints
+    // return 503 rather than silently degrading.
     databaseUrl: "", // Set via NUXT_DATABASE_URL
     public: {
       appwriteEndpoint: "https://api.ppo.gg/v1", // Set via NUXT_PUBLIC_APPWRITE_ENDPOINT
