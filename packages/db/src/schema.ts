@@ -16,6 +16,7 @@ import {
   pgTable,
   text,
   integer,
+  bigint,
   doublePrecision,
   boolean,
   timestamp,
@@ -529,7 +530,9 @@ export type NewTicketTranscript = typeof ticketTranscripts.$inferInsert;
 export const ticketMessages = pgTable(
   "ticket_messages",
   {
-    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
     transcriptId: text("transcript_id")
       .notNull()
       .references(() => ticketTranscripts.id, { onDelete: "cascade" }),
