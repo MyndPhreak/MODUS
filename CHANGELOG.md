@@ -1,5 +1,93 @@
 # Changelog
 
+## [1.12.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.11.0...modus-v1.12.0) (2026-04-23)
+
+
+### ✨ Features
+
+* **api:** accept is_template and description on tag create/update ([b357e52](https://github.com/MyndPhreak/MODUS/commit/b357e52361d1368bcd4bacde48777a91eda993ad))
+* **api:** add server endpoints backing the client-side decommission ([c9f3d34](https://github.com/MyndPhreak/MODUS/commit/c9f3d3454d49dac6df84ca7f7957ae5a2eb32613))
+* **api:** add voice preview endpoint for recording TTS picker ([cffd569](https://github.com/MyndPhreak/MODUS/commit/cffd569af1cdea0f2e46a7def1e701b50c949fcc))
+* **api:** gated ticket transcript read endpoint ([3f74909](https://github.com/MyndPhreak/MODUS/commit/3f74909b236ac742ecabac60906569bb4bc2d040))
+* **api:** list recent ticket transcripts for guild admins ([f875855](https://github.com/MyndPhreak/MODUS/commit/f875855950293cf304603badc85170cb3a62c34e))
+* **api:** migrate welcome image backgrounds to R2 ([d4fd325](https://github.com/MyndPhreak/MODUS/commit/d4fd325d16a02303c658cabe68f90dbd079dc0e2))
+* **api:** native Discord OAuth endpoints behind NUXT_USE_NATIVE_AUTH ([1e41636](https://github.com/MyndPhreak/MODUS/commit/1e41636bbda697c80a8ddfa0df2b8c4db30d06d7))
+* **api:** Nitro SSE bridge for dashboard realtime ([0e64d79](https://github.com/MyndPhreak/MODUS/commit/0e64d7974df6e01cd5a35bde600c760badbda05b))
+* **api:** route discord + servers endpoints through native session ([0cbe74c](https://github.com/MyndPhreak/MODUS/commit/0cbe74c68f154c8e3ba966303d3c0803105b8233))
+* **api:** route servers endpoints through Postgres ([f7f73a6](https://github.com/MyndPhreak/MODUS/commit/f7f73a6d8086b79d20e71169fee483a84bb573cb))
+* **api:** route tags, triggers, AI usage, and stats through Postgres ([bb7f2af](https://github.com/MyndPhreak/MODUS/commit/bb7f2af7b57ed547366470917476f42071724eb3))
+* **api:** route web recording endpoints through Postgres when enabled ([80587fb](https://github.com/MyndPhreak/MODUS/commit/80587fbc69dbd7e9234cdbde0a2e31e5207b9827))
+* **api:** serve recordings via presigned R2 URLs when enabled ([2b9e911](https://github.com/MyndPhreak/MODUS/commit/2b9e91196246dcfb44621504b1f8662c54134d7c))
+* **api:** session helpers for native Discord OAuth + auth guards ([a41324e](https://github.com/MyndPhreak/MODUS/commit/a41324e260266075f3865867d1ade8881c2b1d31))
+* **api:** unified repo accessor for Nitro endpoints ([b87af18](https://github.com/MyndPhreak/MODUS/commit/b87af18f2979a7e88812c0962787ed1e126b0548))
+* **bot:** add Kokoro TTS library and /say command ([af6e58b](https://github.com/MyndPhreak/MODUS/commit/af6e58b0868ab3aab3a67402c80972593720c1f9))
+* **bot:** add nightly recording retention worker ([c3b6f5f](https://github.com/MyndPhreak/MODUS/commit/c3b6f5fe18cbb0f4af0416492f2559c87673971d))
+* **bot:** add R2 storage backend for recordings with streaming uploads ([dbc2b39](https://github.com/MyndPhreak/MODUS/commit/dbc2b391e964f76d60feb9f82fd7765f72606c29))
+* **bot:** add Redis client factory and EventBus pub/sub wrapper ([377cc34](https://github.com/MyndPhreak/MODUS/commit/377cc3472526ca4a15b01858af00894acb6c0eff))
+* **bot:** add ticket-transcript R2 helpers to StorageService ([b601ee6](https://github.com/MyndPhreak/MODUS/commit/b601ee6dd12a3049ec74bdfd887b081406458342))
+* **bot:** add voice TTS announcement mode to recordings ([d5b435b](https://github.com/MyndPhreak/MODUS/commit/d5b435b2143f0667bf5487ee61d32ce3cde83011))
+* **bot:** add webTranscripts settings to tickets module ([968e2ec](https://github.com/MyndPhreak/MODUS/commit/968e2ecb5c9d0f33771fddb472b2600574bb13da))
+* **bot:** cross-shard cache invalidation via Redis pub/sub ([11e4381](https://github.com/MyndPhreak/MODUS/commit/11e4381a42a239a057574f4eeba7b6a44ac57896))
+* **bot:** leader-gated transcript retention worker ([9f3fe67](https://github.com/MyndPhreak/MODUS/commit/9f3fe6714939d26edba1cbfb95424393657867ba))
+* **bot:** lease-based leader election for background workers ([2e30e2f](https://github.com/MyndPhreak/MODUS/commit/2e30e2f156d1f78d199382c2f65036cb0a407504))
+* **bot:** publish realtime events on Redis + drop Appwrite Realtime ([0da2749](https://github.com/MyndPhreak/MODUS/commit/0da2749d96a6fe120892f9ecdf15f7d2570ba6f9))
+* **bot:** publish web transcript URL on ticket close ([0924241](https://github.com/MyndPhreak/MODUS/commit/09242416c7de820f3185b423b01fbe3f1754b141))
+* **bot:** route all CRUD through Postgres when USE_POSTGRES is on ([6150306](https://github.com/MyndPhreak/MODUS/commit/61503063a02c4a02ca97ea052079ca4f087335d3))
+* **bot:** route recording CRUD through Postgres when enabled ([81cc0b7](https://github.com/MyndPhreak/MODUS/commit/81cc0b76e4fec892bf6eedf9b4e2ffe2eeca0aa0))
+* **bot:** snapshot ticket threads into postgres + R2 on close ([37ffd68](https://github.com/MyndPhreak/MODUS/commit/37ffd685be2f5ae0b1fc1f249b4bdbd8908c5a39))
+* **bot:** surface transcript repository on DatabaseService ([d78aa7d](https://github.com/MyndPhreak/MODUS/commit/d78aa7d8d84641493eab358f24f01fe50d787a36))
+* **db,api:** add repo helpers and auth guards for client decommission ([4c33bb5](https://github.com/MyndPhreak/MODUS/commit/4c33bb56e95dfa5d68d8e89f8f17e512d2962722))
+* **db:** add 0002 migration for remaining tables ([4519765](https://github.com/MyndPhreak/MODUS/commit/451976587501e8d0e7a8c5e69fc2de5c8addaaeb))
+* **db:** add Appwrite to Postgres migration script for recordings ([88aecea](https://github.com/MyndPhreak/MODUS/commit/88aecea708f60e591d960c1866eced9eea496163))
+* **db:** add Drizzle schema, client, and repository for recordings ([d864697](https://github.com/MyndPhreak/MODUS/commit/d864697ec88e2761d22c7ee658f2d11f278e0773))
+* **db:** add is_template and description fields to tags ([607abb6](https://github.com/MyndPhreak/MODUS/commit/607abb678faa1080c548bc4d8ea0706bb4233d3c))
+* **db:** add repositories for 11 remaining domains ([42c4bf3](https://github.com/MyndPhreak/MODUS/commit/42c4bf37f1afb4831d8ba53e6c9937402f2b8407))
+* **db:** add SQL migration runner with initial recordings migration ([2ec2373](https://github.com/MyndPhreak/MODUS/commit/2ec23730d6f97b5d7cb5f32a09ae8f86861a4dbf))
+* **db:** add ticket_transcripts and ticket_messages tables ([2326ac7](https://github.com/MyndPhreak/MODUS/commit/2326ac7b137d4c55cbf5c33d36ac482b6e761328))
+* **db:** add TranscriptRepository ([7bc71c2](https://github.com/MyndPhreak/MODUS/commit/7bc71c2814f59ddbaf91136e52dc282f8bb0073b))
+* **db:** extend schema to cover remaining Appwrite collections ([61ac8d2](https://github.com/MyndPhreak/MODUS/commit/61ac8d2727ae2b227c3379424a33062137d61bcf))
+* **db:** extend server + bot-status repositories for dashboard endpoints ([18f5ccc](https://github.com/MyndPhreak/MODUS/commit/18f5cccc39175098894d499e69d583ea4c74772b))
+* **db:** full Appwrite to Postgres migration script ([1e36863](https://github.com/MyndPhreak/MODUS/commit/1e3686320334db8461e6877ef8d1a89b7f4fcc25))
+* **docs:** migration guide for appwrite installs ([c9b8fcc](https://github.com/MyndPhreak/MODUS/commit/c9b8fcc0583a9545644950dbec8c4cedbd5d95ac))
+* **infra:** add optional Postgres service to docker-compose ([c299a59](https://github.com/MyndPhreak/MODUS/commit/c299a59ce753caad9a53f25a99c6b6276d35adcc))
+* **infra:** add optional Redis service to docker-compose ([9b68a7f](https://github.com/MyndPhreak/MODUS/commit/9b68a7f90b662324c815e3c0207bd43e338e2bef))
+* **web:** add reusable embed editor, preview, and markdown toolbar ([b37f287](https://github.com/MyndPhreak/MODUS/commit/b37f2876e72e7cf33ed846f28ef34a9eaeafe6bb))
+* **web:** add TTS announcement controls to recording dashboard ([a8ef132](https://github.com/MyndPhreak/MODUS/commit/a8ef1326e20f5c0178b7cb073e3337be5b28c0fd))
+* **web:** add web transcripts panel to tickets dashboard ([2984bee](https://github.com/MyndPhreak/MODUS/commit/2984bee43334185b56a89f4f710fef40628bd68e))
+* **web:** discord-style ticket transcript page ([73e59b1](https://github.com/MyndPhreak/MODUS/commit/73e59b1c630cfe535593f3847073f1a8134a24c2))
+* **web:** group server sidebar modules into labeled categories ([8c22de3](https://github.com/MyndPhreak/MODUS/commit/8c22de376a2f604cba830853d6ef5bfc9504eb30))
+* **web:** Pinia user store handles both auth backends ([08613ed](https://github.com/MyndPhreak/MODUS/commit/08613ed56fe46ccd749a4029b395aed6cacc590b))
+
+
+### 🐛 Bug Fixes
+
+* **api:** return 404 (not 401) for unauthenticated transcript fetches ([884a281](https://github.com/MyndPhreak/MODUS/commit/884a281c91af1595801e2a30729c30860290b775))
+* **bot:** fix tts voice id ([ffe07e2](https://github.com/MyndPhreak/MODUS/commit/ffe07e2a697b5ceae697d57e761badecc456794e))
+* **bot:** post /tag output to channel, keep admin replies ephemeral ([7cbe7dd](https://github.com/MyndPhreak/MODUS/commit/7cbe7dd945754cf94bf31e1f6e8a65832b97f99e))
+* **db:** ticket_messages.id matches BIGSERIAL column type ([459c015](https://github.com/MyndPhreak/MODUS/commit/459c0151c485b2f12841b8446cf6fad7e897ec35))
+* **docker:** make builds workspace-aware with root lockfile ([e327c81](https://github.com/MyndPhreak/MODUS/commit/e327c811989a1a72e099b9aa639c79739f401978))
+* **web:** use log.timestamp for server log dates ([53ad9e6](https://github.com/MyndPhreak/MODUS/commit/53ad9e6fb0affe1f67a1d2ee66b1bcac3d61f415))
+
+
+### ♻️ Refactors
+
+* **api:** drop Appwrite fallbacks from every data endpoint ([31fef2c](https://github.com/MyndPhreak/MODUS/commit/31fef2c11adc0c58a30c6ca5c116ee566c510128))
+* **api:** drop Appwrite OAuth fallbacks from auth + discord endpoints ([17142dc](https://github.com/MyndPhreak/MODUS/commit/17142dc9a14e3f8104479976c4908264b0141680))
+* **bot:** consumer call-site rename to DatabaseService ([73af7d3](https://github.com/MyndPhreak/MODUS/commit/73af7d3367fc3d0997410f02b1a71996eb8d7700))
+* **bot:** rename AppwriteService to DatabaseService; drop fallbacks ([e26314a](https://github.com/MyndPhreak/MODUS/commit/e26314aa4e5b9d0740db5d8ca6977397631dfee1))
+* **db:** compile @modus/db to dist/ so production node can consume it ([e4f547e](https://github.com/MyndPhreak/MODUS/commit/e4f547e1e0020154cfc8ca779a478ae654b0c128))
+* **web:** drop Appwrite client SDK from every dashboard page ([ee2c556](https://github.com/MyndPhreak/MODUS/commit/ee2c556b3100145425695597a8edb3ab2e29373a))
+* **web:** drop node-appwrite + simplify Pinia user store ([1761183](https://github.com/MyndPhreak/MODUS/commit/1761183a85cbefbc6d0eca6488e389f0d42411a4))
+* **web:** rebuild embed builder on shared EmbedEditor ([7de096c](https://github.com/MyndPhreak/MODUS/commit/7de096cff805679e69ae44c30053c39c1c1a7b35))
+* **web:** rebuild tags dashboard on shared EmbedEditor ([2b8a824](https://github.com/MyndPhreak/MODUS/commit/2b8a8244184d7b178cb70743b248a1bc2cf71209))
+
+
+### 📖 Documentation
+
+* add backend migration plan off Appwrite ([cc24b26](https://github.com/MyndPhreak/MODUS/commit/cc24b2608f370a1a302e6e37abaf86396e81fc12))
+* rewrite CLAUDE.md for post-Appwrite architecture ([f0a7244](https://github.com/MyndPhreak/MODUS/commit/f0a724467c18226752e9f5f5b457c44349fa1a35))
+* spec for server sidebar category organization ([8da4a8f](https://github.com/MyndPhreak/MODUS/commit/8da4a8f6d461e8127028329b175e026aaba70062))
+
 ## [1.11.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.10.0...modus-v1.11.0) (2026-04-21)
 
 
