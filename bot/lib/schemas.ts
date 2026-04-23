@@ -17,8 +17,15 @@ export const RecordingSettingsSchema = z.object({
   maxDuration: z.number().default(14400), // 4 hours in seconds
   bitrate: z.number().default(64), // kbps
   maxConcurrentUsers: z.number().default(25), // cap FFmpeg processes per session
-  announceMode: z.literal(["none", "tts", "soundClip"]).default("tts"),
+  announceMode: z
+    .literal(["none", "tts", "textTts", "soundClip"])
+    .default("tts"),
   announceSoundFileId: z.string().default(""),
+  // Custom announcement text for "tts"/"textTts" modes. Empty = default template.
+  // "{channel}" is substituted with the voice-channel name at speak time.
+  announceText: z.string().default(""),
+  // Kokoro voice id for "tts" mode (e.g. "kokoro-af_bella"). Empty = env default.
+  announceVoice: z.string().default(""),
   allowedRoleIds: z.array(z.string()).default([]),
   allowedUserIds: z.array(z.string()).default([]),
 });

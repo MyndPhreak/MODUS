@@ -34,6 +34,8 @@ import {
   type RecordingSettings,
 } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
+import { speakInConnection, isTTSAvailable } from "../lib/tts";
+import { resolveVoice } from "../lib/ttsVoices";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -67,6 +69,17 @@ interface UserRecordingStream {
 // Defaults + type are defined in lib/schemas.ts (RecordingSettingsSchema)
 
 // ─── Active Sessions ─────────────────────────────────────────────────────
+
+const DEFAULT_ANNOUNCE_TEXT =
+  "Recording has started in {channel}. All audio is being captured.";
+
+function resolveAnnounceText(
+  settings: { announceText: string },
+  channelName: string,
+): string {
+  const raw = settings.announceText.trim() || DEFAULT_ANNOUNCE_TEXT;
+  return raw.replaceAll("{channel}", channelName);
+}
 
 export const activeSessions = new Map<string, RecordingSession>();
 
@@ -1032,6 +1045,32 @@ async function handleStart(
     );
   }
 
+  // Play spoken announcement via Kokoro TTS (if configured)
+  if (settings.announceMode === "tts") {
+    if (!isTTSAvailable()) {
+      _moduleManager?.logger.warn(
+        'announceMode="tts" but KOKORO_BASE_URL is unset — skipping voice announcement',
+        guildId,
+        "recording",
+      );
+    } else {
+      await interaction.editReply({ content: "🔊 Speaking announcement..." });
+      const text = resolveAnnounceText(settings, voiceChannel.name);
+      const selectedVoice = resolveVoice(settings.announceVoice || undefined);
+      await speakInConnection(connection, text, {
+        voice: selectedVoice?.apiVoice,
+        speed: selectedVoice?.speed,
+      }).catch((err) => {
+        _moduleManager?.logger.error(
+          "voice TTS announcement failed",
+          guildId,
+          err,
+          "recording",
+        );
+      });
+    }
+  }
+
   // Resolve multitrack mode — premium-gated
   const wantsMultitrack = interaction.options.getBoolean("multitrack") ?? false;
   let multitrack = false;
@@ -1147,15 +1186,14 @@ async function handleStart(
   // Set nickname to 🔴Recording
   await updateNickname(interaction.guild?.members.me ?? null, true);
 
-  // Send TTS announcement
-  if (settings.announceMode === "tts") {
+  // Legacy "send a text message with Discord's tts flag" behavior.
+  // Kept as an opt-in for anyone who relied on it before voice TTS existed.
+  if (settings.announceMode === "textTts") {
     const ch = interaction.channel;
     if (ch && "send" in ch) {
+      const text = resolveAnnounceText(settings, voiceChannel.name);
       await (ch as TextChannel)
-        .send({
-          content: `Recording has started in **${voiceChannel.name}**. All audio is being captured.`,
-          tts: true,
-        })
+        .send({ content: text, tts: true })
         .catch(() => {});
     }
   }
