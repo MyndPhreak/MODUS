@@ -97,11 +97,16 @@ async function handleTag(
   const name = interaction.options.getString("name", true);
   const guildId = interaction.guildId;
   if (!guildId) {
-    await interaction.editReply({
+    await interaction.reply({
       content: "❌ This command can only be used in a server.",
+      flags: [MessageFlags.Ephemeral],
     });
     return;
   }
+
+  // Defer ephemerally so error/permission feedback stays private; on success
+  // we post the tag as a public channel message and edit this to a confirmation.
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
   const tag = await moduleManager.databaseService.getTagByName(guildId, name);
   if (!tag) {
@@ -111,7 +116,6 @@ async function handleTag(
     return;
   }
 
-  // Check role restrictions
   if (tag.allowed_roles) {
     try {
       const allowedRoles: string[] = JSON.parse(tag.allowed_roles);
@@ -138,7 +142,14 @@ async function handleTag(
     }
   }
 
-  // Send the tag content
+  const channel = interaction.channel;
+  if (!channel || !("send" in channel) || typeof channel.send !== "function") {
+    await interaction.editReply({
+      content: "❌ Can't post the tag here (channel not sendable).",
+    });
+    return;
+  }
+
   if (tag.embed_data) {
     try {
       const embedData = JSON.parse(tag.embed_data);
@@ -154,30 +165,39 @@ async function handleTag(
       if (embedData.fields) embed.setFields(embedData.fields);
       if (embedData.timestamp) embed.setTimestamp();
 
-      // If there's also plain text content, send it alongside
-      await interaction.editReply({
+      await channel.send({
         content: tag.content || undefined,
         embeds: [embed],
       });
     } catch (error) {
       moduleManager.logger.error("Error parsing embed data", interaction.guildId ?? undefined, error, "tags");
       await interaction.editReply({
-        content: tag.content || "❌ Failed to render tag embed.",
+        content: tag.content ? `⚠️ Failed to render embed, posting plain content instead.` : "❌ Failed to render tag embed.",
       });
+      if (tag.content) {
+        await channel.send({ content: tag.content });
+      }
+      return;
     }
   } else if (tag.content) {
-    await interaction.editReply({ content: tag.content });
+    await channel.send({ content: tag.content });
   } else {
     await interaction.editReply({
       content: "❌ This tag has no content.",
     });
+    return;
   }
+
+  await interaction.editReply({
+    content: `✅ Posted tag \`${tag.name}\`.`,
+  });
 }
 
 async function handleTagCreate(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const rawName = interaction.options.getString("name", true);
   const name = slugify(rawName);
   const content = interaction.options.getString("content");
@@ -271,6 +291,7 @@ async function handleTagDelete(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const name = interaction.options.getString("name", true);
   const guildId = interaction.guildId;
 
@@ -306,6 +327,7 @@ async function handleTagList(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const guildId = interaction.guildId;
   if (!guildId) {
     await interaction.editReply({
@@ -370,6 +392,8 @@ async function handleAutocomplete(
 const tagsModule: BotModule = {
   name: "tags",
   description: "Create and use custom tags/snippets with embeds or text.",
+  // Handlers own their defer: /tag posts publicly, admin subcommands are ephemeral.
+  deferReply: false,
 
   commands: [
     tagCommand.toJSON(),
