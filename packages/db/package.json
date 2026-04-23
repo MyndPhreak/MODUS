@@ -38,7 +38,7 @@
     "migrate:all": "ts-node scripts/migrate-appwrite.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.13.1"
   },
   "devDependencies": {
