@@ -168,6 +168,21 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * Cache-only enablement check. Returns undefined on miss so callers on the
+   * Discord 3-second interaction deadline (e.g. skipDefer modules that call
+   * showModal) can avoid blocking on Postgres. Kicks off an async refresh to
+   * populate the cache for subsequent calls.
+   */
+  isModuleEnabledCached(guildId: string, moduleName: string): boolean | undefined {
+    const name = moduleName.toLowerCase();
+    const cacheKey = `enabled:${guildId}:${name}`;
+    const cached = this.configCache.get(cacheKey);
+    if (cached !== undefined) return cached as boolean;
+    void this.isModuleEnabled(guildId, name);
+    return undefined;
+  }
+
   async setModuleStatus(
     guildId: string,
     moduleName: string,

@@ -419,20 +419,37 @@ export class ModuleManager {
         }
       }
 
-      // 3. Check guild-specific enablement (network call, but interaction is already deferred)
+      // 3. Check guild-specific enablement. For deferred modules we can await
+      //    the DB call safely. For skipDefer modules we'd still be on Discord's
+      //    3-second interaction clock, so we use the cache-only variant and
+      //    fall through (assume enabled) on miss — the cache warms for next time.
       let isGuildEnabled = true;
       if (guildId) {
-        isGuildEnabled = await this.databaseService.isModuleEnabled(
-          guildId,
-          module.name,
-        );
+        if (module.skipDefer) {
+          const cached = this.databaseService.isModuleEnabledCached(
+            guildId,
+            module.name,
+          );
+          isGuildEnabled = cached ?? true;
+        } else {
+          isGuildEnabled = await this.databaseService.isModuleEnabled(
+            guildId,
+            module.name,
+          );
+        }
       }
 
       if (!isGuildEnabled) {
         try {
-          await interaction.editReply({
-            content: `This module is currently disabled for this server.`,
-          });
+          const disabledMessage = "This module is currently disabled for this server.";
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: disabledMessage });
+          } else {
+            await interaction.reply({
+              content: disabledMessage,
+              flags: [MessageFlags.Ephemeral],
+            });
+          }
         } catch (replyError) {
           console.error(
             "[ModuleManager] Failed to send disabled reply:",
