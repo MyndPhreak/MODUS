@@ -466,6 +466,127 @@
       </div>
     </div>
 
+    <!-- Web Transcripts Settings -->
+    <div
+      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5"
+    >
+      <div
+        class="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent pointer-events-none"
+      />
+      <div class="relative space-y-5">
+        <div class="flex items-center gap-2 mb-1">
+          <div
+            class="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20"
+          >
+            <UIcon name="i-heroicons-globe-alt" class="text-teal-400" />
+          </div>
+          <div>
+            <h3 class="font-semibold text-white">Web Transcripts</h3>
+            <p class="text-[10px] text-gray-500">
+              Publish a Discord-authenticated transcript page when tickets close
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <UFormField label="Enable web transcripts" name="wt-enabled">
+            <USwitch
+              v-model="webTranscriptsEnabled"
+              color="success"
+              label="Publish transcript pages on ticket close"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Retention"
+            name="wt-retention"
+            description="How long transcripts stay available. Retroactive changes don't apply to already-closed tickets."
+          >
+            <USelect
+              v-model="webTranscriptsRetention"
+              :items="retentionItems"
+              :disabled="!webTranscriptsEnabled"
+              class="w-48"
+            />
+          </UFormField>
+
+          <UFormField label="Mirror image attachments" name="wt-mirror">
+            <USwitch
+              v-model="webTranscriptsMirrorAttachments"
+              color="success"
+              label="Re-host images so they remain available after Discord expires them"
+              :disabled="!webTranscriptsEnabled"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Attachment size cap"
+            name="wt-maxsize"
+            description="Images larger than this are skipped and shown as 'file no longer available'."
+          >
+            <USelect
+              v-model="webTranscriptsMaxBytes"
+              :items="sizeItems"
+              :disabled="!webTranscriptsEnabled || !webTranscriptsMirrorAttachments"
+              class="w-48"
+            />
+          </UFormField>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Transcripts -->
+    <div
+      v-if="webTranscriptsEnabled"
+      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5"
+    >
+      <div
+        class="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent pointer-events-none"
+      />
+      <div class="relative space-y-4">
+        <div class="flex items-center gap-2 mb-1">
+          <div
+            class="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20"
+          >
+            <UIcon name="i-heroicons-clock" class="text-teal-400" />
+          </div>
+          <h3 class="font-semibold text-white">Recent Transcripts</h3>
+        </div>
+
+        <div
+          v-if="recentTranscripts?.items?.length"
+          class="divide-y divide-white/5"
+        >
+          <a
+            v-for="t in recentTranscripts.items"
+            :key="t.id"
+            :href="`/ticket/${t.id}`"
+            target="_blank"
+            rel="noopener"
+            class="flex items-center justify-between py-2 px-1 hover:bg-white/5 rounded transition-colors"
+          >
+            <div>
+              <div class="text-sm font-medium text-white">
+                Ticket #{{ String(t.ticket_id).padStart(4, "0") }} —
+                {{ t.thread_name }}
+              </div>
+              <div class="text-xs text-gray-500">
+                Opened by {{ t.opener_id }} · closed
+                {{ new Date(t.closed_at).toLocaleString() }}
+              </div>
+            </div>
+            <UIcon
+              name="i-heroicons-arrow-top-right-on-square"
+              class="h-4 w-4 text-gray-400 shrink-0"
+            />
+          </a>
+        </div>
+        <div v-else class="py-4 text-center text-sm text-gray-500">
+          No transcripts yet.
+        </div>
+      </div>
+    </div>
+
     <!-- Feature Summary -->
     <div
       class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-5"
@@ -516,7 +637,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { nanoid } from "nanoid";
 
 const route = useRoute();
@@ -546,6 +667,13 @@ interface TicketTypeForm {
   buttonStyle: string;
 }
 
+interface WebTranscriptsForm {
+  enabled: boolean;
+  retentionDays: number | null;
+  mirrorAttachments: boolean;
+  attachmentMaxSizeBytes: number;
+}
+
 interface TicketsForm {
   panelChannelId: string;
   defaultParentChannelId: string;
@@ -556,6 +684,7 @@ interface TicketsForm {
   types: TicketTypeForm[];
   staffRoleIds: string[];
   panelEmbed: { title: string; description: string; color: string };
+  webTranscripts: WebTranscriptsForm;
 }
 
 const settings = ref<TicketsForm>({
@@ -568,11 +697,78 @@ const settings = ref<TicketsForm>({
   types: [],
   staffRoleIds: [],
   panelEmbed: { title: "", description: "", color: "#5865F2" },
+  webTranscripts: {
+    enabled: false,
+    retentionDays: 90,
+    mirrorAttachments: true,
+    attachmentMaxSizeBytes: 8 * 1024 * 1024,
+  },
 });
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const buttonStyleOptions = ["Primary", "Secondary", "Success", "Danger"];
+
+// ── Web transcripts ───────────────────────────────────────────────────────────
+
+const webTranscriptsEnabled = computed({
+  get: () => settings.value.webTranscripts?.enabled ?? false,
+  set: (v: boolean) => {
+    settings.value.webTranscripts = { ...settings.value.webTranscripts, enabled: v };
+  },
+});
+
+const webTranscriptsRetention = computed({
+  get: () => settings.value.webTranscripts?.retentionDays ?? 90,
+  set: (v: number | null) => {
+    settings.value.webTranscripts = { ...settings.value.webTranscripts, retentionDays: v };
+  },
+});
+
+const webTranscriptsMirrorAttachments = computed({
+  get: () => settings.value.webTranscripts?.mirrorAttachments ?? true,
+  set: (v: boolean) => {
+    settings.value.webTranscripts = { ...settings.value.webTranscripts, mirrorAttachments: v };
+  },
+});
+
+const webTranscriptsMaxBytes = computed({
+  get: () => settings.value.webTranscripts?.attachmentMaxSizeBytes ?? 8 * 1024 * 1024,
+  set: (v: number) => {
+    settings.value.webTranscripts = { ...settings.value.webTranscripts, attachmentMaxSizeBytes: v };
+  },
+});
+
+const retentionItems = [
+  { label: "30 days", value: 30 },
+  { label: "90 days", value: 90 },
+  { label: "180 days", value: 180 },
+  { label: "365 days", value: 365 },
+  { label: "Forever", value: null },
+];
+
+const sizeItems = [
+  { label: "2 MB", value: 2 * 1024 * 1024 },
+  { label: "4 MB", value: 4 * 1024 * 1024 },
+  { label: "8 MB", value: 8 * 1024 * 1024 },
+  { label: "16 MB", value: 16 * 1024 * 1024 },
+  { label: "25 MB", value: 25 * 1024 * 1024 },
+];
+
+interface TranscriptItem {
+  id: string;
+  ticket_id: number;
+  thread_name: string;
+  opener_id: string;
+  closed_at: string;
+  expires_at: string | null;
+  message_count: number;
+}
+
+const { data: recentTranscripts } = useFetch<{ items: TranscriptItem[] }>(
+  () => `/api/tickets/transcripts/list?guild_id=${route.params.guild_id}`,
+  { server: false, default: () => ({ items: [] }) },
+);
 
 const features = [
   "Private Threads",
@@ -640,6 +836,7 @@ const save = async () => {
       settings.value.panelEmbed.title || settings.value.panelEmbed.description
         ? settings.value.panelEmbed
         : undefined,
+    webTranscripts: settings.value.webTranscripts,
   });
 
   saving.value = false;
@@ -671,6 +868,12 @@ onMounted(async () => {
         title: saved.panelEmbed?.title ?? "",
         description: saved.panelEmbed?.description ?? "",
         color: saved.panelEmbed?.color ?? "#5865F2",
+      },
+      webTranscripts: {
+        enabled: saved.webTranscripts?.enabled ?? false,
+        retentionDays: saved.webTranscripts?.retentionDays ?? 90,
+        mirrorAttachments: saved.webTranscripts?.mirrorAttachments ?? true,
+        attachmentMaxSizeBytes: saved.webTranscripts?.attachmentMaxSizeBytes ?? 8 * 1024 * 1024,
       },
     };
   }
