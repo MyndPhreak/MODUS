@@ -8,7 +8,7 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getRepos } from "../../../utils/db";
-import { requireAuthedUserId } from "../../../utils/session";
+import { getResolvedDiscordId } from "../../../utils/session";
 import { getR2 } from "../../../utils/r2";
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1h
@@ -19,7 +19,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "Not found." });
   }
 
-  const identity = await requireAuthedUserId(event);
+  // Resolve caller; unauthenticated → treat as "not found" to match the
+  // other denial paths and avoid leaking slug existence via a 401.
+  const callerId = await getResolvedDiscordId(event);
+  if (!callerId) {
+    throw createError({ statusCode: 404, statusMessage: "Not found." });
+  }
 
   const repos = getRepos();
   if (!repos) {
@@ -41,7 +46,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // Access check: opener | participant | guild admin/owner.
-  const callerId = identity.userId;
   const isOpener = transcript.openerId === callerId;
   const isParticipant = transcript.participantIds.includes(callerId);
 
