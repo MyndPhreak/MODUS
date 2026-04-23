@@ -256,18 +256,21 @@ const pollsModule: BotModule = {
     const question = interaction.fields.getTextInputValue("question");
     const answers: string[] = [];
     for (let i = 1; i <= 4; i++) {
-      const val = interaction.fields.getTextInputValue(`option${i}`).trim();
-      if (val) answers.push(val);
+      try {
+        const val = interaction.fields.getTextInputValue(`option${i}`).trim();
+        if (val) answers.push(val);
+      } catch {
+        // Optional fields might be omitted
+      }
     }
 
-    // Build raw poll payload — PollBuilder is not yet in the installed
-    // discord.js version, but discord.js accepts the raw API shape.
+    // Build poll payload using discord.js mapped properties
     const poll = {
       question: { text: question },
       duration: 24,
-      allow_multiselect: false,
-      layout_type: PollLayoutType.Default,
-      answers: answers.map((text) => ({ poll_media: { text } })),
+      allowMultiselect: false,
+      layoutType: PollLayoutType.Default,
+      answers: answers.map((text) => ({ text })),
     };
 
     // Native poll MUST be the initial reply — not an editReply.
