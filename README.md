@@ -14,7 +14,7 @@
 
 MODUS is a Discord bot designed to replace the pile of single-purpose bots most servers end up with. Instead of running five different bots for moderation, music, welcome messages, tickets, and logging, MODUS handles all of it through independent modules that can be toggled on or off per server.
 
-It ships with a web dashboard (built on Nuxt 4) for configuring everything without touching slash commands, and uses Appwrite as its database backend.
+It ships with a web dashboard (built on Nuxt 4) for configuring everything without touching slash commands, and uses Postgres, Redis, and Cloudflare R2 as its backend infrastructure.
 
 ## Features
 
@@ -92,7 +92,7 @@ Velocity-based join flood detection. Configurable thresholds (X joins in Y secon
 
 ## Web Dashboard
 
-The dashboard runs as a separate service on Nuxt 4. It connects to the same Appwrite backend as the bot and lets server admins configure modules, preview welcome images, manage recordings, and monitor bot health — all through a browser.
+The dashboard runs as a separate service on Nuxt 4. It connects to the same Postgres backend as the bot and leverages `nuxt-auth-utils` for Discord OAuth, letting server admins configure modules, preview welcome images, manage recordings, and monitor bot health — all through a browser.
 
 SSR is disabled for dashboard routes (they require Discord OAuth), while public pages like the landing page are server-rendered.
 
@@ -101,52 +101,14 @@ SSR is disabled for dashboard routes (they require Discord OAuth), while public 
 | Layer | Tech |
 |-------|------|
 | Bot | Discord.js 14, discord-player, Node 22, TypeScript |
-| Web | Nuxt 4, @nuxt/ui, Tailwind CSS, Pinia |
+| Web | Nuxt 4, nuxt-auth-utils, @nuxt/ui, Tailwind CSS, Pinia |
 | AI | Anthropic Claude, OpenAI, Groq, Google Gemini |
-| Database | Appwrite (collections + file storage) |
+| Backend | Postgres, Redis, Cloudflare R2 |
 | Infra | Docker Compose, GHCR, pnpm workspaces |
 
 ## Self-Hosting
 
-### Requirements
-
-- Node.js 22+
-- pnpm 10.9+
-- An [Appwrite](https://appwrite.io/) instance
-- A Discord application with bot token
-- FFmpeg and yt-dlp (for music/recording — included in Docker image)
-
-### Setup
-
-Copy the example env files and fill in your credentials:
-
-```sh
-cp bot/.env.example bot/.env
-cp web/.env.example web/.env
-```
-
-### Docker (recommended)
-
-```sh
-docker compose up -d
-```
-
-This starts both services — the bot on port 3005 and the dashboard on port 3000.
-
-### Local development
-
-```sh
-# Bot
-cd bot
-pnpm install
-pnpm run setup-db    # first time only — creates Appwrite collections
-pnpm run dev
-
-# Web (separate terminal)
-cd web
-pnpm install
-pnpm run dev
-```
+For detailed instructions on how to set up MODUS using Docker (with prebuilt images or from source) or for native development, please see our [Installation Guide](INSTALLATION.md).
 
 ## Project Structure
 
@@ -155,7 +117,7 @@ bot/                    Discord bot
   modules/              Feature plugins (auto-loaded)
   lib/                  Shared utilities
   ModuleManager.ts      Plugin loader and interaction router
-  AppwriteService.ts    Database layer
+  DatabaseService.ts    Postgres database layer
 
 web/                    Nuxt 4 dashboard
   app/pages/            File-based routing
