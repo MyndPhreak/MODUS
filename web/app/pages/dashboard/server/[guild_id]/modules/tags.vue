@@ -171,10 +171,16 @@
     </div>
 
     <!-- ═══ Tag Editor Modal ═══ -->
-    <UModal v-model:open="editorOpen" :ui="{ content: 'sm:max-w-4xl' }">
+    <UModal
+      v-model:open="editorOpen"
+      :ui="{ content: 'sm:max-w-6xl max-h-[90vh] flex flex-col' }"
+    >
       <template #content>
-        <div class="p-6 space-y-5">
-          <div class="flex items-center justify-between">
+        <div class="flex flex-col max-h-[90vh]">
+          <!-- Header stays pinned while the body scrolls underneath. -->
+          <div
+            class="flex items-center justify-between p-6 pb-4 border-b border-white/10 flex-shrink-0"
+          >
             <h3 class="text-xl font-bold text-white">
               {{ editingTag ? "Edit Tag" : "Create Tag" }}
             </h3>
@@ -187,6 +193,7 @@
             />
           </div>
 
+          <div class="flex-1 overflow-y-auto p-6 pt-4">
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Left: Form -->
             <div class="space-y-4">
@@ -199,6 +206,7 @@
                   v-model="form.name"
                   placeholder="e.g. shipping-policy"
                   size="lg"
+                  class="w-full"
                   :disabled="!!editingTag"
                 />
                 <p class="text-xs text-gray-500 mt-1">
@@ -256,100 +264,16 @@
                   :rows="4"
                   :maxlength="4096"
                   size="lg"
+                  autoresize
+                  class="w-full"
                 />
               </div>
 
-              <!-- Embed Fields -->
-              <div
+              <!-- Shared embed editor (only when type includes embed) -->
+              <EmbedEditor
                 v-if="form.type === 'embed' || form.type === 'both'"
-                class="space-y-3"
-              >
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5"
-                    >Embed Title</label
-                  >
-                  <UInput
-                    v-model="form.embedTitle"
-                    placeholder="Embed title..."
-                    :maxlength="256"
-                    size="lg"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5">
-                    Embed Description
-                    <span class="text-gray-500 text-xs font-normal"
-                      >(Markdown)</span
-                    >
-                  </label>
-                  <UTextarea
-                    v-model="form.embedDescription"
-                    placeholder="Embed description..."
-                    :rows="4"
-                    :maxlength="4096"
-                    size="lg"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5"
-                    >Embed Color</label
-                  >
-                  <div class="flex items-center gap-3">
-                    <input
-                      type="color"
-                      v-model="form.embedColor"
-                      class="w-10 h-10 rounded-lg cursor-pointer border-2 border-white/10 bg-transparent hover:border-primary-500/50 transition-colors"
-                    />
-                    <UInput
-                      v-model="form.embedColor"
-                      placeholder="#5865F2"
-                      class="flex-1"
-                    />
-                  </div>
-                  <div class="flex gap-1.5 mt-2">
-                    <button
-                      v-for="(hex, cName) in presetColors"
-                      :key="cName"
-                      :title="cName"
-                      class="w-7 h-7 rounded-md border-2 transition-all hover:scale-110"
-                      :class="
-                        form.embedColor === hex
-                          ? 'border-white scale-110'
-                          : 'border-white/20'
-                      "
-                      :style="{ backgroundColor: hex }"
-                      @click="form.embedColor = hex"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5"
-                    >Image URL</label
-                  >
-                  <UInput
-                    v-model="form.embedImage"
-                    placeholder="https://example.com/image.png"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5"
-                    >Thumbnail URL</label
-                  >
-                  <UInput
-                    v-model="form.embedThumbnail"
-                    placeholder="https://example.com/thumb.png"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-1.5"
-                    >Footer Text</label
-                  >
-                  <UInput
-                    v-model="form.embedFooter"
-                    placeholder="Optional footer..."
-                  />
-                </div>
-              </div>
+                v-model="form.embed"
+              />
 
               <!-- Role Restrictions -->
               <div>
@@ -366,107 +290,37 @@
                   multiple
                   placeholder="All roles can use this tag"
                   icon="i-heroicons-shield-check"
+                  class="w-full"
                 />
               </div>
             </div>
 
-            <!-- Right: Preview -->
-            <div>
+            <!-- Right: Preview (sticky so it tracks the scrollable form) -->
+            <div class="lg:sticky lg:top-0 lg:self-start">
               <label class="block text-sm font-medium text-gray-300 mb-1.5"
                 >Preview</label
               >
-              <div
-                class="rounded-lg border border-white/10 bg-[#36393f] p-4 min-h-[200px]"
-              >
-                <!-- Text preview -->
-                <p
-                  v-if="
-                    (form.type === 'text' || form.type === 'both') &&
-                    form.content
+              <div class="rounded-lg border border-white/10 p-2">
+                <EmbedPreview
+                  :form="
+                    form.type === 'text' ? blankEmbedForm : form.embed
                   "
-                  class="text-sm text-[#dcddde] whitespace-pre-wrap mb-3"
-                >
-                  {{ form.content }}
-                </p>
-                <!-- Embed preview -->
-                <div
-                  v-if="
-                    (form.type === 'embed' || form.type === 'both') &&
-                    (form.embedTitle || form.embedDescription)
+                  :content="
+                    form.type === 'text' || form.type === 'both'
+                      ? form.content
+                      : undefined
                   "
-                  class="flex gap-0"
-                >
-                  <div
-                    class="w-1 rounded-l flex-shrink-0"
-                    :style="{
-                      backgroundColor: form.embedColor || '#5865f2',
-                    }"
-                  />
-                  <div class="bg-[#2f3136] rounded-r p-3 flex-1 min-w-0">
-                    <div class="flex gap-3">
-                      <div class="flex-1 min-w-0">
-                        <div
-                          v-if="form.embedTitle"
-                          class="text-sm font-bold text-white mb-1"
-                        >
-                          {{ form.embedTitle }}
-                        </div>
-                        <p
-                          v-if="form.embedDescription"
-                          class="text-xs text-[#dcddde] whitespace-pre-wrap"
-                        >
-                          {{ form.embedDescription }}
-                        </p>
-                      </div>
-                      <img
-                        v-if="form.embedThumbnail"
-                        :src="form.embedThumbnail"
-                        class="w-16 h-16 rounded object-cover flex-shrink-0"
-                        @error="
-                          (e: Event) =>
-                            ((e.target as HTMLImageElement).style.display =
-                              'none')
-                        "
-                      />
-                    </div>
-                    <img
-                      v-if="form.embedImage"
-                      :src="form.embedImage"
-                      class="rounded mt-2 w-full max-h-48 object-cover"
-                      @error="
-                        (e: Event) =>
-                          ((e.target as HTMLImageElement).style.display =
-                            'none')
-                      "
-                    />
-                    <div
-                      v-if="form.embedFooter"
-                      class="mt-2 pt-2 border-t border-white/5"
-                    >
-                      <span class="text-[10px] text-[#72767d]">{{
-                        form.embedFooter
-                      }}</span>
-                    </div>
-                  </div>
-                </div>
-                <!-- Empty state -->
-                <div
-                  v-if="
-                    !form.content && !form.embedTitle && !form.embedDescription
-                  "
-                  class="flex items-center justify-center h-40 text-gray-600"
-                >
-                  <div class="text-center">
-                    <UIcon name="i-heroicons-eye-slash" class="text-3xl mb-2" />
-                    <p class="text-xs">Start typing to see preview</p>
-                  </div>
-                </div>
+                  :context="mdContext"
+                />
               </div>
             </div>
           </div>
 
-          <!-- Footer Actions -->
-          <div class="flex justify-end gap-3 pt-2 border-t border-white/10">
+          </div>
+          <!-- Footer Actions (pinned) -->
+          <div
+            class="flex justify-end gap-3 p-4 border-t border-white/10 flex-shrink-0 bg-gray-900/80 backdrop-blur-xl"
+          >
             <UButton
               variant="ghost"
               color="neutral"
@@ -505,91 +359,12 @@
               @click="previewOpen = false"
             />
           </div>
-          <div
-            class="rounded-lg border border-white/10 bg-[#36393f] p-4"
+          <EmbedPreview
             v-if="previewingTag"
-          >
-            <p
-              v-if="previewingTag.content"
-              class="text-sm text-[#dcddde] whitespace-pre-wrap mb-3"
-            >
-              {{ previewingTag.content }}
-            </p>
-            <div v-if="previewEmbedData" class="flex gap-0">
-              <div
-                class="w-1 rounded-l flex-shrink-0"
-                :style="{
-                  backgroundColor: previewEmbedColor,
-                }"
-              />
-              <div class="bg-[#2f3136] rounded-r p-3 flex-1 min-w-0">
-                <div class="flex gap-3">
-                  <div class="flex-1 min-w-0">
-                    <div
-                      v-if="previewEmbedData.title"
-                      class="text-sm font-bold text-white mb-1"
-                    >
-                      {{ previewEmbedData.title }}
-                    </div>
-                    <p
-                      v-if="previewEmbedData.description"
-                      class="text-xs text-[#dcddde] whitespace-pre-wrap"
-                    >
-                      {{ previewEmbedData.description }}
-                    </p>
-                    <div
-                      v-if="previewEmbedData.fields?.length"
-                      class="mt-2 grid gap-1"
-                      :class="
-                        previewEmbedData.fields.some((f: any) => f.inline)
-                          ? 'grid-cols-3'
-                          : 'grid-cols-1'
-                      "
-                    >
-                      <div
-                        v-for="(field, i) in previewEmbedData.fields"
-                        :key="i"
-                        :class="field.inline ? 'col-span-1' : 'col-span-3'"
-                      >
-                        <div class="text-xs font-bold text-white">
-                          {{ field.name }}
-                        </div>
-                        <div class="text-xs text-[#dcddde]">
-                          {{ field.value }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <img
-                    v-if="previewEmbedData.thumbnail?.url"
-                    :src="previewEmbedData.thumbnail.url"
-                    class="w-16 h-16 rounded object-cover flex-shrink-0"
-                    @error="
-                      (e: Event) =>
-                        ((e.target as HTMLImageElement).style.display = 'none')
-                    "
-                  />
-                </div>
-                <img
-                  v-if="previewEmbedData.image?.url"
-                  :src="previewEmbedData.image.url"
-                  class="rounded mt-2 w-full max-h-48 object-cover"
-                  @error="
-                    (e: Event) =>
-                      ((e.target as HTMLImageElement).style.display = 'none')
-                  "
-                />
-                <div
-                  v-if="previewEmbedData.footer?.text"
-                  class="mt-2 pt-2 border-t border-white/5"
-                >
-                  <span class="text-[10px] text-[#72767d]">{{
-                    previewEmbedData.footer.text
-                  }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+            :form="previewForm"
+            :content="previewingTag.content || undefined"
+            :context="mdContext"
+          />
         </div>
       </template>
     </UModal>
@@ -633,6 +408,7 @@
               placeholder="Select a channel..."
               icon="i-heroicons-hashtag"
               size="lg"
+              class="w-full"
             />
           </div>
           <div class="flex justify-end gap-3 pt-2">
@@ -697,6 +473,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
+import {
+  emptyEmbedForm,
+  fromEmbedData,
+  toEmbedPayload,
+  hasEmbedContent,
+  type EmbedForm,
+} from "~/utils/embed-form";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -706,58 +489,59 @@ const toast = useToast();
 
 const channels = computed(() => state.value.channels);
 const channelsLoading = computed(() => state.value.channelsLoading);
+const rolesList = computed(() => state.value.roles);
+
+const mdContext = computed(() => ({
+  channels: channels.value.map((c: any) => ({ id: c.id, name: c.name })),
+  roles: rolesList.value.map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+  })),
+}));
 
 // ── Data ──
+// Tags list — excludes presets (is_template=true) so the /tag-invocable set
+// stays clean. Presets live on the embeds page.
 const tags = ref<any[]>([]);
 const loading = ref(true);
 
-const presetColors: Record<string, string> = {
-  Blurple: "#5865f2",
-  Green: "#57f287",
-  Yellow: "#fee75c",
-  Red: "#ed4245",
-  Fuchsia: "#eb459e",
-  Orange: "#e67e22",
-  Blue: "#3498db",
-  Purple: "#9b59b6",
-};
+interface TagFormState {
+  name: string;
+  type: "text" | "embed" | "both";
+  content: string;
+  embed: EmbedForm;
+  allowedRoles: string[];
+}
+
+function newTagForm(): TagFormState {
+  return {
+    name: "",
+    type: "text",
+    content: "",
+    embed: emptyEmbedForm(),
+    allowedRoles: [],
+  };
+}
+
+// A stable empty-form reference the preview can fall back to for text-only
+// tags — prevents unnecessary re-renders.
+const blankEmbedForm = emptyEmbedForm();
 
 // ── Editor State ──
 const editorOpen = ref(false);
 const editingTag = ref<any>(null);
 const saving = ref(false);
-
-const form = ref({
-  name: "",
-  type: "text" as "text" | "embed" | "both",
-  content: "",
-  embedTitle: "",
-  embedDescription: "",
-  embedColor: "#5865f2",
-  embedImage: "",
-  embedThumbnail: "",
-  embedFooter: "",
-  allowedRoles: [] as string[],
-});
+const form = ref<TagFormState>(newTagForm());
 
 const isFormValid = computed(() => {
   if (!form.value.name.trim()) return false;
-  if (form.value.type === "text" || form.value.type === "both") {
-    if (!form.value.content.trim() && form.value.type === "text") return false;
-  }
-  if (form.value.type === "embed" || form.value.type === "both") {
-    if (
-      !form.value.embedTitle.trim() &&
-      !form.value.embedDescription.trim() &&
-      form.value.type === "embed"
-    )
-      return false;
-  }
-  // At least one content type must have data
+
   const hasText = form.value.content.trim().length > 0;
-  const hasEmbed =
-    form.value.embedTitle.trim().length > 0 ||
-    form.value.embedDescription.trim().length > 0;
+  const hasEmbed = hasEmbedContent(form.value.embed);
+
+  if (form.value.type === "text") return hasText;
+  if (form.value.type === "embed") return hasEmbed;
   return hasText || hasEmbed;
 });
 
@@ -765,24 +549,15 @@ const isFormValid = computed(() => {
 const previewOpen = ref(false);
 const previewingTag = ref<any>(null);
 
-const previewEmbedData = computed(() => {
-  if (!previewingTag.value?.embed_data) return null;
-  try {
-    return JSON.parse(previewingTag.value.embed_data);
-  } catch {
-    return null;
-  }
-});
-
-const previewEmbedColor = computed(() => {
-  if (!previewEmbedData.value?.color) return "#5865f2";
-  return `#${previewEmbedData.value.color.toString(16).padStart(6, "0")}`;
+const previewForm = computed<EmbedForm>(() => {
+  if (!previewingTag.value?.embed_data) return blankEmbedForm;
+  return fromEmbedData(previewingTag.value.embed_data);
 });
 
 // ── Send State ──
 const sendOpen = ref(false);
 const sendingTag = ref<any>(null);
-const sendChannelId = ref("");
+const sendChannelId = ref<string | { value: string } | "">("");
 const sendingMessage = ref(false);
 
 // ── Delete State ──
@@ -807,10 +582,18 @@ function getTagPreview(tag: any): string {
 function getTagRoles(tag: any): string[] {
   if (!tag.allowed_roles) return [];
   try {
-    return JSON.parse(tag.allowed_roles);
+    const parsed = JSON.parse(tag.allowed_roles);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
+}
+
+function resolveChannelId(): string {
+  const v = sendChannelId.value;
+  if (!v) return "";
+  if (typeof v === "object" && v !== null && "value" in v) return v.value;
+  return String(v);
 }
 
 // ── Actions ──
@@ -820,7 +603,9 @@ async function fetchTags() {
     const response = await $fetch<any>("/api/tags/list", {
       params: { guild_id: guildId },
     });
-    tags.value = response.documents || [];
+    const all = response.documents || [];
+    // Exclude presets — they're managed on the embeds page.
+    tags.value = all.filter((t: any) => t.is_template !== true);
   } catch (error) {
     console.error("Error fetching tags:", error);
     toast.add({
@@ -838,40 +623,15 @@ function openEditor(tag: any | null) {
   if (tag) {
     const hasEmbed = !!tag.embed_data;
     const hasContent = !!tag.content;
-    let embedData: any = {};
-    if (hasEmbed) {
-      try {
-        embedData = JSON.parse(tag.embed_data);
-      } catch {}
-    }
-
     form.value = {
       name: tag.name,
       type: hasEmbed && hasContent ? "both" : hasEmbed ? "embed" : "text",
       content: tag.content || "",
-      embedTitle: embedData.title || "",
-      embedDescription: embedData.description || "",
-      embedColor: embedData.color
-        ? `#${embedData.color.toString(16).padStart(6, "0")}`
-        : "#5865f2",
-      embedImage: embedData.image?.url || "",
-      embedThumbnail: embedData.thumbnail?.url || "",
-      embedFooter: embedData.footer?.text || "",
+      embed: fromEmbedData(tag.embed_data),
       allowedRoles: getTagRoles(tag),
     };
   } else {
-    form.value = {
-      name: "",
-      type: "text",
-      content: "",
-      embedTitle: "",
-      embedDescription: "",
-      embedColor: "#5865f2",
-      embedImage: "",
-      embedThumbnail: "",
-      embedFooter: "",
-      allowedRoles: [],
-    };
+    form.value = newTagForm();
   }
   editorOpen.value = true;
 }
@@ -879,30 +639,18 @@ function openEditor(tag: any | null) {
 async function saveTag() {
   saving.value = true;
   try {
-    // Build embed data if applicable
-    let embedData: string | undefined;
-    if (form.value.type === "embed" || form.value.type === "both") {
-      const embed: Record<string, any> = {};
-      if (form.value.embedTitle) embed.title = form.value.embedTitle;
-      if (form.value.embedDescription)
-        embed.description = form.value.embedDescription;
-      const colorInt = parseInt(form.value.embedColor.replace("#", ""), 16);
-      embed.color = isNaN(colorInt) ? 0x5865f2 : colorInt;
-      if (form.value.embedImage) embed.image = { url: form.value.embedImage };
-      if (form.value.embedThumbnail)
-        embed.thumbnail = { url: form.value.embedThumbnail };
-      if (form.value.embedFooter)
-        embed.footer = { text: form.value.embedFooter };
-      embedData = JSON.stringify(embed);
-    }
+    const includeEmbed =
+      form.value.type === "embed" || form.value.type === "both";
+    const includeText =
+      form.value.type === "text" || form.value.type === "both";
 
-    const content =
-      form.value.type === "text" || form.value.type === "both"
-        ? form.value.content
-        : undefined;
+    const embedData = includeEmbed
+      ? JSON.stringify(toEmbedPayload(form.value.embed))
+      : undefined;
+
+    const content = includeText ? form.value.content : undefined;
 
     if (editingTag.value) {
-      // Update
       await $fetch("/api/tags/update", {
         method: "PUT",
         body: {
@@ -919,7 +667,6 @@ async function saveTag() {
         color: "success",
       });
     } else {
-      // Create
       await $fetch("/api/tags/create", {
         method: "POST",
         body: {
@@ -965,7 +712,10 @@ function openSendDialog(tag: any) {
 }
 
 async function sendTagToChannel() {
-  if (!sendingTag.value || !sendChannelId.value) return;
+  if (!sendingTag.value) return;
+  const channelId = resolveChannelId();
+  if (!channelId) return;
+
   sendingMessage.value = true;
   try {
     const tag = sendingTag.value;
@@ -977,26 +727,23 @@ async function sendTagToChannel() {
       } catch {}
     }
 
-    // If it's an embed tag, use the send-embed endpoint
     if (embed) {
       await $fetch("/api/discord/send-embed", {
         method: "POST",
         body: {
           guild_id: guildId,
-          channel_id: sendChannelId.value,
+          channel_id: channelId,
           embed,
           content: tag.content || undefined,
         },
       });
     } else {
-      // Text-only — we'll need to use the Discord API for plain text
-      // Reuse the send-embed endpoint but with a minimal embed or
-      // create a simple message via the embed API with description only
+      // Text-only: wrap in a minimal embed (until we add a plain-message endpoint).
       await $fetch("/api/discord/send-embed", {
         method: "POST",
         body: {
           guild_id: guildId,
-          channel_id: sendChannelId.value,
+          channel_id: channelId,
           embed: {
             description: tag.content,
             color: 0x5865f2,
@@ -1006,8 +753,7 @@ async function sendTagToChannel() {
     }
 
     const channelName =
-      channels.value.find((c: any) => c.id === sendChannelId.value)?.name ||
-      "channel";
+      channels.value.find((c: any) => c.id === channelId)?.name || "channel";
     toast.add({
       title: "Tag Sent!",
       description: `Successfully sent "${tag.name}" to #${channelName}.`,
