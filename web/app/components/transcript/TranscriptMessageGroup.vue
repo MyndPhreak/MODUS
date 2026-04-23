@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TranscriptEmbed from "./TranscriptEmbed.vue";
 import TranscriptAttachment from "./TranscriptAttachment.vue";
+import TranscriptContent from "./TranscriptContent.vue";
 
 interface Msg {
   id: number;
@@ -14,9 +15,16 @@ interface Msg {
   created_at: string;
 }
 
+interface MentionLookup {
+  users?: Record<string, string>;
+  roles?: Record<string, string>;
+  channels?: Record<string, string>;
+}
+
 const props = defineProps<{
   messages: Msg[];
   signedUrls: Record<string, string>;
+  mentions?: MentionLookup | null;
 }>();
 
 const head = computed(() => props.messages[0]!);
@@ -44,13 +52,17 @@ const headTimestamp = computed(() =>
         <span class="text-xs text-gray-400">{{ headTimestamp }}</span>
       </div>
       <div v-for="m in messages" :key="m.id" class="mt-1">
-        <div v-if="m.content" class="whitespace-pre-wrap text-gray-100">
-          {{ m.content }}
-        </div>
+        <TranscriptContent
+          v-if="m.content"
+          class="text-gray-100"
+          :content="m.content"
+          :mentions="mentions"
+        />
         <TranscriptEmbed
           v-for="(e, i) in (m.embeds as any[])"
           :key="`e-${m.id}-${i}`"
           :embed="e"
+          :mentions="mentions"
         />
         <TranscriptAttachment
           v-for="(a, i) in (m.attachments as any[])"

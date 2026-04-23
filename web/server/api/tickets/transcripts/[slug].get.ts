@@ -109,6 +109,7 @@ export default defineEventHandler(async (event) => {
       expires_at: transcript.expiresAt?.toISOString() ?? null,
       message_count: transcript.messageCount,
       has_skipped_attachments: transcript.hasSkippedAttachments,
+      mentions: transcript.mentions,
     },
     messages: messages.map((m) => ({
       id: m.id,

@@ -67,13 +67,17 @@ useHead(() => ({
   <div class="min-h-screen bg-gray-950 text-gray-100">
     <TranscriptUnavailable v-if="unavailable" />
     <template v-else-if="data">
-      <TranscriptHeader :transcript="data.transcript" />
+      <TranscriptHeader
+        :transcript="data.transcript"
+        :mentions="data.transcript.mentions"
+      />
       <div class="divide-y divide-white/5">
         <TranscriptMessageGroup
           v-for="(group, i) in groups"
           :key="i"
           :messages="group"
           :signed-urls="data.signed_urls"
+          :mentions="data.transcript.mentions"
         />
       </div>
       <div class="p-6 text-center text-xs text-gray-500">

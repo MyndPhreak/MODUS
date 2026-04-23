@@ -11,7 +11,21 @@ interface Transcript {
   message_count: number;
 }
 
-const props = defineProps<{ transcript: Transcript }>();
+interface MentionLookup {
+  users?: Record<string, string>;
+  roles?: Record<string, string>;
+  channels?: Record<string, string>;
+}
+
+const props = defineProps<{
+  transcript: Transcript;
+  mentions?: MentionLookup | null;
+}>();
+
+function userName(id: string | null | undefined): string {
+  if (!id) return "—";
+  return props.mentions?.users?.[id] ?? id;
+}
 
 const priorityColors: Record<string, string> = {
   low: "bg-green-500/20 text-green-300",
@@ -38,11 +52,11 @@ const priorityColors: Record<string, string> = {
     <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-300 sm:grid-cols-4">
       <div>
         <div class="text-gray-500">Opened by</div>
-        <div class="font-mono">{{ transcript.opener_id }}</div>
+        <div :title="transcript.opener_id">{{ userName(transcript.opener_id) }}</div>
       </div>
       <div>
         <div class="text-gray-500">Closed by</div>
-        <div class="font-mono">{{ transcript.closed_by_id }}</div>
+        <div :title="transcript.closed_by_id">{{ userName(transcript.closed_by_id) }}</div>
       </div>
       <div>
         <div class="text-gray-500">Opened</div>

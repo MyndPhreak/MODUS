@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import TranscriptContent from "./TranscriptContent.vue";
+
 interface SnapshotEmbed {
   title?: string;
   description?: string;
@@ -9,7 +11,16 @@ interface SnapshotEmbed {
   thumbnail_url?: string;
 }
 
-const props = defineProps<{ embed: SnapshotEmbed }>();
+interface MentionLookup {
+  users?: Record<string, string>;
+  roles?: Record<string, string>;
+  channels?: Record<string, string>;
+}
+
+const props = defineProps<{
+  embed: SnapshotEmbed;
+  mentions?: MentionLookup | null;
+}>();
 
 const borderColor = computed(() =>
   props.embed.color != null
@@ -23,14 +34,23 @@ const borderColor = computed(() =>
     class="my-2 max-w-xl rounded-md bg-white/5 p-3 text-sm"
     :style="{ borderLeft: `4px solid ${borderColor}` }"
   >
-    <div v-if="embed.title" class="font-semibold">{{ embed.title }}</div>
-    <div v-if="embed.description" class="mt-1 whitespace-pre-wrap text-gray-200">
-      {{ embed.description }}
+    <div v-if="embed.title" class="font-semibold">
+      <TranscriptContent :content="embed.title" :mentions="mentions" />
     </div>
+    <TranscriptContent
+      v-if="embed.description"
+      class="mt-1 text-gray-200"
+      :content="embed.description"
+      :mentions="mentions"
+    />
     <div v-if="embed.fields?.length" class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
       <div v-for="(f, i) in embed.fields" :key="i" :class="{ 'sm:col-span-2': !f.inline }">
         <div class="text-xs font-semibold text-gray-300">{{ f.name }}</div>
-        <div class="whitespace-pre-wrap text-gray-200">{{ f.value }}</div>
+        <TranscriptContent
+          class="text-gray-200"
+          :content="f.value"
+          :mentions="mentions"
+        />
       </div>
     </div>
     <img
