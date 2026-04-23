@@ -68,8 +68,8 @@ export const KOKORO_VOICES: Record<string, KokoroVoice> = {
     displayName: "Kokoro · Emma (British F)",
   },
   KOKORO_BF_ISABELLA: {
-    id: "kokoro-bf_isabella",
-    apiVoice: "bf_isabella",
+    id: "kokoro-bf_v0isabella",
+    apiVoice: "bf_v0isabella",
     displayName: "Kokoro · Isabella (British F)",
   },
   KOKORO_BM_FABLE: {
