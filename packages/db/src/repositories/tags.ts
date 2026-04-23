@@ -15,6 +15,7 @@ export type TagDoc = Tag & {
   embed_data: string | null;
   allowed_roles: string;
   created_by: string | null;
+  is_template: boolean;
 };
 
 function toDoc(row: Tag): TagDoc {
@@ -25,6 +26,7 @@ function toDoc(row: Tag): TagDoc {
     embed_data: row.embedData == null ? null : JSON.stringify(row.embedData),
     allowed_roles: JSON.stringify(row.allowedRoles ?? []),
     created_by: row.createdBy,
+    is_template: row.isTemplate,
   };
 }
 
@@ -81,6 +83,8 @@ export class TagRepository {
     embed_data?: string;
     allowed_roles?: string;
     created_by?: string;
+    is_template?: boolean;
+    description?: string;
   }): Promise<string> {
     const [row] = await this.db
       .insert(tags)
@@ -91,6 +95,8 @@ export class TagRepository {
         embedData: parseJson(data.embed_data),
         allowedRoles: parseStringArray(data.allowed_roles),
         createdBy: data.created_by ?? null,
+        isTemplate: data.is_template ?? false,
+        description: data.description ?? null,
       })
       .returning({ id: tags.id });
     return row.id;
@@ -104,6 +110,9 @@ export class TagRepository {
       patch.embedData = parseJson(data.embed_data);
     if (data.allowed_roles !== undefined)
       patch.allowedRoles = parseStringArray(data.allowed_roles);
+    if (data.is_template !== undefined) patch.isTemplate = !!data.is_template;
+    if (data.description !== undefined)
+      patch.description = data.description === "" ? null : data.description;
     await this.db.update(tags).set(patch).where(eq(tags.id, tagId));
   }
 
