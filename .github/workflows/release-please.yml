@@ -25,6 +25,10 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    env:
+      # release-please-action@v4 still ships on Node 20, deprecated for removal
+      # in Sept 2026. Opt into Node 24 now to silence the runner warning.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
