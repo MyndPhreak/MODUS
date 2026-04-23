@@ -25,3 +25,5 @@ logs
 
 # Cached font files (downloaded on-demand by render API)
 data/fonts/*.ttf
+
+docs/*.md
