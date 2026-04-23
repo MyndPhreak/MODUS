@@ -146,8 +146,9 @@ export class ModuleManager {
             );
           } else if (module.data) {
             // Legacy single-command module
-            this.modules.set(module.name.toLowerCase(), module);
-            this.logger.info(`Loaded module: ${module.name}`);
+            const cmdName = (module.data.name || module.name).toLowerCase();
+            this.modules.set(cmdName, module);
+            this.logger.info(`Loaded module: ${module.name} (command: /${cmdName})`);
           }
 
           // Register module in Appwrite if not exists
