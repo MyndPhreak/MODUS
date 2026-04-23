@@ -167,6 +167,71 @@
               </div>
           </UFormField>
 
+            <!-- Custom announcement text (visible when TTS mode is selected) -->
+            <div
+              v-if="
+                recordingSettings.announceMode === 'tts' ||
+                recordingSettings.announceMode === 'textTts'
+              "
+              class="space-y-3 pl-1 border-l-2 border-orange-500/30 ml-2"
+            >
+              <div class="pl-3">
+                <label class="block text-sm font-medium mb-2 text-orange-300">
+                  Custom announcement text
+                </label>
+                <UTextarea
+                  v-model="recordingSettings.announceText"
+                  :rows="2"
+                  :maxlength="500"
+                  placeholder="Recording has started in {channel}. All audio is being captured."
+                  class="w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">
+                  Leave blank to use the default. Use
+                  <code class="text-orange-300">{channel}</code>
+                  as a placeholder for the voice channel name.
+                </p>
+              </div>
+
+              <div
+                v-if="recordingSettings.announceMode === 'tts'"
+                class="pl-3"
+              >
+                <label class="block text-sm font-medium mb-2 text-orange-300">
+                  Voice
+                </label>
+                <div class="flex items-center gap-2">
+                  <USelectMenu
+                    v-model="announceVoiceModel"
+                    :items="voiceOptions"
+                    value-key="value"
+                    :search-input="false"
+                    placeholder="Select a Kokoro voice..."
+                    class="flex-1"
+                  />
+                  <UButton
+                    color="neutral"
+                    variant="soft"
+                    :icon="
+                      previewingVoice
+                        ? 'i-heroicons-stop'
+                        : 'i-heroicons-play'
+                    "
+                    :loading="loadingVoicePreview"
+                    :disabled="loadingVoicePreview"
+                    @click="toggleVoicePreview"
+                  >
+                    {{ previewingVoice ? "Stop" : "Preview" }}
+                  </UButton>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                  Default falls back to the
+                  <code class="text-orange-300">KOKORO_VOICE</code>
+                  environment setting on the bot.
+                </p>
+              </div>
+            </div>
+
             <!-- Sound Clip Upload (only visible when soundClip mode selected) -->
             <div
               v-if="recordingSettings.announceMode === 'soundClip'"
@@ -650,11 +715,78 @@ const newUserId = ref("");
 const recordingSettings = ref({
   maxDuration: 14400,
   bitrate: 64,
-  announceMode: "tts" as "none" | "tts" | "soundClip",
+  announceMode: "tts" as "none" | "tts" | "textTts" | "soundClip",
+  announceText: "",
+  announceVoice: "",
   announceSoundFileId: "",
   allowedRoleIds: [] as string[],
   allowedUserIds: [] as string[],
 });
+
+const VOICE_DEFAULT_SENTINEL = "__default__";
+const voiceOptions = [
+  { label: "Default (server environment)", value: VOICE_DEFAULT_SENTINEL },
+  ...KOKORO_VOICE_LIST.map((v) => ({ label: v.displayName, value: v.id })),
+];
+const announceVoiceModel = computed({
+  get: () =>
+    recordingSettings.value.announceVoice || VOICE_DEFAULT_SENTINEL,
+  set: (v: string) => {
+    recordingSettings.value.announceVoice =
+      v === VOICE_DEFAULT_SENTINEL ? "" : v;
+  },
+});
+
+const toast = useToast();
+const loadingVoicePreview = ref(false);
+const previewingVoice = ref(false);
+let previewAudio: HTMLAudioElement | null = null;
+
+function stopVoicePreview() {
+  if (previewAudio) {
+    previewAudio.pause();
+    previewAudio.src = "";
+    previewAudio = null;
+  }
+  previewingVoice.value = false;
+}
+
+async function toggleVoicePreview() {
+  if (previewingVoice.value || loadingVoicePreview.value) {
+    stopVoicePreview();
+    return;
+  }
+  loadingVoicePreview.value = true;
+  try {
+    const blob = await $fetch<Blob>("/api/recordings/preview-voice", {
+      method: "POST",
+      body: {
+        voiceId: recordingSettings.value.announceVoice,
+        text: recordingSettings.value.announceText,
+      },
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(blob);
+    previewAudio = new Audio(url);
+    previewAudio.addEventListener("ended", () => {
+      previewingVoice.value = false;
+      URL.revokeObjectURL(url);
+    });
+    previewAudio.addEventListener("error", () => {
+      previewingVoice.value = false;
+      URL.revokeObjectURL(url);
+    });
+    previewingVoice.value = true;
+    await previewAudio.play();
+  } catch (err: any) {
+    const message =
+      err?.data?.statusMessage || err?.message || "Preview failed.";
+    toast.add({ title: "Voice preview failed", description: message, color: "error" });
+    previewingVoice.value = false;
+  } finally {
+    loadingVoicePreview.value = false;
+  }
+}
 
 const announceModeOptions = [
   {
@@ -664,8 +796,15 @@ const announceModeOptions = [
   },
   {
     value: "tts" as const,
-    label: "Text-to-Speech",
-    description: "Send a TTS message announcing the recording",
+    label: "Voice TTS",
+    description:
+      "Bot speaks the announcement in the voice channel via Kokoro",
+  },
+  {
+    value: "textTts" as const,
+    label: "Text TTS (legacy)",
+    description:
+      "Send a text message with Discord's TTS flag (client reads it aloud)",
   },
   {
     value: "soundClip" as const,
@@ -718,7 +857,7 @@ type Recording = {
   ended_at?: string;
   duration?: number;
   bitrate?: number;
-  participants?: string;
+  participants?: string[] | string;
   mixed_file_id?: string;
   recorded_by: string;
   guild_id: string;
@@ -792,12 +931,17 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getParticipantCount(json: string): number {
-  try {
-    return JSON.parse(json).length;
-  } catch {
-    return 0;
+function getParticipantCount(value: unknown): number {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === "string" && value.length > 0) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      return 0;
+    }
   }
+  return 0;
 }
 
 function getRoleName(roleId: string): string {
@@ -1126,6 +1270,8 @@ onMounted(async () => {
       maxDuration: saved.maxDuration ?? 14400,
       bitrate: saved.bitrate ?? 64,
       announceMode,
+      announceText: saved.announceText ?? "",
+      announceVoice: saved.announceVoice ?? "",
       announceSoundFileId: saved.announceSoundFileId ?? "",
       allowedRoleIds: saved.allowedRoleIds ?? [],
       allowedUserIds: saved.allowedUserIds ?? [],
