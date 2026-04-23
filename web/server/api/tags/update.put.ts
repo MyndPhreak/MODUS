@@ -46,6 +46,14 @@ export default defineEventHandler(async (event) => {
       ? JSON.stringify(body.allowed_roles)
       : String(body.allowed_roles || "").slice(0, 2048);
   }
+  if (body.is_template !== undefined) {
+    normalized.is_template = Boolean(body.is_template);
+  }
+  if (body.description !== undefined) {
+    normalized.description = body.description
+      ? String(body.description).slice(0, 500)
+      : "";
+  }
 
   const repos = getRepos();
   if (!repos) {

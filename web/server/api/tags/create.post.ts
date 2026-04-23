@@ -19,8 +19,16 @@ function slugify(name: string): string {
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
 
-  const { guild_id, name, content, embed_data, allowed_roles, created_by } =
-    body || {};
+  const {
+    guild_id,
+    name,
+    content,
+    embed_data,
+    allowed_roles,
+    created_by,
+    is_template,
+    description,
+  } = body || {};
 
   if (!guild_id || !name) {
     throw createError({
@@ -80,6 +88,13 @@ export default defineEventHandler(async (event) => {
       embed_data: embedDataSerialized,
       allowed_roles: allowedRolesSerialized,
       created_by: created_by ? String(created_by).slice(0, 64) : undefined,
+      is_template: Boolean(is_template),
+      description:
+        description === undefined
+          ? undefined
+          : description
+            ? String(description).slice(0, 500)
+            : "",
     });
     const tag = await repos.tags.getByName(guild_id, slug);
     return { success: true, tag: tag ?? { $id: id } };
