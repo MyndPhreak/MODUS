@@ -129,4 +129,4 @@ Modules are self-contained — drop a file in `bot/modules/` and it gets picked 
 
 ## License
 
-ISC
+MIT — see [LICENSE](LICENSE).
