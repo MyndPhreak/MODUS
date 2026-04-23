@@ -506,6 +506,10 @@ export const ticketTranscripts = pgTable(
     hasSkippedAttachments: boolean("has_skipped_attachments")
       .notNull()
       .default(false),
+    // Display-name lookup captured at snapshot time so transcripts remain
+    // legible after members leave, roles are deleted, etc. Shape:
+    //   { users: {id: name}, roles: {id: name}, channels: {id: name} }
+    mentions: jsonb("mentions").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

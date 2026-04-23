@@ -1,0 +1,1 @@
+ALTER TABLE "ticket_transcripts" ADD COLUMN "mentions" jsonb DEFAULT '{}'::jsonb NOT NULL;
