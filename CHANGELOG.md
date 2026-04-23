@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.13.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.12.0...modus-v1.13.0) (2026-04-23)
+
+
+### ✨ Features
+
+* **bot:** resolve user/role/channel mentions when snapshotting tickets ([4c37a98](https://github.com/MyndPhreak/MODUS/commit/4c37a984a0740809bcba399d2920aedf9946d65a))
+* **db:** add mentions lookup column to ticket_transcripts ([50cd7f1](https://github.com/MyndPhreak/MODUS/commit/50cd7f11b994be2e0d2f55c59aad3642acb40de8))
+* **web:** render resolved names in ticket transcripts ([7ae705c](https://github.com/MyndPhreak/MODUS/commit/7ae705cc59a64d6c37a7c93d98565802486d8f82))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** avoid blocking on Postgres for skipDefer enablement check ([d78e4c8](https://github.com/MyndPhreak/MODUS/commit/d78e4c8172a80492d32e38d9f5a79f091f4c09f9))
+* **bot:** fix routing for module commands ([71c9b50](https://github.com/MyndPhreak/MODUS/commit/71c9b50ec68921b9af0e22c4529eceed2a14086e))
+* **bot:** resolve modal submission error for /poll create command ([c6ca8ee](https://github.com/MyndPhreak/MODUS/commit/c6ca8eeb6a84987b2390fccbe9e94f0c9c9de231))
+
+
+### 📖 Documentation
+
+* replace Appwrite references with Postgres/R2/Redis stack ([6cf2f49](https://github.com/MyndPhreak/MODUS/commit/6cf2f4926f4adf53811ff0cdf45ac12b2d31f06a))
+
 ## [1.12.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.11.0...modus-v1.12.0) (2026-04-23)
 
 
