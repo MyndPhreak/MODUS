@@ -8,23 +8,22 @@
 #   docker compose down              # stop & remove containers
 #
 # Usage (pull from GHCR — for Unraid docker-compose plugin):
-#   export GHCR_OWNER=mynd           # your GitHub username
-#   docker compose --profile ghcr up -d
+#   export GHCR_OWNER=myndphreak      # your GitHub username
+#   docker compose pull
+#   docker compose up -d
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ── Redis (optional) ─────────────────────────────────────────────────────
-  # Enabled via the `redis` profile. Used by the bot for:
+  # ── Redis (optional but recommended) ─────────────────────────────────────
+  # Used by the bot for:
   #   - cross-shard cache invalidation (CacheService pub/sub)
   #   - leader election for background workers (RecordingRetentionWorker)
-  # Set REDIS_URL=redis://redis:6379 in bot/.env to use it.
-  #   docker compose --profile redis up -d redis
-  #   COMPOSE_PROFILES=redis,postgres docker compose up -d
+  #   - dashboard realtime SSE (log tail + config change events)
+  # Set REDIS_URL=redis://redis:6379 in bot/.env and web/.env to use it.
   redis:
     image: redis:7-alpine
     container_name: modus-redis
     restart: unless-stopped
-    profiles: ["redis"]
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - modus-redisdata:/data
@@ -38,17 +37,12 @@ services:
     networks:
       - modus
 
-  # ── Postgres (optional) ──────────────────────────────────────────────────
-  # Enabled only when USE_POSTGRES_RECORDINGS=true (the default compose stack
-  # still uses Appwrite). Bring it up on its own:
-  #   docker compose --profile postgres up -d postgres
-  # or together with the bot+web stack by setting the profile env var:
-  #   COMPOSE_PROFILES=postgres docker compose up -d
+  # ── Postgres (required) ──────────────────────────────────────────────────
+  # The core database for MODUS (settings, recordings metadata, logs, etc.).
   postgres:
     image: postgres:16-alpine
     container_name: modus-postgres
     restart: unless-stopped
-    profiles: ["postgres"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-modus}
       POSTGRES_USER: ${POSTGRES_USER:-modus}
