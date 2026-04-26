@@ -9,6 +9,7 @@
  */
 
 import http from "http";
+import https from "https";
 import crypto from "crypto";
 import { URL } from "url";
 import { Client, TextChannel, EmbedBuilder } from "discord.js";
@@ -39,6 +40,17 @@ function sendJson(res: http.ServerResponse, statusCode: number, data: any) {
   res.end(JSON.stringify(data));
 }
 
+function resolveNestedPath(data: Record<string, any>, path: string): any {
+  if (path in data) return data[path];
+  const keys = path.split(".");
+  let value: any = data;
+  for (const key of keys) {
+    if (value == null || typeof value !== "object") return undefined;
+    value = value[key];
+  }
+  return value;
+}
+
 /**
  * Resolve `{dot.path}` placeholders against a nested object.
  * E.g. `{pull_request.title}` in body `{ pull_request: { title: "Fix" } }` → "Fix"
@@ -48,17 +60,44 @@ function resolvePlaceholders(
   data: Record<string, any>,
 ): string {
   return template.replace(/\{([^}]+)\}/g, (match, path) => {
-    // Prefer flat keys (e.g. "repo.name") over nested traversal so that
-    // flattenGitHub aliases always win over raw body properties.
-    if (path in data) return data[path] != null ? String(data[path]) : match;
-    const keys = path.split(".");
-    let value: any = data;
-    for (const key of keys) {
-      if (value == null || typeof value !== "object") return match;
-      value = value[key];
-    }
-    return value != null ? String(value) : match;
+    const val = resolveNestedPath(data, path);
+    return val != null ? String(val) : match;
   });
+}
+
+/**
+ * Evaluate JSON filters against flattened payload data.
+ * Supports exact matches and wildcard string matches (e.g. `*error*`).
+ */
+function evaluateFilters(filtersJson: string | null | undefined, data: any): boolean {
+  if (!filtersJson) return true;
+  try {
+    const filters = JSON.parse(filtersJson);
+    for (const [key, expected] of Object.entries(filters)) {
+      const actual = resolveNestedPath(data, key);
+      
+      let match = false;
+      if (actual === expected) {
+        match = true;
+      } else if (typeof actual === "string" && typeof expected === "string") {
+        const expectedLower = expected.toLowerCase();
+        const actualLower = actual.toLowerCase();
+        if (expectedLower.startsWith("*") && expectedLower.endsWith("*")) {
+          match = actualLower.includes(expectedLower.slice(1, -1));
+        } else if (expectedLower.startsWith("*")) {
+          match = actualLower.endsWith(expectedLower.slice(1));
+        } else if (expectedLower.endsWith("*")) {
+          match = actualLower.startsWith(expectedLower.slice(0, -1));
+        }
+      }
+      
+      if (!match) return false;
+    }
+    return true;
+  } catch {
+    // If filter JSON is invalid, default to passing (or fail, but passing avoids lockouts)
+    return true;
+  }
 }
 
 // ── Provider Handlers ──────────────────────────────────────────────
@@ -165,19 +204,8 @@ function handleGitHub(
   const ghEvent = headers["x-github-event"] as string | undefined;
 
   // Apply filters
-  if (trigger.filters) {
-    try {
-      const filters = JSON.parse(trigger.filters);
-      for (const [key, expected] of Object.entries(filters)) {
-        // Support dot-notation keys in filters
-        const actual = flat[key] ?? body[key];
-        if (actual !== expected) {
-          return { skip: true, embed: null };
-        }
-      }
-    } catch {
-      // Invalid filter JSON — proceed without filtering
-    }
+  if (!evaluateFilters(trigger.filters, flat)) {
+    return { skip: true, embed: null };
   }
 
   // Resolve embed template: use stored template if present, otherwise pick
@@ -240,16 +268,8 @@ function handleTwitch(
   const flat = flattenTwitch(body);
 
   // Apply filters
-  if (trigger.filters) {
-    try {
-      const filters = JSON.parse(trigger.filters);
-      for (const [key, expected] of Object.entries(filters)) {
-        const actual = flat[key] ?? body[key];
-        if (actual !== expected) {
-          return { skip: true, embed: null };
-        }
-      }
-    } catch {}
+  if (!evaluateFilters(trigger.filters, flat)) {
+    return { skip: true, embed: null };
   }
 
   let title = "📺 Twitch — {stream.user}";
@@ -281,6 +301,11 @@ function handleGenericWebhook(
   body: any,
   _headers: http.IncomingHttpHeaders,
 ): ProviderResult {
+  // Apply filters
+  if (!evaluateFilters(trigger.filters, body)) {
+    return { skip: true, embed: null };
+  }
+
   let title = "🔔 Webhook Triggered";
   let description =
     "```json\n" + JSON.stringify(body, null, 2).slice(0, 3900) + "\n```";
@@ -432,7 +457,7 @@ export function registerWebhookRoutes(
                     if (alert.message) msgBody.content = alert.message;
                     const payload = JSON.stringify(msgBody);
 
-                    const req2 = require("https").request(
+                    const req2 = https.request(
                       {
                         hostname: "discord.com",
                         path: `/api/v10/channels/${alert.channelId}/messages`,

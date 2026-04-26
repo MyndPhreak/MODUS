@@ -221,6 +221,14 @@
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <UButton
+                color="primary"
+                variant="ghost"
+                size="xs"
+                icon="i-heroicons-pencil-square"
+                title="Edit Trigger"
+                @click="openBuilder(trigger)"
+              />
+              <UButton
                 color="neutral"
                 variant="ghost"
                 size="xs"
@@ -310,9 +318,18 @@
       </div>
     </div>
   </div>
+
+  <TriggerBuilderModal
+    v-model:open="isBuilderOpen"
+    :trigger="activeTriggerForBuild"
+    @save="onSaveBuilder"
+  />
 </template>
 
 <script setup lang="ts">
+import TriggerBuilderModal from "~/components/dashboard/TriggerBuilderModal.vue";
+import type { TriggerDocument } from "~/composables/useTriggers";
+
 const route = useRoute();
 const guildId = route.params.guild_id as string;
 const { isModuleEnabled } = useServerSettings(guildId);
@@ -344,6 +361,7 @@ const {
   createTrigger,
   deleteTrigger,
   toggleTrigger: toggleTriggerFn,
+  updateTrigger,
   getWebhookUrl,
 } = useTriggers(guildId);
 
@@ -438,6 +456,25 @@ const providerBadgeClass = (p: string) => {
       return "bg-purple-500/10 border border-purple-500/20";
     default:
       return "bg-blue-500/10 border border-blue-500/20";
+  }
+};
+
+// ── Builder Modal ──
+const isBuilderOpen = ref(false);
+const activeTriggerForBuild = ref<TriggerDocument | null>(null);
+
+const openBuilder = (trigger: TriggerDocument) => {
+  activeTriggerForBuild.value = trigger;
+  isBuilderOpen.value = true;
+};
+
+const onSaveBuilder = async (data: { filters: string | null; embed_template: string | null }) => {
+  if (!activeTriggerForBuild.value) return;
+  try {
+    await updateTrigger(activeTriggerForBuild.value.$id, data);
+    toast.add({ title: "Trigger saved", color: "success" });
+  } catch {
+    toast.add({ title: "Failed to save trigger", color: "error" });
   }
 };
 </script>
