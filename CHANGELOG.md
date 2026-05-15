@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.14.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.13.0...modus-v1.14.0) (2026-05-15)
+
+
+### ✨ Features
+
+* add visual trigger builder with wildcard filter support ([a91776a](https://github.com/MyndPhreak/MODUS/commit/a91776aebde7b5015cd8b78570ee6d9dd1b0a17d))
+* **bot:** auto-register guilds on join and reconcile presence on boot ([ae4329f](https://github.com/MyndPhreak/MODUS/commit/ae4329f1cb5d4b684faa9b34150f0c4b9412cfaa))
+* **db:** add upsertByGuildId + markOffline on ServerRepository ([7070af8](https://github.com/MyndPhreak/MODUS/commit/7070af88a0c69817f6226faef4126d2478b20afd))
+
 ## [1.13.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.12.0...modus-v1.13.0) (2026-04-23)
 
 
