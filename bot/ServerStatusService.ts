@@ -18,43 +18,55 @@ export class ServerStatusService {
   }
 
   private async checkServers() {
-    const allServers = await this.databaseService.getServers();
-
-    // Filter servers that belong to this shard's guilds
-    const servers = allServers.filter((server) =>
-      this.client.guilds.cache.has(server.$id),
-    );
-
-    if (servers.length === 0) return;
+    const shardId = this.client.shard?.ids[0] ?? 0;
+    const cachedGuilds = Array.from(this.client.guilds.cache.values());
 
     console.log(
-      `[ServerStatusService] [Shard ${this.client.shard?.ids[0] ?? 0}] Checking ${servers.length} relevant servers (out of ${allServers.length} total)...`,
+      `[ServerStatusService] [Shard ${shardId}] Reconciling ${cachedGuilds.length} guild(s) in cache...`,
     );
 
-    for (const server of servers) {
+    // Upsert every guild this shard sees — backfills any rows that were
+    // never registered via the dashboard.
+    for (const guild of cachedGuilds) {
       try {
-        const guild = this.client.guilds.cache.get(server.$id);
-        const isOnline = !!guild;
-        const memberCount = guild?.memberCount ?? 0;
-        const icon = guild?.icon ?? null;
-        const name = guild?.name ?? server.name;
-
-        const shardId = this.client.shard?.ids[0] ?? 0;
-        await this.databaseService.updateServerStatus(
-          server.$id,
-          server.guild_id,
-          isOnline,
-          memberCount,
-          icon,
-          name,
+        await this.databaseService.upsertGuildPresence({
+          guildId: guild.id,
+          name: guild.name,
+          icon: guild.icon ?? null,
+          memberCount: guild.memberCount ?? 0,
+          status: true,
           shardId,
-        );
+          ownerId: guild.ownerId ?? null,
+        });
       } catch (error) {
         console.error(
-          `[ServerStatusService] Error checking server ${server.name}:`,
+          `[ServerStatusService] upsert failed for ${guild.name} (${guild.id}):`,
           error,
         );
       }
+    }
+
+    // Mark offline any rows previously owned by this shard whose guild
+    // is no longer in cache (bot was removed while the shard was down,
+    // so the guildDelete event never fired).
+    try {
+      const allServers = await this.databaseService.getServers();
+      const cachedIds = new Set(cachedGuilds.map((g) => g.id));
+      const stale = allServers.filter(
+        (s) =>
+          s.shard_id === shardId && s.status && !cachedIds.has(s.guild_id),
+      );
+      for (const server of stale) {
+        await this.databaseService.markGuildOffline(server.guild_id);
+        console.log(
+          `[ServerStatusService] Marked offline (no longer in shard ${shardId} cache): ${server.name} (${server.guild_id})`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[ServerStatusService] Stale-row sweep failed:",
+        error,
+      );
     }
   }
 }

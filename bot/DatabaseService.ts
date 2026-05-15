@@ -280,28 +280,31 @@ export class DatabaseService {
     }
   }
 
-  async updateServerStatus(
-    serverId: string,
-    guildId: string,
-    status: boolean,
-    memberCount: number,
-    icon: string | null,
-    name: string,
-    shardId: number,
-  ): Promise<void> {
+  async upsertGuildPresence(input: {
+    guildId: string;
+    name: string;
+    icon: string | null;
+    memberCount: number;
+    status: boolean;
+    shardId: number;
+    ownerId?: string | null;
+  }): Promise<void> {
     try {
-      await this.servers.updateStatus(
-        serverId,
-        guildId,
-        status,
-        memberCount,
-        icon,
-        name,
-        shardId,
-      );
+      await this.servers.upsertByGuildId(input);
     } catch (error) {
       console.error(
-        `[DatabaseService] updateServerStatus failed for ${serverId}:`,
+        `[DatabaseService] upsertGuildPresence failed for ${input.guildId}:`,
+        error,
+      );
+    }
+  }
+
+  async markGuildOffline(guildId: string): Promise<void> {
+    try {
+      await this.servers.markOffline(guildId);
+    } catch (error) {
+      console.error(
+        `[DatabaseService] markGuildOffline failed for ${guildId}:`,
         error,
       );
     }

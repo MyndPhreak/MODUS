@@ -356,6 +356,44 @@ client.on("interactionCreate", async (interaction) => {
   await moduleManager.handleInteraction(interaction);
 });
 
+// Track guild membership: insert/update on join, mark offline on leave.
+// `available === false` means an outage (guild not actually removed).
+client.on(Events.GuildCreate, async (guild) => {
+  if (guild.available === false) return;
+  try {
+    await databaseService.upsertGuildPresence({
+      guildId: guild.id,
+      name: guild.name,
+      icon: guild.icon ?? null,
+      memberCount: guild.memberCount ?? 0,
+      status: true,
+      shardId: client.shard?.ids[0] ?? 0,
+      ownerId: guild.ownerId ?? null,
+    });
+    logger.info(`Joined guild: ${guild.name} (${guild.id})`);
+  } catch (err) {
+    logger.error(
+      `Failed to register guild ${guild.id}`,
+      undefined,
+      err,
+    );
+  }
+});
+
+client.on(Events.GuildDelete, async (guild) => {
+  if (guild.available === false) return;
+  try {
+    await databaseService.markGuildOffline(guild.id);
+    logger.info(`Removed from guild: ${guild.name ?? "?"} (${guild.id})`);
+  } catch (err) {
+    logger.error(
+      `Failed to mark guild offline ${guild.id}`,
+      undefined,
+      err,
+    );
+  }
+});
+
 client.login(process.env.DISCORD_TOKEN);
 
 // ─── Graceful Shutdown (prevents "port in use" on nodemon restart) ────────
