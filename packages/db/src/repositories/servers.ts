@@ -1,8 +1,5 @@
 /**
  * ServerRepository — guild metadata + premium flag + admin/dashboard ACLs.
- *
- * `updateServerStatus` keys on the document id (caller passes it); the
- * premium helpers key on `guild_id` because the ID isn't always known.
  */
 import { count, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../client";
@@ -54,40 +51,53 @@ export class ServerRepository {
     return rows[0] ? toDoc(rows[0]) : null;
   }
 
-  async updateStatus(
-    serverId: string,
-    guildId: string,
-    status: boolean,
-    memberCount: number,
-    icon: string | null,
-    name: string,
-    shardId: number,
-  ): Promise<void> {
-    // Upsert by id so a fresh guild can be tracked without a prior row.
+  /**
+   * Upsert a server row keyed on `guild_id`. Used by guildCreate /
+   * periodic reconciliation to register guilds the bot is in but that
+   * were never explicitly added via the dashboard. Never overwrites
+   * owner/admin ACLs — those are dashboard-managed.
+   */
+  async upsertByGuildId(input: {
+    guildId: string;
+    name: string;
+    icon: string | null;
+    memberCount: number;
+    status: boolean;
+    shardId: number;
+    ownerId?: string | null;
+  }): Promise<void> {
     await this.db
       .insert(servers)
       .values({
-        id: serverId,
-        guildId,
-        name,
-        icon,
-        memberCount,
-        status,
-        shardId,
+        guildId: input.guildId,
+        name: input.name,
+        icon: input.icon,
+        memberCount: input.memberCount,
+        status: input.status,
+        shardId: input.shardId,
+        ownerId: input.ownerId ?? null,
         lastChecked: new Date(),
       })
       .onConflictDoUpdate({
-        target: servers.id,
+        target: servers.guildId,
         set: {
-          guildId,
-          status,
-          memberCount,
-          icon,
-          name,
-          shardId,
+          name: input.name,
+          icon: input.icon,
+          memberCount: input.memberCount,
+          status: input.status,
+          shardId: input.shardId,
           lastChecked: new Date(),
         },
       });
+  }
+
+  /** Mark a server offline (bot left or guild deleted). Row is kept so
+   *  guild_configs and history remain intact. */
+  async markOffline(guildId: string): Promise<void> {
+    await this.db
+      .update(servers)
+      .set({ status: false, shardId: null, lastChecked: new Date() })
+      .where(eq(servers.guildId, guildId));
   }
 
   async isPremium(guildId: string): Promise<boolean> {
