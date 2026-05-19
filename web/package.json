@@ -22,7 +22,7 @@
     "jszip": "^3.10.1",
     "konva": "^10.2.5",
     "lucide-vue-next": "latest",
-    "nuxt": "^4.4.2",
+    "nuxt": "^4.4.6",
     "nuxt-auth-utils": "^0.5.25",
     "openai": "^6.34.0",
     "pinia": "^3.0.4",
