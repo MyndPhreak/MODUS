@@ -13,8 +13,7 @@ import {
   getResolvedDiscordId,
   requireAuthedUserId,
 } from "../../utils/session";
-
-const ADMIN_PERMISSION = BigInt(0x8);
+import { hasAdministratorPermission } from "#shared/discord-permissions";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -48,8 +47,7 @@ export default defineEventHandler(async (event) => {
     const targetGuild = guilds.find((g: any) => g.id === guild_id);
 
     if (targetGuild) {
-      const permissions = BigInt(targetGuild.permissions);
-      hasAdminPerm = (permissions & ADMIN_PERMISSION) === ADMIN_PERMISSION;
+      hasAdminPerm = hasAdministratorPermission(targetGuild.permissions);
     }
   } catch (err) {
     console.error(

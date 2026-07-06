@@ -345,6 +345,8 @@
 </template>
 
 <script setup lang="ts">
+import { hasAdministratorPermission } from "#shared/discord-permissions";
+
 const userStore = useUserStore();
 const toast = useToast();
 const router = useRouter();
@@ -361,8 +363,6 @@ const joiningId = ref<string | null>(null);
 // Bot invite modal state
 const inviteModalOpen = ref(false);
 const inviteGuild = ref<any>(null);
-
-const ADMIN_PERMISSION = 0x8;
 
 // Permissions the bot requests (Administrator for full access)
 const BOT_PERMISSIONS = "8"; // Administrator
@@ -381,10 +381,10 @@ const dashboardRoleGuildIds = ref<Set<string>>(new Set());
 
 const adminGuilds = computed(() => {
   return guilds.value.filter((guild: any) => {
-    const permissions = BigInt(guild.permissions);
-    const isAdmin =
-      (permissions & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION);
-    return isAdmin || dashboardRoleGuildIds.value.has(guild.id);
+    return (
+      hasAdministratorPermission(guild.permissions) ||
+      dashboardRoleGuildIds.value.has(guild.id)
+    );
   });
 });
 
@@ -536,13 +536,7 @@ const fetchGuilds = async () => {
         const roleChecks = serversWithRoles.map(async (server: any) => {
           // Skip if user already has admin on this guild
           const guild = guilds.value.find((g: any) => g.id === server.$id);
-          if (guild) {
-            const perms = BigInt(guild.permissions);
-            if (
-              (perms & BigInt(ADMIN_PERMISSION)) === BigInt(ADMIN_PERMISSION)
-            )
-              return;
-          }
+          if (guild && hasAdministratorPermission(guild.permissions)) return;
 
           try {
             const memberRes = await $fetch<{ roles: string[] }>(
