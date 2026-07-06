@@ -69,6 +69,7 @@ async function getSettings(
 
 const tempvoiceModule: BotModule = {
   name: "tempvoice",
+  registerEvents: registerTempVoiceEvents,
   description: "Temporary voice channels — join a lobby to create your own VC",
   data: new SlashCommandBuilder()
     .setName("tempvoice")

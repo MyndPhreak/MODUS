@@ -121,6 +121,7 @@ async function deployPanel(
 
 const verificationModule: BotModule = {
   name: "verification",
+  registerEvents: registerVerificationEvents,
   description: "Protects the server with a customisable verification panel",
   data: new SlashCommandBuilder()
     .setName("verification")

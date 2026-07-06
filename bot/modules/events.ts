@@ -153,6 +153,7 @@ function parseTimezone(input: string): number | null {
 
 const eventsModule: BotModule = {
   name: "events",
+  registerEvents: registerEventsEvents,
   description: "Schedule server events natively",
   skipDefer: true, // We need to showModal before any defer
   data: new SlashCommandBuilder()

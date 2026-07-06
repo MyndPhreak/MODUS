@@ -182,6 +182,7 @@ async function renderViaApi(
 
 const welcomeModule: BotModule = {
   name: "welcome",
+  registerEvents: registerWelcomeEvents,
   description: "Send beautiful welcome images when new members join",
   data: new SlashCommandBuilder()
     .setName("welcome")

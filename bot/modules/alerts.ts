@@ -18,6 +18,7 @@ const platforms = [
 
 const alertsModule: BotModule = {
   name: "alerts",
+  registerEvents: registerAlertsEvents,
   description: "Configure automated social media & external alerts",
   data: new SlashCommandBuilder()
     .setName("alerts")

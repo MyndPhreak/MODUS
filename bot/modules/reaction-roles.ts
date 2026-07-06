@@ -160,7 +160,8 @@ async function toggleRole(
 // ── Module Definition ──────────────────────────────────────────────────────
 
 const buttonRolesModule: BotModule = {
-  name: "reaction-roles", // Appwrite key preserved for backward compat
+  name: "reaction-roles", // legacy module key preserved for backward compat
+  registerEvents: registerReactionRolesEvents,
   description: "Create button or dropdown panels that toggle roles",
   data: new SlashCommandBuilder()
     .setName("buttonroles")

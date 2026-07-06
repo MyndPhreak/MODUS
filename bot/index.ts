@@ -24,19 +24,6 @@ import {
   createYtDlpStreamFunction,
   createSpotifyBridgeStreamFunction,
 } from "./lib/ytdlp-stream";
-import { registerWelcomeEvents } from "./modules/welcome";
-import { registerMilestoneEvents } from "./modules/milestones";
-import { registerAutoModEvents } from "./modules/automod";
-import { registerAIEvents } from "./modules/ai";
-import { registerLoggingEvents } from "./modules/logging";
-import { registerTempVoiceEvents } from "./modules/tempvoice";
-import { registerAntiRaidEvents } from "./modules/antiraid";
-import { registerVerificationEvents } from "./modules/verification";
-import { registerTicketsEvents } from "./modules/tickets/index";
-import { registerReactionRolesEvents } from "./modules/reaction-roles";
-import { registerPollsEvents } from "./modules/polls";
-import { registerEventsEvents } from "./modules/events";
-import { registerAlertsEvents } from "./modules/alerts";
 import { registerMusicAPI } from "./MusicAPI";
 import { registerWebhookRoutes } from "./WebhookRouter";
 
@@ -194,20 +181,9 @@ client.once("ready", async () => {
   }
 
   await loadExtractors();
+  // loadModules() also runs each module's registerEvents hook (client
+  // listeners, timers) — no per-module wiring needed here.
   await moduleManager.loadModules();
-  registerWelcomeEvents(moduleManager);
-  registerMilestoneEvents(moduleManager);
-  registerAutoModEvents(moduleManager);
-  registerAIEvents(moduleManager);
-  registerLoggingEvents(moduleManager);
-  await registerTempVoiceEvents(moduleManager);
-  registerAntiRaidEvents(moduleManager);
-  registerVerificationEvents(moduleManager);
-  registerTicketsEvents(moduleManager);
-  registerReactionRolesEvents(moduleManager);
-  registerPollsEvents(moduleManager);
-  registerEventsEvents(moduleManager);
-  registerAlertsEvents(moduleManager);
   serverStatusService.start();
 
   // ── Recording retention ──────────────────────────────────────────────

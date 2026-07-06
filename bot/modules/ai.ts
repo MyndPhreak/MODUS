@@ -708,6 +708,7 @@ const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
 
 const aiModule: BotModule = {
   name: "ai",
+  registerEvents: registerAIEvents,
   description: "AI conversational assistant — @mention the bot to chat",
   data: new SlashCommandBuilder()
     .setName("ai")

@@ -38,6 +38,7 @@ setInterval(() => {
 
 const antiraidModule: BotModule = {
   name: "antiraid",
+  registerEvents: registerAntiRaidEvents,
   description: "Protects the server from sudden bot raids and join floods",
   data: new SlashCommandBuilder()
     .setName("antiraid")

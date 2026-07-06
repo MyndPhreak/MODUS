@@ -78,6 +78,7 @@ export async function sendAuditLog(
 
 const loggingModule: BotModule = {
   name: "logging",
+  registerEvents: registerLoggingEvents,
   description: "Comprehensive audit logging for server forensics and events",
   data: new SlashCommandBuilder()
     .setName("logging")

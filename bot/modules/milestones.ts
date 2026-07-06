@@ -144,10 +144,10 @@ function getMedalEmoji(rank: number): string {
  * Falls back to DEFAULT_MILESTONES if the guild hasn't customised them.
  */
 async function getGuildMilestones(
-  appwrite: ModuleManager["databaseService"],
+  db: ModuleManager["databaseService"],
   guildId: string,
 ): Promise<MilestoneConfig[]> {
-  const raw = await appwrite.getModuleSettings(guildId, "milestones");
+  const raw = await db.getModuleSettings(guildId, "milestones");
   const parsed = parseSettings(
     MilestoneSettingsSchema,
     raw,
@@ -187,7 +187,7 @@ function getCrossedMilestones(
 
 // ── Buffer Flush Logic ─────────────────────────────────────────────────
 
-async function flushBuffer(appwrite: ModuleManager["databaseService"]) {
+async function flushBuffer(db: ModuleManager["databaseService"]) {
   const entries = Array.from(userCache.entries()).filter(
     ([, state]) => state.pendingChars > 0 && state.docId && state.optedIn,
   );
@@ -197,7 +197,7 @@ async function flushBuffer(appwrite: ModuleManager["databaseService"]) {
   const promises = entries.map(async ([key, state]) => {
     try {
       const newTotal = state.charCount + state.pendingChars;
-      await appwrite.updateMilestoneUser(state.docId!, {
+      await db.updateMilestoneUser(state.docId!, {
         char_count: newTotal,
         username: state.username,
       });
@@ -211,9 +211,9 @@ async function flushBuffer(appwrite: ModuleManager["databaseService"]) {
   await Promise.allSettled(promises);
 }
 
-function startFlushTimer(appwrite: ModuleManager["databaseService"]) {
+function startFlushTimer(db: ModuleManager["databaseService"]) {
   if (flushTimer) return;
-  flushTimer = setInterval(() => flushBuffer(appwrite), FLUSH_INTERVAL_MS);
+  flushTimer = setInterval(() => flushBuffer(db), FLUSH_INTERVAL_MS);
   _moduleManager?.logger.info(
     `Buffer flush timer started (every ${FLUSH_INTERVAL_MS / 1000}s)`,
     undefined,
@@ -319,10 +319,10 @@ async function sendMilestoneNotification(
     );
 
     // Check for announcement channel in guild settings
-    const appwrite = (message.client as any).__milestoneAppwrite;
+    const db = _moduleManager?.databaseService;
     let announcementChannel: TextChannel | null = null;
-    if (appwrite) {
-      const settings = await appwrite.getModuleSettings(guild.id, "milestones");
+    if (db) {
+      const settings = await db.getModuleSettings(guild.id, "milestones");
       if (settings?.announcementChannel) {
         const ch = guild.channels.cache.get(settings.announcementChannel);
         if (ch instanceof TextChannel) {
@@ -431,6 +431,7 @@ function buildLeaderboardButtons(
 
 const milestonesModule: BotModule = {
   name: "milestones",
+  registerEvents: registerMilestoneEvents,
   description:
     "Track character milestones, earn achievements, and climb the leaderboard!",
   deferReply: true,
@@ -503,13 +504,13 @@ const milestonesModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     switch (subcommand) {
       // ── Leaderboard ──
       case "leaderboard": {
-        const milestones = await getGuildMilestones(appwrite, guildId);
-        const { users, total } = await appwrite.getMilestoneLeaderboard(
+        const milestones = await getGuildMilestones(db, guildId);
+        const { users, total } = await db.getMilestoneLeaderboard(
           guildId,
           LEADERBOARD_PAGE_SIZE,
           0,
@@ -540,8 +541,8 @@ const milestonesModule: BotModule = {
       case "check": {
         const targetUser =
           interaction.options.getUser("user") ?? interaction.user;
-        const milestones = await getGuildMilestones(appwrite, guildId);
-        const msUser = await appwrite.getMilestoneUser(guildId, targetUser.id);
+        const milestones = await getGuildMilestones(db, guildId);
+        const msUser = await db.getMilestoneUser(guildId, targetUser.id);
 
         if (!msUser) {
           await interaction.editReply({
@@ -567,7 +568,7 @@ const milestonesModule: BotModule = {
         const key = cacheKey(guildId, targetUser.id);
         const cached = userCache.get(key);
         const totalChars = msUser.char_count + (cached?.pendingChars ?? 0);
-        const rank = await appwrite.getMilestoneUserRank(guildId, totalChars);
+        const rank = await db.getMilestoneUserRank(guildId, totalChars);
         const nextMs = getNextMilestone(totalChars, milestones);
 
         const embed = new EmbedBuilder()
@@ -626,7 +627,7 @@ const milestonesModule: BotModule = {
       // ── Opt In ──
       case "optin": {
         const userId = interaction.user.id;
-        const existing = await appwrite.getMilestoneUser(guildId, userId);
+        const existing = await db.getMilestoneUser(guildId, userId);
 
         if (existing) {
           if (existing.opted_in) {
@@ -634,7 +635,7 @@ const milestonesModule: BotModule = {
               "You're already opted in! 🎉 Use `/milestones check` to see your stats.",
             );
           } else {
-            await appwrite.updateMilestoneUser(existing.$id, {
+            await db.updateMilestoneUser(existing.$id, {
               opted_in: true,
             });
             // Update cache
@@ -647,7 +648,7 @@ const milestonesModule: BotModule = {
             );
           }
         } else {
-          const docId = await appwrite.createMilestoneUser({
+          const docId = await db.createMilestoneUser({
             guild_id: guildId,
             user_id: userId,
             username: interaction.user.displayName,
@@ -679,7 +680,7 @@ const milestonesModule: BotModule = {
       // ── Opt Out ──
       case "optout": {
         const userId = interaction.user.id;
-        const existing = await appwrite.getMilestoneUser(guildId, userId);
+        const existing = await db.getMilestoneUser(guildId, userId);
 
         if (!existing) {
           await interaction.editReply(
@@ -688,7 +689,7 @@ const milestonesModule: BotModule = {
           return;
         }
 
-        await appwrite.updateMilestoneUser(existing.$id, { opted_in: false });
+        await db.updateMilestoneUser(existing.$id, { opted_in: false });
 
         // Update cache
         const key = cacheKey(guildId, userId);
@@ -709,7 +710,7 @@ const milestonesModule: BotModule = {
           | "private"
           | "silent";
         const userId = interaction.user.id;
-        const existing = await appwrite.getMilestoneUser(guildId, userId);
+        const existing = await db.getMilestoneUser(guildId, userId);
 
         if (!existing) {
           await interaction.editReply(
@@ -718,7 +719,7 @@ const milestonesModule: BotModule = {
           return;
         }
 
-        await appwrite.updateMilestoneUser(existing.$id, {
+        await db.updateMilestoneUser(existing.$id, {
           notification_pref: mode,
         });
 
@@ -747,14 +748,11 @@ const milestonesModule: BotModule = {
 
 export function registerMilestoneEvents(moduleManager: ModuleManager) {
   _moduleManager = moduleManager;
-  const client = moduleManager["client"];
-  const appwrite = moduleManager.databaseService;
-
-  // Store appwrite reference on client for notification use
-  (client as any).__milestoneAppwrite = appwrite;
+  const client = moduleManager.client;
+  const db = moduleManager.databaseService;
 
   // Start the buffer flush timer
-  startFlushTimer(appwrite);
+  startFlushTimer(db);
 
   // ── Message Handler ──
   client.on("messageCreate", async (message: Message) => {
@@ -772,7 +770,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
       if (chars < MIN_MESSAGE_LENGTH) return;
 
       // Check if milestones module is enabled for this guild
-      const isEnabled = await appwrite.isModuleEnabled(guildId, "milestones");
+      const isEnabled = await db.isModuleEnabled(guildId, "milestones");
       if (!isEnabled) return;
 
       const key = cacheKey(guildId, userId);
@@ -781,7 +779,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
 
       // ── First encounter: load from DB ──
       if (!state) {
-        const dbUser = await appwrite.getMilestoneUser(guildId, userId);
+        const dbUser = await db.getMilestoneUser(guildId, userId);
 
         if (!dbUser) {
           // Brand new user — send opt-in prompt
@@ -830,14 +828,14 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
       const newTotal = state.charCount + state.pendingChars;
 
       // ── Check for milestone crossings ──
-      const milestones = await getGuildMilestones(appwrite, guildId);
+      const milestones = await getGuildMilestones(db, guildId);
       const crossed = getCrossedMilestones(oldTotal, newTotal, milestones);
 
       if (crossed.length > 0) {
         // Flush this user immediately so milestone data is accurate
         const flushedTotal = state.charCount + state.pendingChars;
         try {
-          await appwrite.updateMilestoneUser(state.docId!, {
+          await db.updateMilestoneUser(state.docId!, {
             char_count: flushedTotal,
             last_milestone: crossed[crossed.length - 1].threshold,
             username: state.username,
@@ -850,7 +848,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
         }
 
         // Get rank for notification
-        const rank = await appwrite.getMilestoneUserRank(guildId, flushedTotal);
+        const rank = await db.getMilestoneUserRank(guildId, flushedTotal);
 
         // Notify for the highest milestone crossed
         const topMilestone = crossed[crossed.length - 1];
@@ -925,7 +923,7 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
 
         // Create the user document in DB
         try {
-          const docId = await appwrite.createMilestoneUser({
+          const docId = await db.createMilestoneUser({
             guild_id: guildId,
             user_id: targetUserId,
             username: interaction.user.displayName,
@@ -983,8 +981,8 @@ export function registerMilestoneEvents(moduleManager: ModuleManager) {
 
         await interaction.deferUpdate();
 
-        const milestones = await getGuildMilestones(appwrite, guildId);
-        const { users, total } = await appwrite.getMilestoneLeaderboard(
+        const milestones = await getGuildMilestones(db, guildId);
+        const { users, total } = await db.getMilestoneLeaderboard(
           guildId,
           LEADERBOARD_PAGE_SIZE,
           newPage * LEADERBOARD_PAGE_SIZE,

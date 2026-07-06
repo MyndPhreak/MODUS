@@ -718,6 +718,7 @@ const automodCommand = new SlashCommandBuilder()
 
 const automodModule: BotModule = {
   name: "automod",
+  registerEvents: registerAutoModEvents,
   description:
     "Programmable auto-moderation engine with IF/THEN rules, regex, and conditional logic",
   commands: [automodCommand],

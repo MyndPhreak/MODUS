@@ -40,6 +40,7 @@ async function fetchPollMessage(
 
 const pollsModule: BotModule = {
   name: "polls",
+  registerEvents: registerPollsEvents,
   description: "Create and manage native Discord polls",
 
   // We call interaction.reply() ourselves — the poll must be the initial reply.

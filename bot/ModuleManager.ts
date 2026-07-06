@@ -56,6 +56,12 @@ export interface BotModule {
     interaction: ModalSubmitInteraction,
     moduleManager: ModuleManager,
   ) => Promise<void>;
+  /**
+   * Optional one-time event wiring (client listeners, timers, workers).
+   * Called after the first loadModules() pass completes; guarded per module
+   * name so /reload cannot attach duplicate listeners.
+   */
+  registerEvents?: (moduleManager: ModuleManager) => void | Promise<void>;
 }
 
 export class ModuleManager {
@@ -81,6 +87,12 @@ export class ModuleManager {
   private modulesPath: string;
   public databaseService: DatabaseService;
   private enabledModules: Set<string> = new Set();
+  /** Module names whose registerEvents hook already ran (survives /reload). */
+  private eventsRegistered: Set<string> = new Set();
+  /** True once the first loadModules() pass has finished. */
+  private modulesLoaded = false;
+  /** Guards the modules-channel subscription so /reload doesn't stack duplicates. */
+  private modulesSubscribed = false;
   public logger: Logger;
   public player: Player;
 
@@ -151,7 +163,7 @@ export class ModuleManager {
             this.logger.info(`Loaded module: ${module.name} (command: /${cmdName})`);
           }
 
-          // Register module in Appwrite if not exists
+          // Register module in the modules table if not exists
           await this.databaseService.ensureModuleRegistered(
             module.name,
             module.description || "No description",
@@ -174,10 +186,29 @@ export class ModuleManager {
     // Hot-reload subscription: fires when another shard (or the dashboard)
     // writes to the modules table. Falls back to a no-op when Redis isn't
     // configured — restart is required to see new modules in that case.
-    await this.databaseService.subscribeToModules(() => {
-      console.log("[ModuleManager] modules channel event — refreshing.");
-      this.refreshEnabledModules();
-    });
+    if (!this.modulesSubscribed) {
+      await this.databaseService.subscribeToModules(() => {
+        console.log("[ModuleManager] modules channel event — refreshing.");
+        this.refreshEnabledModules();
+      });
+      this.modulesSubscribed = true;
+    }
+
+    // One-time event wiring for modules that declare registerEvents.
+    for (const [name, module] of this.uniqueModules) {
+      if (!module.registerEvents || this.eventsRegistered.has(name)) continue;
+      try {
+        await module.registerEvents(this);
+        this.eventsRegistered.add(name);
+      } catch (error) {
+        console.error(
+          `[ModuleManager] registerEvents failed for ${name}:`,
+          error,
+        );
+      }
+    }
+
+    this.modulesLoaded = true;
   }
 
   private async registerCommands() {
@@ -403,7 +434,7 @@ export class ModuleManager {
       }
 
       // 2. Defer the reply FIRST to meet Discord's 3-second deadline
-      //    before making any slow network calls (like Appwrite checks)
+      //    before making any slow network calls (like database checks)
       //    Exception: skipDefer modules (e.g. polls) own the first reply themselves.
       if (!module.skipDefer && module.deferReply !== false) {
         try {

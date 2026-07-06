@@ -137,6 +137,7 @@ const ticketCommand = new SlashCommandBuilder()
 
 const ticketsModule: BotModule = {
   name: "tickets",
+  registerEvents: registerTicketsEvents,
   description: "Private thread-based support ticketing system",
   commands: [ticketsCommand, ticketCommand],
   deferReply: false, // handlers manage their own deferral
