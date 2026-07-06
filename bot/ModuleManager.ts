@@ -10,6 +10,7 @@ import {
   Routes,
   Interaction,
   MessageFlags,
+  type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from "discord.js";
 import { Player } from "discord-player";
 import fs from "fs";
@@ -17,13 +18,25 @@ import path from "path";
 import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
 
+/**
+ * A slash-command definition: any command builder (SlashCommandBuilder and
+ * friends, matched structurally) or the already-serialized REST JSON body.
+ */
+export type SlashCommandData =
+  | RESTPostAPIChatInputApplicationCommandsJSONBody
+  | {
+      name: string;
+      description: string;
+      toJSON(): RESTPostAPIChatInputApplicationCommandsJSONBody;
+    };
+
 export interface BotModule {
   name: string;
   description: string;
   /** Single command data (legacy). If `commands` is provided, this is ignored. */
-  data?: any;
+  data?: SlashCommandData;
   /** Multiple command definitions. Each entry's `name` property is used for routing. */
-  commands?: any[];
+  commands?: SlashCommandData[];
   /** If false, the module handles its own deferReply/reply. Default: true (auto-defers as ephemeral). */
   deferReply?: boolean;
   /**
@@ -230,7 +243,7 @@ export class ModuleManager {
 
     const rest = new REST({ version: "10" }).setToken(token);
     // Collect all command data from unique modules
-    const commandData: any[] = [];
+    const commandData: SlashCommandData[] = [];
     for (const module of this.uniqueModules.values()) {
       if (module.commands && module.commands.length > 0) {
         commandData.push(...module.commands);
