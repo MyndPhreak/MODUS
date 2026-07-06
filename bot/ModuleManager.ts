@@ -263,6 +263,55 @@ export class ModuleManager {
     console.log("Updated enabled modules:", Array.from(this.enabledModules));
   }
 
+  /**
+   * Shared dispatch for button / select-menu / modal interactions: resolve
+   * the module from the customId prefix (`moduleName:...`), check global
+   * enablement, run the module's handler.
+   */
+  private async dispatchComponent(
+    interaction:
+      | ButtonInteraction
+      | StringSelectMenuInteraction
+      | ModalSubmitInteraction,
+    handlerKey: "handleButton" | "handleSelectMenu" | "handleModal",
+    label: string,
+  ): Promise<void> {
+    const [modulePrefix] = interaction.customId.split(":");
+    if (!modulePrefix) return;
+
+    // Direct lookup first; fall back to alias map for modules that use
+    // a different customId prefix (e.g. button-roles → reaction-roles)
+    const resolvedName =
+      this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
+      modulePrefix.toLowerCase();
+    const module = this.uniqueModules.get(resolvedName);
+    const handler = module?.[handlerKey];
+    if (!module || !handler) return;
+
+    if (!this.enabledModules.has(module.name.toLowerCase())) return;
+
+    try {
+      // The handlerKey/interaction pairing is guaranteed by the isButton/
+      // isStringSelectMenu/isModalSubmit branch that routed us here.
+      await handler(interaction as any, this);
+    } catch (error) {
+      console.error(
+        `[ModuleManager] Error handling ${label} ${interaction.customId}:`,
+        error,
+      );
+      try {
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: "Something went wrong!",
+            flags: [MessageFlags.Ephemeral],
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   public async handleInteraction(interaction: Interaction) {
     // Helper: resolve module from command name
     const resolveModule = (cmdName: string): BotModule | undefined => {
@@ -309,108 +358,19 @@ export class ModuleManager {
       return;
     }
 
-    // ─── Button Interactions ──────────────────────────────────────────
+    // ─── Component Interactions (buttons / select menus / modals) ─────
     if (interaction.isButton()) {
-      const [modulePrefix] = interaction.customId.split(":");
-      if (!modulePrefix) return;
-
-      // Direct lookup first; fall back to alias map for modules that use
-      // a different customId prefix (e.g. button-roles → reaction-roles)
-      const resolvedName =
-        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
-        modulePrefix.toLowerCase();
-      const module = this.uniqueModules.get(resolvedName);
-      if (!module?.handleButton) return;
-
-      if (!this.enabledModules.has(module.name.toLowerCase())) return;
-
-      try {
-        await module.handleButton(interaction, this);
-      } catch (error) {
-        console.error(
-          `[ModuleManager] Error handling button ${interaction.customId}:`,
-          error,
-        );
-        try {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-              content: "Something went wrong!",
-              flags: [MessageFlags.Ephemeral],
-            });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      return;
+      return this.dispatchComponent(interaction, "handleButton", "button");
     }
-
-    // ─── Select Menu Interactions ─────────────────────────────────────
     if (interaction.isStringSelectMenu()) {
-      const [modulePrefix] = interaction.customId.split(":");
-      if (!modulePrefix) return;
-
-      const resolvedName =
-        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
-        modulePrefix.toLowerCase();
-      const module = this.uniqueModules.get(resolvedName);
-      if (!module?.handleSelectMenu) return;
-
-      if (!this.enabledModules.has(module.name.toLowerCase())) return;
-
-      try {
-        await module.handleSelectMenu(interaction, this);
-      } catch (error) {
-        console.error(
-          `[ModuleManager] Error handling select menu ${interaction.customId}:`,
-          error,
-        );
-        try {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-              content: "Something went wrong!",
-              flags: [MessageFlags.Ephemeral],
-            });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      return;
+      return this.dispatchComponent(
+        interaction,
+        "handleSelectMenu",
+        "select menu",
+      );
     }
-
-    // ─── Modal Submit Interactions ────────────────────────────────────
     if (interaction.isModalSubmit()) {
-      const [modulePrefix] = interaction.customId.split(":");
-      if (!modulePrefix) return;
-
-      const resolvedName =
-        this.buttonPrefixAliases.get(modulePrefix.toLowerCase()) ??
-        modulePrefix.toLowerCase();
-      const module = this.uniqueModules.get(resolvedName);
-      if (!module?.handleModal) return;
-
-      if (!this.enabledModules.has(module.name.toLowerCase())) return;
-
-      try {
-        await module.handleModal(interaction, this);
-      } catch (error) {
-        console.error(
-          `[ModuleManager] Error handling modal ${interaction.customId}:`,
-          error,
-        );
-        try {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-              content: "Something went wrong!",
-              flags: [MessageFlags.Ephemeral],
-            });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      return;
+      return this.dispatchComponent(interaction, "handleModal", "modal");
     }
 
     // ─── Chat Input Commands ──────────────────────────────────────────
