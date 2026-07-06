@@ -19,28 +19,40 @@ export class Logger {
     return `${shardPrefix}${guildPrefix} ${message}`;
   }
 
+  /**
+   * Callers routinely fire-and-forget logger calls, so a DB hiccup here
+   * must never escape as an unhandled rejection — console output above
+   * has already happened, persistence is best-effort.
+   */
+  private async persist(
+    message: string,
+    level: "info" | "warn" | "error",
+    guildId?: string,
+    source?: string,
+  ) {
+    try {
+      await this.databaseService.logServerMessage(
+        guildId || "global",
+        message,
+        level,
+        this.shardId,
+        source,
+      );
+    } catch (err) {
+      console.error("[Logger] Failed to persist log entry:", err);
+    }
+  }
+
   public async info(message: string, guildId?: string, source?: string) {
     const formatted = this.format(message, guildId);
     console.log(`[INFO] ${formatted}`);
-    await this.databaseService.logServerMessage(
-      guildId || "global",
-      message,
-      "info",
-      this.shardId,
-      source,
-    );
+    await this.persist(message, "info", guildId, source);
   }
 
   public async warn(message: string, guildId?: string, source?: string) {
     const formatted = this.format(message, guildId);
     console.warn(`[WARN] ${formatted}`);
-    await this.databaseService.logServerMessage(
-      guildId || "global",
-      message,
-      "warn",
-      this.shardId,
-      source,
-    );
+    await this.persist(message, "warn", guildId, source);
   }
 
   public async error(
@@ -53,12 +65,6 @@ export class Logger {
     console.error(`[ERROR] ${formatted}`, error);
     const errorMessage =
       error instanceof Error ? `${message}: ${error.message}` : message;
-    await this.databaseService.logServerMessage(
-      guildId || "global",
-      errorMessage,
-      "error",
-      this.shardId,
-      source,
-    );
+    await this.persist(errorMessage, "error", guildId, source);
   }
 }
