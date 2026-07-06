@@ -212,6 +212,12 @@ export class ModuleManager {
   }
 
   private async registerCommands() {
+    // Commands are registered globally, so one PUT covers the whole fleet.
+    // Only shard 0 performs it — otherwise N shards send N identical REST
+    // calls at boot and eat into Discord's daily command-registration limit.
+    const shardId = this.client.shard?.ids[0] ?? 0;
+    if (shardId !== 0) return;
+
     const token = process.env.DISCORD_TOKEN;
     const clientId = process.env.CLIENT_ID;
 
