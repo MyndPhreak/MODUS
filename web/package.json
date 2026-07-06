@@ -7,7 +7,8 @@
     "dev": "nuxt dev --host 0.0.0.0 --port 3000",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
@@ -34,6 +35,7 @@
     "wavesurfer.js": "^7.12.6"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "vue-tsc": "^3.3.6"
   }
 }
