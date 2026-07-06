@@ -223,14 +223,14 @@ const welcomeModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     switch (subcommand) {
       case "channel": {
         const channel = interaction.options.getChannel("channel", true);
 
         // Load current settings and update channelId
-        const currentSettings = await appwrite.getModuleSettings(
+        const currentSettings = await db.getModuleSettings(
           guildId,
           "welcome",
         );
@@ -241,7 +241,7 @@ const welcomeModule: BotModule = {
           guildId,
         ) ?? { ...DEFAULT_TEMPLATE, channelId: channel.id };
 
-        await appwrite.setModuleSettings(guildId, "welcome", template);
+        await db.setModuleSettings(guildId, "welcome", template);
 
         await interaction.editReply(
           `✅ Welcome messages will be sent to <#${channel.id}>!`,
@@ -272,7 +272,7 @@ const welcomeModule: BotModule = {
       }
 
       case "disable": {
-        await appwrite.setModuleStatus(guildId, "welcome", false);
+        await db.setModuleStatus(guildId, "welcome", false);
         await interaction.editReply("✅ Welcome messages have been disabled.");
         break;
       }
@@ -288,14 +288,14 @@ export function registerWelcomeEvents(moduleManager: ModuleManager) {
   client.on("guildMemberAdd", async (member: GuildMember) => {
     try {
       const guildId = member.guild.id;
-      const appwrite = moduleManager.databaseService;
+      const db = moduleManager.databaseService;
 
       // Check if module is enabled
-      const isEnabled = await appwrite.isModuleEnabled(guildId, "welcome");
+      const isEnabled = await db.isModuleEnabled(guildId, "welcome");
       if (!isEnabled) return;
 
       // Load template to get channelId
-      const settings = await appwrite.getModuleSettings(guildId, "welcome");
+      const settings = await db.getModuleSettings(guildId, "welcome");
       if (!settings || !settings.channelId) return;
 
       const template: WelcomeTemplate =

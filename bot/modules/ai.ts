@@ -790,16 +790,16 @@ const aiModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     switch (subcommand) {
       case "status": {
-        const isEnabled = await appwrite.isModuleEnabled(guildId, "ai");
-        const settings = await appwrite.getModuleSettings(guildId, "ai");
+        const isEnabled = await db.isModuleEnabled(guildId, "ai");
+        const settings = await db.getModuleSettings(guildId, "ai");
         const merged: AIModuleSettings =
           parseSettings(AISettingsSchema, settings, "ai", guildId) ??
           DEFAULT_SETTINGS;
-        const isPremium = await appwrite.isGuildPremium(guildId);
+        const isPremium = await db.isGuildPremium(guildId);
         const hasOwnKey = !!merged.aiApiKey;
 
         const keyStatus = hasOwnKey
@@ -825,7 +825,7 @@ const aiModule: BotModule = {
       }
 
       case "disable": {
-        await appwrite.setModuleStatus(guildId, "ai", false);
+        await db.setModuleStatus(guildId, "ai", false);
         await interaction.editReply("✅ AI module has been disabled.");
         break;
       }
@@ -852,14 +852,14 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       // DM handling — off by default
       if (!guildId) return;
 
-      const appwrite = moduleManager.databaseService;
+      const db = moduleManager.databaseService;
 
       // ─ Module enabled check ─────────────────────────────────────
-      const isEnabled = await appwrite.isModuleEnabled(guildId, "ai");
+      const isEnabled = await db.isModuleEnabled(guildId, "ai");
       if (!isEnabled) return;
 
       // ─ Load settings ────────────────────────────────────────────
-      const savedSettings = await appwrite.getModuleSettings(guildId, "ai");
+      const savedSettings = await db.getModuleSettings(guildId, "ai");
       const settings: Required<AIModuleSettings> = (parseSettings(
         AISettingsSchema,
         savedSettings,
@@ -879,7 +879,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         keySource = "guild";
       } else {
         // ── No guild key: check premium + global config ──────────
-        const isPremium = await appwrite.isGuildPremium(guildId);
+        const isPremium = await db.isGuildPremium(guildId);
         if (!isPremium) {
           await message.reply(
             "⚠️ The AI module requires either a guild-provided API key or a **Premium** subscription for hosted AI. Configure your key in the dashboard or contact the bot owner.",
@@ -888,7 +888,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         }
 
         // 1️⃣ Try admin-set global config from Appwrite
-        const globalConfig = await appwrite.getGlobalAIConfig();
+        const globalConfig = await db.getGlobalAIConfig();
 
         if (globalConfig?.aiApiKey) {
           apiKey = globalConfig.aiApiKey;
@@ -1134,7 +1134,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         totalOutputTokens,
       );
 
-      await appwrite.logAIUsage({
+      await db.logAIUsage({
         guildId,
         userId: message.author.id,
         provider: settings.aiProvider,

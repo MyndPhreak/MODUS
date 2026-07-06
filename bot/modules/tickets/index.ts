@@ -165,8 +165,8 @@ const ticketsModule: BotModule = {
         const panelCh = interaction.options.getChannel("channel", true) as TextChannel;
         const parentCh = interaction.options.getChannel("parent_channel") as TextChannel | null;
 
-        const appwrite = moduleManager.databaseService;
-        const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+        const db = moduleManager.databaseService;
+        const rawSettings = await db.getModuleSettings(guildId, "tickets");
         const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
 
         if (!settings) {
@@ -204,11 +204,11 @@ const ticketsModule: BotModule = {
             defaultParentChannelId: parentCh?.id ?? panelCh.id,
           });
 
-          await appwrite.setModuleSettings(guildId, "tickets", {
+          await db.setModuleSettings(guildId, "tickets", {
             ...updatedSettings,
             panelMessageId: msgId,
           });
-          await appwrite.setModuleStatus(guildId, "tickets", true);
+          await db.setModuleStatus(guildId, "tickets", true);
 
           await interaction.editReply(
             `✅ Ticket panel deployed in <#${panelCh.id}>. Tickets will be created as threads${parentCh ? ` under <#${parentCh.id}>` : " in the same channel"}.`,

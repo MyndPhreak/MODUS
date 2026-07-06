@@ -12,7 +12,7 @@
  *   - twitch   → EventSub webhooks (stream.online / stream.offline)
  *
  * State persistence:
- *   Last-seen item IDs are written to Appwrite via DatabaseService.setAlertsState,
+ *   Last-seen item IDs are written to Postgres via DatabaseService.setAlertsState,
  *   keyed as `${platform}:${handle}` per guild.
  */
 
@@ -432,14 +432,14 @@ async function subscribeTwitchEventSub(
 // ── Main worker class ──────────────────────────────────────────────────────
 
 export class AlertsWorker {
-  private appwrite: DatabaseService;
+  private db: DatabaseService;
   private intervalMs: number;
   private timer: NodeJS.Timeout | null = null;
   /** Track which Twitch broadcasterIds we've already subscribed for this session. */
   private twitchSubscribed = new Set<string>();
 
-  constructor(appwrite: DatabaseService, pollIntervalMinutes = 10) {
-    this.appwrite = appwrite;
+  constructor(db: DatabaseService, pollIntervalMinutes = 10) {
+    this.db = db;
     this.intervalMs = pollIntervalMinutes * 60 * 1000;
   }
 
@@ -464,7 +464,7 @@ export class AlertsWorker {
   }
 
   private async runCycle(): Promise<void> {
-    const allConfigs = await this.appwrite.getAllAlertsConfigs();
+    const allConfigs = await this.db.getAllAlertsConfigs();
     if (allConfigs.length === 0) return;
 
     console.log(`[Alerts] Poll cycle — ${allConfigs.length} guild(s) with active alerts`);
@@ -475,7 +475,7 @@ export class AlertsWorker {
   }
 
   private async processGuild(guildId: string, alerts: SocialAlert[]): Promise<void> {
-    const state = await this.appwrite.getAlertsState(guildId);
+    const state = await this.db.getAlertsState(guildId);
     let stateChanged = false;
 
     for (const alert of alerts) {
@@ -521,7 +521,7 @@ export class AlertsWorker {
     }
 
     if (stateChanged) {
-      await this.appwrite.setAlertsState(guildId, state);
+      await this.db.setAlertsState(guildId, state);
     }
   }
 

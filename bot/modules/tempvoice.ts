@@ -172,7 +172,7 @@ const tempvoiceModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
     const member = interaction.member as GuildMember;
 
     switch (subcommand) {
@@ -200,7 +200,7 @@ const tempvoiceModule: BotModule = {
         }
 
         settings.lobbyChannelIds.push(channel.id);
-        await appwrite.setModuleSettings(guildId, "tempvoice", settings as any);
+        await db.setModuleSettings(guildId, "tempvoice", settings as any);
 
         await interaction.editReply(
           `✅ <#${channel.id}> is now a Join-to-Create lobby!`,
@@ -232,7 +232,7 @@ const tempvoiceModule: BotModule = {
         }
 
         settings.lobbyChannelIds.splice(idx, 1);
-        await appwrite.setModuleSettings(guildId, "tempvoice", settings as any);
+        await db.setModuleSettings(guildId, "tempvoice", settings as any);
 
         await interaction.editReply(
           `✅ <#${channel.id}> is no longer a lobby.`,
@@ -342,7 +342,7 @@ const tempvoiceModule: BotModule = {
         activeChannels.set(vc.id, info);
 
         try {
-          await appwrite.updateTempChannelOwner(vc.id, member.id);
+          await db.updateTempChannelOwner(vc.id, member.id);
         } catch (err) {
           moduleManager.logger.error("Failed to update owner in Appwrite", guildId, err, "tempvoice");
         }
@@ -393,7 +393,7 @@ const tempvoiceModule: BotModule = {
         const pattern = interaction.options.getString("pattern", true);
         const settings = await getSettings(moduleManager, guildId);
         settings.namingTemplate = pattern;
-        await appwrite.setModuleSettings(guildId, "tempvoice", settings as any);
+        await db.setModuleSettings(guildId, "tempvoice", settings as any);
 
         await interaction.editReply(
           `✅ Naming template set to: \`${pattern}\`\n` +
@@ -423,7 +423,7 @@ const tempvoiceModule: BotModule = {
           const count = interaction.options.getInteger("count", true);
           const settings = await getSettings(moduleManager, guildId);
           settings.defaultUserLimit = count;
-          await appwrite.setModuleSettings(
+          await db.setModuleSettings(
             guildId,
             "tempvoice",
             settings as any,
@@ -446,11 +446,11 @@ const tempvoiceModule: BotModule = {
 
 export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
   const client = (moduleManager as any).client;
-  const appwrite = moduleManager.databaseService;
+  const db = moduleManager.databaseService;
 
   // ── Boot-time hydration: load all tracked temp channels from Appwrite ──
   try {
-    const records = await appwrite.getAllTempChannels();
+    const records = await db.getAllTempChannels();
     let orphaned = 0;
 
     for (const record of records) {
@@ -458,7 +458,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
       if (!guild) {
         // Guild no longer accessible — clean up record
         try {
-          await appwrite.deleteTempChannel(record.channel_id);
+          await db.deleteTempChannel(record.channel_id);
         } catch {}
         orphaned++;
         continue;
@@ -469,7 +469,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
       if (!channel) {
         // Channel was deleted while bot was offline — clean up record
         try {
-          await appwrite.deleteTempChannel(record.channel_id);
+          await db.deleteTempChannel(record.channel_id);
         } catch {}
         orphaned++;
         continue;
@@ -492,7 +492,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
         try {
           await channel.delete("Temp voice channel empty after bot restart");
           activeChannels.delete(record.channel_id);
-          await appwrite.deleteTempChannel(record.channel_id);
+          await db.deleteTempChannel(record.channel_id);
           moduleManager.logger.info(
             `[TempVoice] Cleaned up empty orphan channel: ${channel.name}`,
             record.guild_id,
@@ -524,7 +524,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
         const guildId = newState.guild.id;
 
         // Check if module is enabled for this guild
-        const isEnabled = await appwrite.isModuleEnabled(guildId, "tempvoice");
+        const isEnabled = await db.isModuleEnabled(guildId, "tempvoice");
         if (!isEnabled) return;
 
         // ── User joined a channel ──────────────────────────────────
@@ -586,7 +586,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
 
               // Persist to Appwrite
               try {
-                await appwrite.createTempChannel({
+                await db.createTempChannel({
                   guild_id: guildId,
                   channel_id: tempChannel.id,
                   owner_id: member.id,
@@ -627,7 +627,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
             // Channel already deleted
             activeChannels.delete(oldState.channelId);
             try {
-              await appwrite.deleteTempChannel(oldState.channelId);
+              await db.deleteTempChannel(oldState.channelId);
             } catch {}
             return;
           }
@@ -652,7 +652,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
 
             activeChannels.delete(oldState.channelId);
             try {
-              await appwrite.deleteTempChannel(oldState.channelId);
+              await db.deleteTempChannel(oldState.channelId);
             } catch (err) {
               moduleManager.logger.error(
                 "Failed to remove Appwrite record",
@@ -674,7 +674,7 @@ export async function registerTempVoiceEvents(moduleManager: ModuleManager) {
     if (activeChannels.has(channel.id)) {
       activeChannels.delete(channel.id);
       try {
-        await appwrite.deleteTempChannel(channel.id);
+        await db.deleteTempChannel(channel.id);
       } catch {}
     }
   });

@@ -211,8 +211,8 @@ const buttonRolesModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
-    const raw = await appwrite.getModuleSettings(guildId, "reaction-roles");
+    const db = moduleManager.databaseService;
+    const raw = await db.getModuleSettings(guildId, "reaction-roles");
     const settings =
       parseSettings(ButtonRolesSettingsSchema, raw, "reaction-roles", guildId) ??
       { panels: [] };
@@ -265,12 +265,12 @@ const buttonRolesModule: BotModule = {
           guildId,
         );
         settings.panels[panelIndex] = updated;
-        await appwrite.setModuleSettings(
+        await db.setModuleSettings(
           guildId,
           "reaction-roles",
           settings,
         );
-        await appwrite.setModuleStatus(guildId, "reaction-roles", true);
+        await db.setModuleStatus(guildId, "reaction-roles", true);
         await interaction.editReply(
           `✅ Panel **${panel.name}** deployed in <#${channel.id}>.`,
         );
@@ -289,7 +289,7 @@ const buttonRolesModule: BotModule = {
     }
 
     if (subcommand === "disable") {
-      await appwrite.setModuleStatus(guildId, "reaction-roles", false);
+      await db.setModuleStatus(guildId, "reaction-roles", false);
       await interaction.editReply("✅ Button roles module disabled.");
     }
   },
@@ -307,8 +307,8 @@ const buttonRolesModule: BotModule = {
     if (parts.length < 3) return;
     const [, panelId, entryId] = parts;
 
-    const appwrite = moduleManager.databaseService;
-    const isEnabled = await appwrite.isModuleEnabled(guildId, "reaction-roles");
+    const db = moduleManager.databaseService;
+    const isEnabled = await db.isModuleEnabled(guildId, "reaction-roles");
     if (!isEnabled) {
       await interaction.reply({
         content: "This panel is currently disabled.",
@@ -317,7 +317,7 @@ const buttonRolesModule: BotModule = {
       return;
     }
 
-    const raw = await appwrite.getModuleSettings(guildId, "reaction-roles");
+    const raw = await db.getModuleSettings(guildId, "reaction-roles");
     const settings = parseSettings(
       ButtonRolesSettingsSchema,
       raw,
@@ -354,11 +354,11 @@ export function registerReactionRolesEvents(moduleManager: ModuleManager) {
     const guildId = interaction.guildId;
     if (!guildId) return;
 
-    const appwrite = moduleManager.databaseService;
-    const isEnabled = await appwrite.isModuleEnabled(guildId, "reaction-roles");
+    const db = moduleManager.databaseService;
+    const isEnabled = await db.isModuleEnabled(guildId, "reaction-roles");
     if (!isEnabled) return;
 
-    const raw = await appwrite.getModuleSettings(guildId, "reaction-roles");
+    const raw = await db.getModuleSettings(guildId, "reaction-roles");
     const settings = parseSettings(
       ButtonRolesSettingsSchema,
       raw,

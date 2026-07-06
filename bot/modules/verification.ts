@@ -162,7 +162,7 @@ const verificationModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     if (subcommand === "deploy") {
       const channel = interaction.options.getChannel(
@@ -170,7 +170,7 @@ const verificationModule: BotModule = {
         true,
       ) as TextChannel;
 
-      const rawSettings = await appwrite.getModuleSettings(
+      const rawSettings = await db.getModuleSettings(
         guildId,
         "verification",
       );
@@ -195,8 +195,8 @@ const verificationModule: BotModule = {
           moduleManager,
           guildId,
         );
-        await appwrite.setModuleSettings(guildId, "verification", updated);
-        await appwrite.setModuleStatus(guildId, "verification", true);
+        await db.setModuleSettings(guildId, "verification", updated);
+        await db.setModuleStatus(guildId, "verification", true);
         await interaction.editReply(
           `✅ Verification panel deployed in <#${channel.id}>.`,
         );
@@ -212,7 +212,7 @@ const verificationModule: BotModule = {
         );
       }
     } else if (subcommand === "disable") {
-      await appwrite.setModuleStatus(guildId, "verification", false);
+      await db.setModuleStatus(guildId, "verification", false);
       await interaction.editReply("✅ Verification system disabled.");
     }
   },
@@ -225,8 +225,8 @@ const verificationModule: BotModule = {
     const guildId = interaction.guildId;
     if (!guildId) return;
 
-    const appwrite = moduleManager.databaseService;
-    const isEnabled = await appwrite.isModuleEnabled(guildId, "verification");
+    const db = moduleManager.databaseService;
+    const isEnabled = await db.isModuleEnabled(guildId, "verification");
     if (!isEnabled) {
       await interaction.reply({
         content: "Verification is disabled.",
@@ -235,7 +235,7 @@ const verificationModule: BotModule = {
       return;
     }
 
-    const rawSettings = await appwrite.getModuleSettings(
+    const rawSettings = await db.getModuleSettings(
       guildId,
       "verification",
     );

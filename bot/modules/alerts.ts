@@ -93,8 +93,8 @@ const alertsModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
-    const rawSettings = await appwrite.getModuleSettings(guildId, "alerts");
+    const db = moduleManager.databaseService;
+    const rawSettings = await db.getModuleSettings(guildId, "alerts");
     const settings = parseSettings(AlertsSettingsSchema, rawSettings, "alerts", guildId) || { alerts: [] };
 
     if (subcommand === "add") {
@@ -114,8 +114,8 @@ const alertsModule: BotModule = {
         settings.alerts.push(newAlert);
       }
 
-      await appwrite.setModuleSettings(guildId, "alerts", settings);
-      await appwrite.setModuleStatus(guildId, "alerts", true);
+      await db.setModuleSettings(guildId, "alerts", settings);
+      await db.setModuleStatus(guildId, "alerts", true);
 
       await interaction.editReply(`✅ Configured **${platform}** alerts for \`${handle}\` → <#${channel.id}>. *(Polling worker implementation pending)*`);
       moduleManager.logger.info(`Added alert for ${platform}:${handle} in ${channel.id}`, guildId, "alerts");
@@ -130,7 +130,7 @@ const alertsModule: BotModule = {
       if (settings.alerts.length === count) {
         await interaction.editReply(`❌ Could not find a **${platform}** alert for \`${handle}\`.`);
       } else {
-        await appwrite.setModuleSettings(guildId, "alerts", settings);
+        await db.setModuleSettings(guildId, "alerts", settings);
         await interaction.editReply(`✅ Removed **${platform}** alert for \`${handle}\`.`);
       }
 

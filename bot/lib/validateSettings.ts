@@ -16,7 +16,7 @@ import type * as z from "zod";
  * Safely parse raw settings data against a Zod schema.
  *
  * @param schema  - The Zod schema to validate against
- * @param raw     - The raw data from Appwrite (may be `null` / `undefined`)
+ * @param raw     - The raw data from the database (may be `null` / `undefined`)
  * @param module  - Human-readable module name for log messages
  * @param guildId - Optional guild ID for contextual logging
  * @returns The parsed settings if valid, or `undefined` on failure.

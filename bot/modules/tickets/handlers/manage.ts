@@ -33,8 +33,8 @@ export async function handleAdd(
     return;
   }
 
-  const appwrite = moduleManager.databaseService;
-  const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+  const db = moduleManager.databaseService;
+  const rawSettings = await db.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return;
 
@@ -75,8 +75,8 @@ export async function handleRemove(
     return;
   }
 
-  const appwrite = moduleManager.databaseService;
-  const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+  const db = moduleManager.databaseService;
+  const rawSettings = await db.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return;
 
@@ -123,8 +123,8 @@ export async function handleRename(
   const thread = channel as ThreadChannel;
   const newName = interaction.options.getString("name", true).trim().substring(0, 96);
 
-  const appwrite = moduleManager.databaseService;
-  const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+  const db = moduleManager.databaseService;
+  const rawSettings = await db.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return;
 
@@ -165,8 +165,8 @@ export async function handlePriority(
     return;
   }
 
-  const appwrite = moduleManager.databaseService;
-  const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+  const db = moduleManager.databaseService;
+  const rawSettings = await db.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return;
 

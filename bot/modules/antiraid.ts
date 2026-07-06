@@ -106,7 +106,7 @@ const antiraidModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     if (subcommand === "config") {
       const threshold = interaction.options.getInteger("threshold", true);
@@ -121,8 +121,8 @@ const antiraidModule: BotModule = {
         alertChannelId: alertChannel ? alertChannel.id : undefined,
       };
 
-      await appwrite.setModuleSettings(guildId, "antiraid", settings);
-      await appwrite.setModuleStatus(guildId, "antiraid", true);
+      await db.setModuleSettings(guildId, "antiraid", settings);
+      await db.setModuleStatus(guildId, "antiraid", true);
 
       await interaction.editReply(`✅ Anti-Raid configured! Trigger: **${threshold} joins in ${window}s**. Action: **${action}**.`);
 
@@ -158,7 +158,7 @@ const antiraidModule: BotModule = {
       moduleManager.logger.info(`Lockdown lifted by ${interaction.user.tag}, ${restored} channels restored.`, guildId, "antiraid");
 
     } else if (subcommand === "disable") {
-      await appwrite.setModuleStatus(guildId, "antiraid", false);
+      await db.setModuleStatus(guildId, "antiraid", false);
       await interaction.editReply("✅ Anti-Raid protection disabled.");
     }
   },
@@ -172,12 +172,12 @@ export function registerAntiRaidEvents(moduleManager: ModuleManager) {
   client.on("guildMemberAdd", async (member: GuildMember) => {
     try {
       const guildId = member.guild.id;
-      const appwrite = moduleManager.databaseService;
+      const db = moduleManager.databaseService;
 
-      const isEnabled = await appwrite.isModuleEnabled(guildId, "antiraid");
+      const isEnabled = await db.isModuleEnabled(guildId, "antiraid");
       if (!isEnabled) return;
 
-      const rawSettings = await appwrite.getModuleSettings(guildId, "antiraid");
+      const rawSettings = await db.getModuleSettings(guildId, "antiraid");
       const settings = parseSettings(AntiRaidSettingsSchema, rawSettings, "antiraid", guildId);
       if (!settings) return;
 

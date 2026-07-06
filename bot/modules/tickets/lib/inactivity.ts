@@ -30,17 +30,17 @@ const SWEEP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 // ── Main sweep ────────────────────────────────────────────────────────────────
 
 async function runSweep(client: Client, moduleManager: ModuleManager): Promise<void> {
-  const appwrite = moduleManager.databaseService;
+  const db = moduleManager.databaseService;
 
   for (const guild of client.guilds.cache.values()) {
     try {
       // Load and validate settings for this guild
-      const rawSettings = await appwrite.getModuleSettings(guild.id, "tickets");
+      const rawSettings = await db.getModuleSettings(guild.id, "tickets");
       const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guild.id);
       if (!settings || settings.inactivityHours <= 0) continue;
 
       // Check module is enabled for this guild
-      const isEnabled = await appwrite.isModuleEnabled(guild.id, "tickets");
+      const isEnabled = await db.isModuleEnabled(guild.id, "tickets");
       if (!isEnabled) continue;
 
       const cutoffMs = settings.inactivityHours * 60 * 60 * 1000;

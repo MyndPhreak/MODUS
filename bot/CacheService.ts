@@ -5,7 +5,7 @@
  * Map so hot-path reads stay synchronous and sub-millisecond. When a shard
  * writes, it publishes an invalidation event; other shards drop the key
  * from their L1 and the next read re-fetches from the source of truth
- * (Postgres / Appwrite). Per-shard TTL still bounds how stale a value can
+ * (Postgres). Per-shard TTL still bounds how stale a value can
  * be even if pub/sub is down.
  *
  * Drop-in replacement for the old in-line `TTLCache`: same method shapes

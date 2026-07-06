@@ -64,8 +64,8 @@ manager.spawn().then(() => {
   const redisClients = createRedisClients();
   const eventBus = redisClients ? new EventBus(redisClients) : null;
 
-  const appwrite = new DatabaseService({ eventBus });
-  const alertsWorker = new AlertsWorker(appwrite, 10); // 10-minute polling interval
+  const db = new DatabaseService({ eventBus });
+  const alertsWorker = new AlertsWorker(db, 10); // 10-minute polling interval
   alertsWorker.start();
 
   // Graceful shutdown

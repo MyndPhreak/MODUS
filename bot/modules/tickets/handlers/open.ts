@@ -46,8 +46,8 @@ async function loadSettings(
   const cached = settingsCache.get(guildId);
   if (cached && Date.now() < cached.expiresAt) return cached;
 
-  const appwrite = moduleManager.databaseService;
-  const rawSettings = await appwrite.getModuleSettings(guildId, "tickets");
+  const db = moduleManager.databaseService;
+  const rawSettings = await db.getModuleSettings(guildId, "tickets");
   const settings = parseSettings(TicketsSettingsSchema, rawSettings, "tickets", guildId);
   if (!settings) return null;
 

@@ -203,7 +203,7 @@ const triggersModule: BotModule = {
       return;
     }
 
-    const appwrite = moduleManager.databaseService;
+    const db = moduleManager.databaseService;
 
     switch (subcommand) {
       // ── Create ──────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ const triggersModule: BotModule = {
         const channel = interaction.options.getChannel("channel", true);
 
         // Check for duplicate name
-        const existing = await appwrite.listTriggers(guildId);
+        const existing = await db.listTriggers(guildId);
         if (
           existing.some((t: any) => t.name.toLowerCase() === name.toLowerCase())
         ) {
@@ -237,7 +237,7 @@ const triggersModule: BotModule = {
         const secret = generateSecret();
         const webhookUrl = buildWebhookUrl(secret);
 
-        await appwrite.createTrigger({
+        await db.createTrigger({
           guild_id: guildId,
           name,
           secret,
@@ -265,7 +265,7 @@ const triggersModule: BotModule = {
 
       // ── List ────────────────────────────────────────────────────────
       case "list": {
-        const triggers = await appwrite.listTriggers(guildId);
+        const triggers = await db.listTriggers(guildId);
 
         if (triggers.length === 0) {
           await interaction.editReply(
@@ -291,7 +291,7 @@ const triggersModule: BotModule = {
       // ── Delete ──────────────────────────────────────────────────────
       case "delete": {
         const name = interaction.options.getString("name", true);
-        const triggers = await appwrite.listTriggers(guildId);
+        const triggers = await db.listTriggers(guildId);
         const trigger = triggers.find(
           (t: any) => t.name.toLowerCase() === name.toLowerCase(),
         );
@@ -301,7 +301,7 @@ const triggersModule: BotModule = {
           return;
         }
 
-        await appwrite.deleteTrigger(trigger.$id);
+        await db.deleteTrigger(trigger.$id);
         await interaction.editReply(`🗑️ Trigger **${trigger.name}** deleted.`);
         break;
       }
@@ -309,7 +309,7 @@ const triggersModule: BotModule = {
       // ── Test ────────────────────────────────────────────────────────
       case "test": {
         const name = interaction.options.getString("name", true);
-        const triggers = await appwrite.listTriggers(guildId);
+        const triggers = await db.listTriggers(guildId);
         const trigger = triggers.find(
           (t: any) => t.name.toLowerCase() === name.toLowerCase(),
         );
@@ -370,7 +370,7 @@ const triggersModule: BotModule = {
           return;
         }
 
-        const triggers = await appwrite.listTriggers(guildId);
+        const triggers = await db.listTriggers(guildId);
         const trigger = triggers.find(
           (t: any) => t.name.toLowerCase() === name.toLowerCase(),
         );
@@ -380,7 +380,7 @@ const triggersModule: BotModule = {
           return;
         }
 
-        await appwrite.updateTrigger(trigger.$id, { embed_template: json });
+        await db.updateTrigger(trigger.$id, { embed_template: json });
         await interaction.editReply(
           `✅ Embed template updated for **${trigger.name}**.`,
         );
@@ -402,7 +402,7 @@ const triggersModule: BotModule = {
           return;
         }
 
-        const triggers = await appwrite.listTriggers(guildId);
+        const triggers = await db.listTriggers(guildId);
         const trigger = triggers.find(
           (t: any) => t.name.toLowerCase() === name.toLowerCase(),
         );
@@ -412,7 +412,7 @@ const triggersModule: BotModule = {
           return;
         }
 
-        await appwrite.updateTrigger(trigger.$id, { filters: json });
+        await db.updateTrigger(trigger.$id, { filters: json });
         await interaction.editReply(
           `✅ Filters updated for **${trigger.name}**.`,
         );

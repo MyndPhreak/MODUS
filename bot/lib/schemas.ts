@@ -1,5 +1,5 @@
 /**
- * Zod v4 schemas for every module's Appwrite settings.
+ * Zod v4 schemas for every module's stored settings.
  *
  * Each schema mirrors the module's DEFAULT_SETTINGS / interface and adds
  * `.default()` on every field so that `schema.parse({})` always returns
@@ -356,7 +356,7 @@ export type TicketsSettings = TicketsSettingsType;
 
 // ── Button Roles (replaces Reaction Roles) ─────────────────────────
 //
-// The Appwrite module key remains "reaction-roles" for backward compat.
+// The stored module key remains "reaction-roles" for backward compat.
 // The UI / bot now calls this feature "Button Roles".
 
 export const ButtonRoleEntrySchema = z.object({

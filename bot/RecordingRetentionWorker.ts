@@ -1,9 +1,9 @@
 /**
  * Nightly sweep that deletes recordings older than RECORDING_RETENTION_DAYS.
  *
- * Controls cost by ensuring stale files don't accumulate indefinitely. Works
- * the same whether recordings live in R2 or Appwrite Storage — delegates to
- * DatabaseService.deleteRecording which routes each file to its backend.
+ * Controls cost by ensuring stale files don't accumulate indefinitely.
+ * Delegates to DatabaseService.deleteRecording, which removes the DB row
+ * and the recording's R2 objects.
  *
  * Set RECORDING_RETENTION_DAYS=0 (or unset) to disable.
  */
@@ -20,7 +20,7 @@ export class RecordingRetentionWorker {
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
-    private appwrite: DatabaseService,
+    private db: DatabaseService,
     private logger: Logger,
     private retentionDays: number,
   ) {}
@@ -36,7 +36,7 @@ export class RecordingRetentionWorker {
     }
 
     // Stagger the first run by 0–60 min so sharded deployments don't all hit
-    // Appwrite at once on restart.
+    // the backend at once on restart.
     const jitter = Math.floor(Math.random() * 60 * 60 * 1000);
     setTimeout(() => {
       this.runSweep().catch((err) => {
@@ -67,7 +67,7 @@ export class RecordingRetentionWorker {
     const cutoff = new Date(Date.now() - this.retentionDays * ONE_DAY_MS);
     const cutoffIso = cutoff.toISOString();
 
-    const recordings = await this.appwrite.getRecordingsOlderThan(
+    const recordings = await this.db.getRecordingsOlderThan(
       cutoffIso,
       SWEEP_BATCH_LIMIT,
     );
@@ -91,7 +91,7 @@ export class RecordingRetentionWorker {
     let failed = 0;
     for (const rec of recordings) {
       try {
-        await this.appwrite.deleteRecording(rec.$id);
+        await this.db.deleteRecording(rec.$id);
         deleted++;
       } catch (err) {
         failed++;

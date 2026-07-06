@@ -595,7 +595,7 @@ async function executeActions(
               await logChannel.send({ embeds: [embed] });
             }
           }
-          // Also log to Appwrite
+          // Also persist to the server log
           moduleManager.logger.info(
             `[AutoMod] Rule "${rule.name}" triggered on ${member.user.tag}: ${actions.map((a) => a.type).join(", ")}`,
             guildId,
