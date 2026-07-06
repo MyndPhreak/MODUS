@@ -1,11 +1,50 @@
+import type { GuildConfigDoc, ModuleDoc } from "@modus/db";
+
+/** Minimal guild identity for header/breadcrumb display. */
+export interface DashboardGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+/** Projection returned by GET /api/servers/by-guild-ids. */
+export interface ServerSummary {
+  $id: string;
+  guild_id: string;
+  name: string;
+  icon: string | null;
+  owner_id: string | null;
+  admin_user_ids: string[];
+  dashboard_role_ids: string[];
+  premium: boolean;
+}
+
+/** Text channel as returned by GET /api/discord/channels. */
+export interface DiscordChannel {
+  id: string;
+  name: string;
+  type: number;
+  position: number;
+  parentId: string | null;
+}
+
+/** Role as returned by GET /api/discord/roles. */
+export interface DiscordRole {
+  id: string;
+  name: string;
+  color: number;
+  position: number;
+  managed: boolean;
+  permissions: string;
+}
 
 export interface ServerSettingsState {
-  guild: any;
-  modules: any[];
-  guildConfigs: any[];
-  channels: any[];
+  guild: DashboardGuild | null;
+  modules: ModuleDoc[];
+  guildConfigs: GuildConfigDoc[];
+  channels: DiscordChannel[];
   channelsLoading: boolean;
-  roles: any[];
+  roles: DiscordRole[];
   rolesLoading: boolean;
   loading: boolean;
   unauthorized: boolean;
@@ -44,25 +83,34 @@ export function useServerSettings(guildId: string) {
     return config ? config.enabled : true;
   };
 
+  // Keep in sync with web/app/pages/dashboard/server/[guild_id]/modules/*.vue
+  // (excluding index.vue, which is the grid itself). Modules without a
+  // dedicated settings page — help, ping, reload, say, shard-info — are
+  // intentionally omitted.
+  const MODULE_SETTINGS_PAGES = new Set([
+    "music",
+    "moderation",
+    "recording",
+    "milestones",
+    "automod",
+    "logging",
+    "triggers",
+    "ai",
+    "antiraid",
+    "verification",
+    "tickets",
+    "alerts",
+    "tempvoice",
+    "reaction-roles",
+    "events",
+    "polls",
+    "embeds",
+    "tags",
+    "welcome",
+  ]);
+
   const hasModuleSettings = (moduleName: string): boolean => {
-    return [
-      "music",
-      "moderation",
-      "recording",
-      "milestones",
-      "automod",
-      "logging",
-      "triggers",
-      "ai",
-      "antiraid",
-      "verification",
-      "tickets",
-      "alerts",
-      "tempvoice",
-      "reaction-roles",
-      "events",
-      "polls",
-    ].includes(moduleName.toLowerCase());
+    return MODULE_SETTINGS_PAGES.has(moduleName.toLowerCase());
   };
 
   const toggleModule = async (moduleName: string, enabled: boolean) => {
@@ -82,11 +130,14 @@ export function useServerSettings(guildId: string) {
         existing.enabled = enabled;
       } else {
         state.value.guildConfigs.push({
+          id: `${guildId}:${name}`,
           $id: `${guildId}:${name}`,
           guildId,
           moduleName: name,
           enabled,
           settings: "{}",
+          updatedAt: new Date(),
+          createdAt: new Date(),
         });
       }
       toast.add({
@@ -125,11 +176,14 @@ export function useServerSettings(guildId: string) {
         existing.settings = settingsJson;
       } else {
         state.value.guildConfigs.push({
+          id: `${guildId}:${name}`,
           $id: `${guildId}:${name}`,
           guildId,
           moduleName: name,
           enabled: true,
           settings: settingsJson,
+          updatedAt: new Date(),
+          createdAt: new Date(),
         });
       }
       toast.add({
@@ -168,9 +222,10 @@ export function useServerSettings(guildId: string) {
     if (state.value.channels.length > 0) return;
     state.value.channelsLoading = true;
     try {
-      const response = (await $fetch("/api/discord/channels", {
-        params: { guild_id: guildId },
-      })) as any;
+      const response = await $fetch<{ channels: DiscordChannel[] }>(
+        "/api/discord/channels",
+        { params: { guild_id: guildId } },
+      );
       state.value.channels = response.channels || [];
     } catch (error) {
       console.error("Error loading channels:", error);
@@ -189,9 +244,10 @@ export function useServerSettings(guildId: string) {
     if (state.value.roles.length > 0) return;
     state.value.rolesLoading = true;
     try {
-      const response = (await $fetch("/api/discord/roles", {
-        params: { guild_id: guildId },
-      })) as any;
+      const response = await $fetch<{ roles: DiscordRole[] }>(
+        "/api/discord/roles",
+        { params: { guild_id: guildId } },
+      );
       state.value.roles = response.roles || [];
     } catch (error) {
       console.error("Error loading roles:", error);
@@ -225,7 +281,7 @@ export function useServerSettings(guildId: string) {
   // ── Initialization ──
   const fetchModules = async () => {
     try {
-      state.value.modules = await $fetch<any[]>("/api/modules");
+      state.value.modules = await $fetch<ModuleDoc[]>("/api/modules");
     } catch (error) {
       console.error("Error fetching modules:", error);
     }
@@ -233,7 +289,7 @@ export function useServerSettings(guildId: string) {
 
   const fetchGuildConfigs = async () => {
     try {
-      state.value.guildConfigs = await $fetch<any[]>(
+      state.value.guildConfigs = await $fetch<GuildConfigDoc[]>(
         `/api/guild-configs?guild_id=${encodeURIComponent(guildId)}`,
       );
     } catch (error) {
@@ -241,123 +297,71 @@ export function useServerSettings(guildId: string) {
     }
   };
 
+  /**
+   * Gate access the same way the write-path APIs do (requireGuildManager:
+   * servers.owner_id / admin_user_ids), instead of re-deriving Discord
+   * ADMINISTRATOR / dashboard_role_ids client-side. That drift used to let
+   * a Discord admin or dashboard-role user see a fully editable settings
+   * page whose saves then silently 403'd, because the server-side gate
+   * didn't recognize either signal. Reconciliation now goes through
+   * POST /api/servers/join — the single place that logic lives — which
+   * promotes a qualifying user into admin_user_ids on success.
+   */
   const checkPermissions = async () => {
     try {
-      let discordGuilds: any[] = [];
-
+      let serverDoc: ServerSummary | null = null;
       try {
-        const response = await fetch("/api/discord/guilds");
-        if (response.ok) {
-          discordGuilds = await response.json();
-        }
-      } catch {
-        // Server API failed
-      }
-
-      if (!discordGuilds || discordGuilds.length === 0) {
-        discordGuilds = userStore.userGuilds;
-      }
-
-      // Check Discord ADMINISTRATOR permission first
-      let currentGuild: any = null;
-      let hasDiscordAdmin = false;
-      if (discordGuilds && discordGuilds.length > 0) {
-        currentGuild = discordGuilds.find((g: any) => g.id === guildId);
-        if (currentGuild) {
-          const ADMIN_PERMISSION = 0x8;
-          const permissions = BigInt(currentGuild.permissions);
-          hasDiscordAdmin =
-            (permissions & BigInt(ADMIN_PERMISSION)) ===
-            BigInt(ADMIN_PERMISSION);
-        }
-      }
-
-      // Load the server row for ownership + dashboard role data. Uses
-      // /api/servers/by-guild-ids because it's already the shared
-      // projection the UI needs; a dedicated by-id endpoint would be
-      // marginal value.
-      let serverDoc: any = null;
-      try {
-        const rows = await $fetch<any[]>(
+        const rows = await $fetch<ServerSummary[]>(
           `/api/servers/by-guild-ids?ids=${encodeURIComponent(guildId)}`,
         );
-        if (rows.length > 0) {
-          serverDoc = rows[0];
-          state.value.dashboardRoleIds = Array.isArray(
-            serverDoc.dashboard_role_ids,
-          )
-            ? serverDoc.dashboard_role_ids
-            : [];
-        }
+        serverDoc = rows[0] ?? null;
       } catch {
-        // Not registered yet or permission denied — fall through to the
-        // Discord-ADMIN check below.
+        // Not registered yet or permission denied.
       }
 
-      // Discord ADMINISTRATOR → full access
-      if (hasDiscordAdmin) {
-        state.value.isServerOwnerOrAdmin = true;
-        state.value.guild = currentGuild;
+      if (!serverDoc) {
+        state.value.unauthorized = true;
         return;
       }
 
-      // servers.owner_id / admin_user_ids → full access
-      if (serverDoc) {
-        const userId = userStore.user?.$id;
-        const isOwner = serverDoc.owner_id === userId;
-        const isAdmin =
-          Array.isArray(serverDoc.admin_user_ids) &&
-          userId &&
-          serverDoc.admin_user_ids.includes(userId);
+      state.value.dashboardRoleIds = serverDoc.dashboard_role_ids ?? [];
 
-        if (isOwner || isAdmin) {
-          state.value.isServerOwnerOrAdmin = true;
-          state.value.guild = currentGuild || {
-            id: serverDoc.$id,
-            name: serverDoc.name,
-            icon: null,
-            owner: isOwner,
-            permissions: "8",
-          };
-          return;
-        }
+      const userId = userStore.discordId;
+      const isOwner = !!userId && serverDoc.owner_id === userId;
+      const isAdmin =
+        !!userId && serverDoc.admin_user_ids.includes(userId);
 
-        // Fallback: check dashboard_role_ids — specific Discord roles
-        // that the server owner has granted dashboard access to
-        if (
-          state.value.dashboardRoleIds.length > 0 &&
-          userStore.discordId
-        ) {
-          try {
-            const memberResponse = await $fetch<{ roles: string[] }>(
-              "/api/discord/member-roles",
-              {
-                params: {
-                  guild_id: guildId,
-                  discord_uid: userStore.discordId,
-                },
-              },
-            );
+      if (isOwner || isAdmin) {
+        state.value.isServerOwnerOrAdmin = true;
+        state.value.guild = {
+          id: serverDoc.guild_id,
+          name: serverDoc.name,
+          icon: serverDoc.icon,
+        };
+        return;
+      }
 
-            const userRoles = memberResponse.roles || [];
-            const hasRole = userRoles.some((r) =>
-              state.value.dashboardRoleIds.includes(r),
-            );
-
-            if (hasRole) {
-              state.value.guild = currentGuild || {
-                id: serverDoc.$id,
-                name: serverDoc.name,
-                icon: serverDoc.icon || null,
-                owner: false,
-                permissions: "0",
-              };
-              return;
-            }
-          } catch {
-            // Bot may not be in the guild or member not found
-          }
-        }
+      // Not yet a recognized manager — ask the server whether this user
+      // qualifies (Discord ADMINISTRATOR or a configured dashboard role)
+      // and, if so, join them into admin_user_ids.
+      try {
+        const joined = await $fetch<{
+          guild_id: string;
+          name: string;
+          icon: string | null;
+        }>("/api/servers/join", {
+          method: "POST",
+          body: { guild_id: guildId },
+        });
+        state.value.isServerOwnerOrAdmin = true;
+        state.value.guild = {
+          id: joined.guild_id,
+          name: joined.name,
+          icon: joined.icon,
+        };
+        return;
+      } catch {
+        // Not a Discord admin and no matching dashboard role.
       }
 
       state.value.unauthorized = true;
