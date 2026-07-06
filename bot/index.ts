@@ -384,6 +384,10 @@ function gracefulShutdown(signal: string) {
   // Destroy the Discord client connection
   client.destroy();
 
+  // Drain buffered log rows so the last few seconds of logs survive the
+  // restart. Best-effort within the grace period below.
+  databaseService.flushLogs().catch(() => {});
+
   // Best-effort Redis quiesce. Matters most for leader election — quitting
   // lets the lease release via Lua CAS (inside LeaderElection.stop); without
   // this, the next leader waits the full TTL before picking up.

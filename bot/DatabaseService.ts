@@ -20,6 +20,7 @@ import {
   ModuleRepository,
   BotStatusRepository,
   LogRepository,
+  type LogInput,
   MilestoneUserRepository,
   AutomodRuleRepository,
   AIUsageLogRepository,
@@ -63,6 +64,15 @@ export class DatabaseService {
   private configCache: CacheService<any>;
   private eventBus: EventBus | null;
 
+  /**
+   * Pending log rows awaiting a batched insert. The realtime EventBus
+   * publish is not buffered — only Postgres persistence is deferred, so
+   * the dashboard SSE stream stays immediate.
+   */
+  private logBuffer: LogInput[] = [];
+  private static readonly LOG_FLUSH_INTERVAL_MS = 5_000;
+  private static readonly LOG_FLUSH_MAX_BUFFER = 50;
+
   constructor(opts: { eventBus?: EventBus | null } = {}) {
     if (!process.env.DATABASE_URL) {
       throw new Error(
@@ -100,6 +110,12 @@ export class DatabaseService {
     this.tempVoice = new TempVoiceChannelRepository(db);
     this.triggers = new TriggerRepository(db);
     this.transcripts = new TranscriptRepository(db);
+
+    // Periodic log flush. unref() so a pending timer never holds the
+    // process open during shutdown — gracefulShutdown calls flushLogs().
+    setInterval(() => {
+      void this.flushLogs();
+    }, DatabaseService.LOG_FLUSH_INTERVAL_MS).unref();
   }
 
   // ── Cache invalidation ─────────────────────────────────────────────────
@@ -357,21 +373,42 @@ export class DatabaseService {
     shardId?: number,
     source?: string,
   ): Promise<void> {
-    const logDoc = {
+    const timestamp = new Date();
+
+    this.publishLog({
       guildId,
       message,
       level,
-      timestamp: new Date().toISOString(),
+      timestamp: timestamp.toISOString(),
       shardId: shardId ?? null,
       source: source ?? null,
-    };
+    });
 
+    this.logBuffer.push({ guildId, message, level, shardId, source, timestamp });
+
+    // Errors flush eagerly so crash-adjacent context reaches Postgres;
+    // info/warn ride the 5s interval unless the buffer fills first.
+    if (
+      level === "error" ||
+      this.logBuffer.length >= DatabaseService.LOG_FLUSH_MAX_BUFFER
+    ) {
+      await this.flushLogs();
+    }
+  }
+
+  /**
+   * Drain the log buffer into a single multi-row insert. Never throws —
+   * a failed batch is reported to the console only. Also called from
+   * gracefulShutdown so buffered entries survive restarts.
+   */
+  async flushLogs(): Promise<void> {
+    if (this.logBuffer.length === 0) return;
+    const batch = this.logBuffer.splice(0);
     try {
-      await this.logs.log({ guildId, message, level, shardId, source });
-      this.publishLog(logDoc);
+      await this.logs.logBatch(batch);
     } catch (error) {
       console.error(
-        `[DatabaseService] logServerMessage failed for ${guildId}:`,
+        `[DatabaseService] log flush failed (${batch.length} entries):`,
         error,
       );
     }

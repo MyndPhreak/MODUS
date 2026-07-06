@@ -19,25 +19,36 @@ function toDoc(row: LogEntry): LogDoc {
   return { ...row, $id: row.id, guildId: row.guildId, shardId: row.shardId };
 }
 
+export interface LogInput {
+  guildId: string;
+  message: string;
+  level: "info" | "warn" | "error";
+  shardId?: number;
+  source?: string;
+  timestamp?: Date;
+}
+
 export class LogRepository {
   constructor(private db: Database) {}
 
-  async log(entry: {
-    guildId: string;
-    message: string;
-    level: "info" | "warn" | "error";
-    shardId?: number;
-    source?: string;
-    timestamp?: Date;
-  }): Promise<void> {
-    await this.db.insert(logs).values({
-      guildId: entry.guildId,
-      message: entry.message,
-      level: entry.level,
-      shardId: entry.shardId ?? null,
-      source: entry.source ?? null,
-      timestamp: entry.timestamp ?? new Date(),
-    });
+  async log(entry: LogInput): Promise<void> {
+    await this.logBatch([entry]);
+  }
+
+  /** Insert many entries in a single statement. Callers batch to keep the
+   *  insert-heavy log path from producing one round-trip per entry. */
+  async logBatch(entries: LogInput[]): Promise<void> {
+    if (entries.length === 0) return;
+    await this.db.insert(logs).values(
+      entries.map((entry) => ({
+        guildId: entry.guildId,
+        message: entry.message,
+        level: entry.level,
+        shardId: entry.shardId ?? null,
+        source: entry.source ?? null,
+        timestamp: entry.timestamp ?? new Date(),
+      })),
+    );
   }
 
   async listByGuild(guildId: string, limit = 100): Promise<LogDoc[]> {
