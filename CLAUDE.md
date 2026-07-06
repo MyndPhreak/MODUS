@@ -10,9 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`web/`** — Nuxt 4 dashboard (Vue 3, SSR for public pages, SPA for `/dashboard/**`).
 - **`packages/db/`** (`@modus/db`) — Shared Postgres schema, drizzle client, and repositories consumed by both `bot` and `web`.
 
-**Version:** 1.10.0 | **Runtime:** Node.js 22 | **Package Manager:** pnpm v10.9.0 (enforced via `packageManager` field — do not use npm or yarn).
+**Runtime:** Node.js 22 | **Package Manager:** pnpm v10.9.0 (enforced via `packageManager` field — do not use npm or yarn).
 
-> **Note:** The branch `refactor/drop-appwrite` is mid-migration from Appwrite to Postgres + R2. If something in the code still mentions Appwrite (env vars, comments, old scripts), cross-reference [docs/backend-migration-plan.md](docs/backend-migration-plan.md) and [docs/migration-runbook.md](docs/migration-runbook.md) before assuming it's current.
+> **Note:** The Appwrite → Postgres + R2 migration is complete on `main`. Remaining Appwrite references (the `node-appwrite` devDependency and `migrate:all` script in `packages/db`, comments about legacy file IDs) are transitional migration tooling, not live code paths — see [docs/migration-runbook.md](docs/migration-runbook.md) for history.
 
 ## Development Commands
 
@@ -50,10 +50,12 @@ Root has a `postinstall` that builds `@modus/db`, so `pnpm install` at the root 
 ### Docker
 
 ```sh
-docker compose up -d          # both services
+docker compose up -d          # everything
 docker compose up -d bot      # bot only (port 3005)
 docker compose up -d web      # web only (port 3000)
 ```
+
+Compose also provides the backing services: Postgres (5432) and Redis (6379) — handy for running just the datastores while developing bot/web natively. Env setup is documented in [INSTALLATION.md](INSTALLATION.md).
 
 No test runner is wired up (the `bot` `test` script is a placeholder). No linter or formatter is configured — match surrounding style.
 
@@ -61,15 +63,16 @@ No test runner is wired up (the `bot` `test` script is a placeholder). No linter
 
 ### Bot module system
 
-Each file in [bot/modules/](bot/modules/) exports a `Module` object consumed by [bot/ModuleManager.ts](bot/ModuleManager.ts):
+Each file in [bot/modules/](bot/modules/) (or subdirectory with an `index.ts`, e.g. `modules/tickets/`) default-exports a `BotModule` object consumed by [bot/ModuleManager.ts](bot/ModuleManager.ts):
 
-- **`data`** — `SlashCommandBuilder` command definition.
-- **`execute(interaction)`** — Command handler.
-- **`buttons` / `selectMenus` / `modals`** — Optional interaction handlers, routed by `customId` prefix.
-- **`events`** — Optional Discord.js event listeners.
-- **`autoDefer`** — Auto-reply-deferral toggle (default `true`).
+- **`data`** (single command) or **`commands`** (array) — slash command definition(s).
+- **`execute(interaction, moduleManager)`** — Command handler.
+- **`handleButton` / `handleSelectMenu` / `handleModal`** — Optional component handlers, routed by `customId` prefix (`moduleName:...`).
+- **`autocomplete`** — Optional autocomplete handler.
+- **`deferReply`** — Auto-deferral toggle (default `true`, ephemeral). **`skipDefer`** skips deferral entirely for APIs where the payload must be the initial reply (e.g. native polls).
+- **`registerEvents(moduleManager)`** — Optional one-time event wiring (client listeners, timers). Runs after the first `loadModules()` pass; guarded per module name so `/reload` can't double-register listeners.
 
-`ModuleManager` discovers modules at boot, registers their commands with Discord, and dispatches interactions. No manual registration step.
+`ModuleManager` discovers modules at boot, registers their commands with Discord (shard 0 only — commands are global, one PUT covers the fleet), and dispatches interactions. No manual registration step.
 
 ### Data layer
 
