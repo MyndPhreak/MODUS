@@ -420,6 +420,21 @@ export class ModuleManager {
     const module = resolveModule(commandName);
     const moduleName = resolveModuleName(commandName);
 
+    // Interactions can arrive between login and the end of loadModules()
+    // (extractor loading alone can take seconds). Without this reply the
+    // user just sees "The application did not respond".
+    if (!module && !this.modulesLoaded) {
+      try {
+        await interaction.reply({
+          content: "MODUS is still starting up — try again in a few seconds.",
+          flags: [MessageFlags.Ephemeral],
+        });
+      } catch {
+        /* interaction expired */
+      }
+      return;
+    }
+
     if (module) {
       // 1. Check global enablement first (local, no network call)
       const isGloballyEnabled = this.enabledModules.has(moduleName);
