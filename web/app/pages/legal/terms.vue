@@ -18,7 +18,7 @@
         <h1 class="text-3xl font-black text-white tracking-tight mb-2">
           Terms of Service
         </h1>
-        <p class="text-sm text-gray-500">Last updated: March 22, 2026</p>
+        <p class="text-sm text-gray-500">Last updated: July 6, 2026</p>
       </div>
 
       <!-- Content -->
@@ -195,7 +195,8 @@
           </h2>
           <p class="text-sm text-slate-400 leading-7">
             The AI Assistant module uses third-party AI providers (including
-            OpenAI, Anthropic, and Google) to process user messages. By using
+            Groq, OpenAI, Anthropic, and Google) to process user messages. By
+            using
             this module, you acknowledge that:
           </p>
           <ul class="mt-2 space-y-1">

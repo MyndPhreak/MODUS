@@ -18,7 +18,7 @@
         <h1 class="text-3xl font-black text-white tracking-tight mb-2">
           Privacy Policy
         </h1>
-        <p class="text-sm text-gray-500">Last updated: March 22, 2026</p>
+        <p class="text-sm text-gray-500">Last updated: July 6, 2026</p>
       </div>
 
       <!-- Content -->
@@ -106,7 +106,7 @@
               <strong class="text-slate-300">AI Conversations</strong> — When
               the AI Assistant module is used, MODUS reads the last 5 messages
               in the channel for context. These messages are sent to third-party
-              AI providers (OpenAI, Anthropic, Google) for processing.
+              AI providers (Groq, OpenAI, Anthropic, Google) for processing.
               <strong class="text-white"
                 >No conversation data is stored by MODUS.</strong
               >
@@ -190,8 +190,9 @@
               class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
             >
               <strong class="text-slate-300">Infrastructure Providers</strong> —
-              Data is stored on our hosting and database providers (such as
-              Appwrite) solely for Service operation
+              Configuration and account data is stored in our self-hosted
+              database. Voice recordings and welcome images are stored with
+              Cloudflare (R2 object storage) solely for Service operation
             </li>
             <li
               class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
@@ -382,6 +383,28 @@
                 class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
                 >Google Privacy Policy</a
               > (Gemini)
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <a
+                href="https://groq.com/privacy-policy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                >Groq Privacy Policy</a
+              >
+            </li>
+            <li
+              class="relative pl-5 text-sm text-slate-400 leading-7 before:content-[''] before:absolute before:left-0 before:top-[0.65rem] before:w-1.5 before:h-1.5 before:rounded-full before:bg-emerald-500/60"
+            >
+              <a
+                href="https://www.cloudflare.com/privacypolicy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                >Cloudflare Privacy Policy</a
+              > (R2 object storage)
             </li>
           </ul>
         </section>
