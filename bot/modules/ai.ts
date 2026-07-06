@@ -60,25 +60,32 @@ export interface AIModuleSettings {
 }
 
 interface ToolCall {
+  id: string;
   name: string;
   args: Record<string, unknown>;
 }
 
 interface LLMResponse {
   content: string;
-  tool_call?: ToolCall; // set when the model chose a tool instead of text
+  tool_calls?: ToolCall[]; // Array of tool calls made by the model
   input_tokens: number;
   output_tokens: number;
 }
 
 interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_calls?: ToolCall[]; // For assistant role
+  tool_call_id?: string;   // For tool role
+  name?: string;           // For tool role (OpenAI sometimes needs name, Anthropic needs tool_use_id mapped)
 }
 
 interface ConversationEntry {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  name?: string;
   timestamp: number; // Date.now()
 }
 
@@ -119,8 +126,11 @@ function pruneContext(
 
 function pushContext(
   channelId: string,
-  role: "user" | "assistant",
+  role: "user" | "assistant" | "tool",
   content: string,
+  tool_calls?: ToolCall[],
+  tool_call_id?: string,
+  name?: string,
 ) {
   if (!channelContext.has(channelId)) {
     channelContext.set(channelId, []);
@@ -128,6 +138,9 @@ function pushContext(
   channelContext.get(channelId)!.push({
     role,
     content,
+    tool_calls,
+    tool_call_id,
+    name,
     timestamp: Date.now(),
   });
 }
@@ -151,9 +164,17 @@ function buildContextMessages(
   // Walk backwards from most recent, collect entries that fit
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
-    const entryTokens = estimateTokens(entry.content);
+    // Add rough estimate for tool_calls size
+    const toolTokens = entry.tool_calls ? 50 * entry.tool_calls.length : 0;
+    const entryTokens = estimateTokens(entry.content || "") + toolTokens;
     if (tokensUsed + entryTokens > remainingTokenBudget) break;
-    result.unshift({ role: entry.role, content: entry.content });
+    result.unshift({
+      role: entry.role,
+      content: entry.content,
+      tool_calls: entry.tool_calls,
+      tool_call_id: entry.tool_call_id,
+      name: entry.name,
+    });
     tokensUsed += entryTokens;
   }
 
@@ -371,10 +392,36 @@ async function callLLM(
       model,
       max_tokens: maxOutputTokens,
       system: systemPrompt,
-      messages: conversationMessages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
+      messages: conversationMessages.map((m) => {
+        if (m.role === "tool") {
+          return {
+            role: "user" as const,
+            content: [{
+              type: "tool_result" as const,
+              tool_use_id: m.tool_call_id!,
+              content: m.content
+            }]
+          };
+        } else if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+          const contentBlocks: Anthropic.ContentBlock[] = [];
+          if (m.content) {
+            contentBlocks.push({ type: "text", text: m.content } as unknown as Anthropic.ContentBlock);
+          }
+          for (const tc of m.tool_calls) {
+            contentBlocks.push({
+              type: "tool_use",
+              id: tc.id,
+              name: tc.name,
+              input: tc.args
+            } as unknown as Anthropic.ContentBlock);
+          }
+          return { role: "assistant" as const, content: contentBlocks };
+        }
+        return {
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        };
+      }),
       ...(toolsEnabled ? { tools: ANTHROPIC_TOOLS } : {}),
     };
 
@@ -382,16 +429,17 @@ async function callLLM(
 
     // Check for tool use
     if (toolsEnabled && response.stop_reason === "tool_use") {
-      const toolBlock = response.content.find((b) => b.type === "tool_use") as
-        | Anthropic.ToolUseBlock
-        | undefined;
-      if (toolBlock) {
+      const toolBlocks = response.content.filter((b) => b.type === "tool_use") as Anthropic.ToolUseBlock[];
+      const textBlock = response.content.find((b) => b.type === "text") as Anthropic.TextBlock | undefined;
+      
+      if (toolBlocks.length > 0) {
         return {
-          content: "",
-          tool_call: {
-            name: toolBlock.name,
-            args: toolBlock.input as Record<string, unknown>,
-          },
+          content: textBlock?.text ?? "",
+          tool_calls: toolBlocks.map((b) => ({
+            id: b.id,
+            name: b.name,
+            args: b.input as Record<string, unknown>,
+          })),
           input_tokens: response.usage.input_tokens,
           output_tokens: response.usage.output_tokens,
         };
@@ -419,10 +467,30 @@ async function callLLM(
     max_tokens: maxOutputTokens,
     messages: [
       { role: "system" as const, content: systemPrompt },
-      ...conversationMessages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
+      ...conversationMessages.map((m) => {
+        if (m.role === "tool") {
+          return {
+            role: "tool" as const,
+            content: m.content,
+            tool_call_id: m.tool_call_id!,
+            name: m.name!
+          };
+        } else if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+          return {
+            role: "assistant" as const,
+            content: m.content || null,
+            tool_calls: m.tool_calls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.args) }
+            }))
+          };
+        }
+        return {
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        };
+      }),
     ],
     ...(toolsEnabled ? { tools: OPENAI_TOOLS, tool_choice: "auto" } : {}),
   });
@@ -436,22 +504,22 @@ async function callLLM(
     choice?.finish_reason === "tool_calls" &&
     choice.message?.tool_calls?.length
   ) {
-    const tc = choice.message.tool_calls[0];
-    const tcAny = tc as any;
-    let args: Record<string, unknown> = {};
-    try {
-      args = JSON.parse(tcAny.function?.arguments ?? "{}");
-    } catch {
-      // malformed JSON from model — treat as chat
-      _moduleManager?.logger.warn(
-        "Failed to parse tool call arguments",
-        undefined,
-        "ai",
-      );
-    }
+    const tool_calls = choice.message.tool_calls.map((tc: any) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(tc.function?.arguments ?? "{}");
+      } catch {
+        _moduleManager?.logger.warn("Failed to parse tool call arguments", undefined, "ai");
+      }
+      return {
+        id: tc.id,
+        name: tc.function?.name ?? tc.name ?? "",
+        args
+      };
+    });
     return {
-      content: "",
-      tool_call: { name: tcAny.function?.name ?? tcAny.name ?? "", args },
+      content: choice.message.content ?? "",
+      tool_calls,
       input_tokens: usage?.prompt_tokens ?? 0,
       output_tokens: usage?.completion_tokens ?? 0,
     };
@@ -521,34 +589,24 @@ async function performWebSearch(query: string): Promise<string> {
 
 // ── Tool Router ────────────────────────────────────────────────────
 // Executes the tool call returned by the LLM and returns the result.
-// directReply: send as-is to the user (music tools)
-// llmContext:  pass back to the LLM so it can synthesize a natural reply (web search)
-
-interface ToolExecResult {
-  directReply?: string;
-  llmContext?: string;
-}
 
 async function executeToolCall(
   toolCall: ToolCall,
   message: Message,
   guildId: string,
   moduleManager: ModuleManager,
-): Promise<ToolExecResult> {
+): Promise<string> {
   const { name, args } = toolCall;
 
   // ── Web search (no module dependency) ──────────────────────────
   if (name === "web_search") {
     const query = (args.query as string) || "";
-    if (!query) return { directReply: "❌ I need a search query to look something up." };
+    if (!query) return "❌ I need a search query to look something up.";
     if (!process.env.SEARXNG_URL) {
-      return {
-        directReply:
-          "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.",
-      };
+      return "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.";
     }
     const results = await performWebSearch(query);
-    return { llmContext: results.slice(0, 3200) };
+    return results.slice(0, 3200);
   }
 
   // All music tools require the music module to be enabled
@@ -557,22 +615,19 @@ async function executeToolCall(
     "music",
   );
   if (!isMusicEnabled) {
-    return {
-      directReply:
-        "❌ The music module is not enabled on this server. Ask an admin to enable it in the dashboard.",
-    };
+    return "❌ The music module is not enabled on this server. Ask an admin to enable it in the dashboard.";
   }
 
   switch (name) {
     case "play_music": {
       const query = (args.query as string) || "";
-      if (!query) return { directReply: "❌ I need a song name or URL to play something." };
+      if (!query) return "❌ I need a song name or URL to play something.";
 
       // Resolve the user's voice channel from the message member
       const member = message.member as GuildMember | null;
       const voiceChannel = member?.voice?.channel;
       if (!voiceChannel) {
-        return { directReply: "❌ You need to be in a voice channel for me to play music!" };
+        return "❌ You need to be in a voice channel for me to play music!";
       }
 
       const result = await musicPlay(
@@ -583,57 +638,55 @@ async function executeToolCall(
         moduleManager,
         message.channel as any,
       );
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "skip_track": {
       const result = await musicSkip(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "stop_music": {
       const result = await musicStop(guildId, moduleManager);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "pause_music": {
       const result = await musicPause(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "resume_music": {
       const result = await musicResume(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "set_volume": {
       const level =
         typeof args.level === "number" ? args.level : Number(args.level);
       if (isNaN(level))
-        return { directReply: "❌ Please specify a valid volume level (1–100)." };
+        return "❌ Please specify a valid volume level (1–100).";
       const result = await musicSetVolume(guildId, level, moduleManager);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "get_queue": {
       const result = await musicGetQueue(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "get_nowplaying": {
       const result = await musicGetNowPlaying(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     case "shuffle_queue": {
       const result = await musicShuffle(guildId);
-      return { directReply: result.message };
+      return result.message;
     }
 
     default:
-      return {
-        directReply: `❓ I tried to use an unknown tool: \`${name}\`. That's a bug — please report it!`,
-      };
+      return `❓ I tried to use an unknown tool: \`${name}\`. That's a bug — please report it!`;
   }
 }
 
@@ -970,92 +1023,92 @@ export function registerAIEvents(moduleManager: ModuleManager) {
 
       // Add the new user message
       llmMessages.push({ role: "user", content: trimmedMessage });
+      const newMessagesStartIndex = llmMessages.length - 1;
 
-      // ─ Call the LLM ─────────────────────────────────────────────
-      moduleManager.logger.info(
-        `Calling LLM: provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}, messages=${llmMessages.length}`,
-        guildId,
-        "ai",
-      );
-
-      const result = await callLLM(
-        settings.aiProvider,
-        apiKey,
-        settings.aiModel,
-        llmMessages,
-        settings.maxOutputTokens,
-        settings.aiBaseUrl || undefined,
-        settings.toolUseEnabled,
-      );
-
-      // ─ Handle tool call ──────────────────────────────────────────
-      let reply: string;
+      // ─ Agent Loop ─────────────────────────────────────────────
+      let reply = "";
       let action: "chat" | "tool_use" = "chat";
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let iterations = 0;
+      const MAX_ITERATIONS = 5;
 
-      if (result.tool_call) {
-        action = "tool_use";
+      while (iterations < MAX_ITERATIONS) {
+        iterations++;
+
         moduleManager.logger.info(
-          `[AI] Tool call: ${result.tool_call.name}(${JSON.stringify(result.tool_call.args)}) for ${message.author.tag}`,
+          `Calling LLM (iter ${iterations}): provider=${settings.aiProvider}, model=${settings.aiModel}, baseUrl=${settings.aiBaseUrl || "(default)"}, toolUse=${settings.toolUseEnabled}, messages=${llmMessages.length}`,
           guildId,
           "ai",
         );
 
-        try {
-          const toolResult = await executeToolCall(
-            result.tool_call,
-            message,
-            guildId,
-            moduleManager,
-          );
+        const result = await callLLM(
+          settings.aiProvider,
+          apiKey,
+          settings.aiModel,
+          llmMessages,
+          settings.maxOutputTokens,
+          settings.aiBaseUrl || undefined,
+          settings.toolUseEnabled,
+        );
 
-          if (toolResult.directReply) {
-            // Music tools and error cases — send as-is
-            reply = toolResult.directReply.slice(0, 1990);
-          } else if (toolResult.llmContext) {
-            // Web search — make a second LLM call to synthesize the results
-            if ("sendTyping" in message.channel) {
-              await message.channel.sendTyping().catch(() => {});
-            }
+        totalInputTokens += result.input_tokens;
+        totalOutputTokens += result.output_tokens;
 
-            const searchSystemPrompt =
-              effectiveSystemPrompt +
-              "\n\nYou just performed a web search. Here are the results:\n\n" +
-              toolResult.llmContext +
-              "\n\nUse these search results to answer the user's question. Cite sources (title + URL) when relevant. Be concise.";
+        if (result.tool_calls && result.tool_calls.length > 0) {
+          action = "tool_use";
+          
+          // Append the assistant's tool calls to the message history
+          llmMessages.push({
+            role: "assistant",
+            content: result.content || "",
+            tool_calls: result.tool_calls
+          });
 
-            const followUpMessages: ChatMessage[] = [
-              { role: "system", content: searchSystemPrompt },
-              ...llmMessages.filter((m) => m.role !== "system"),
-            ];
-
-            const followUp = await callLLM(
-              settings.aiProvider,
-              apiKey,
-              settings.aiModel,
-              followUpMessages,
-              settings.maxOutputTokens,
-              settings.aiBaseUrl || undefined,
-              false, // no tools on follow-up to prevent recursion
+          // Execute all tools in parallel
+          const toolPromises = result.tool_calls.map(async (tc) => {
+            moduleManager.logger.info(
+              `[AI] Tool call: ${tc.name}(${JSON.stringify(tc.args)}) for ${message.author.tag}`,
+              guildId,
+              "ai",
             );
+            
+            try {
+              if ("sendTyping" in message.channel) {
+                await message.channel.sendTyping().catch(() => {});
+              }
+              const execResult = await executeToolCall(tc, message, guildId, moduleManager);
+              return {
+                role: "tool" as const,
+                content: execResult,
+                tool_call_id: tc.id,
+                name: tc.name
+              };
+            } catch (toolErr: any) {
+              moduleManager.logger.error("Tool execution error", guildId, toolErr, "ai");
+              return {
+                role: "tool" as const,
+                content: `❌ ${toolErr?.message ?? "Something went wrong."}`,
+                tool_call_id: tc.id,
+                name: tc.name
+              };
+            }
+          });
 
-            reply =
-              followUp.content.slice(0, 1990) ||
-              "🔍 I found some results but couldn't summarize them.";
-
-            // Accumulate token usage from the follow-up call
-            result.input_tokens += followUp.input_tokens;
-            result.output_tokens += followUp.output_tokens;
-          } else {
-            reply = "❌ Something went wrong trying to do that. Please try again.";
-          }
-        } catch (toolErr: any) {
-          moduleManager.logger.error("Tool execution error", guildId, toolErr, "ai");
-          reply = `❌ ${toolErr?.message ?? "Something went wrong trying to do that. Please try again."}`;
+          const toolResults = await Promise.all(toolPromises);
+          
+          // Append tool results to message history and loop again
+          llmMessages.push(...toolResults);
+          
+        } else {
+          // No tool calls, we have our final text reply
+          reply = result.content.slice(0, 1990) || "🤔 I got nothing on that one.";
+          break;
         }
-      } else {
-        // Normal chat response
-        reply =
-          result.content.slice(0, 1990) || "🤔 I got nothing on that one.";
+      }
+
+      if (iterations >= MAX_ITERATIONS && !reply) {
+         reply = "⚠️ I had to stop thinking because it took too many steps. Here is what I have so far.";
       }
 
       await message.reply(reply);
@@ -1063,16 +1116,22 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       // ─ Push to context buffer ────────────────────────────────────
       if (settings.contextEnabled) {
         const channelId = message.channel.id;
-        pushContext(channelId, "user", trimmedMessage);
-        pushContext(channelId, "assistant", reply);
+        // Push all new messages (user request + any assistant tool calls + any tool results + final reply)
+        const newMessages = llmMessages.slice(newMessagesStartIndex);
+        for (const m of newMessages) {
+           pushContext(channelId, m.role as "user" | "assistant" | "tool", m.content, m.tool_calls, m.tool_call_id, m.name);
+        }
+        if (reply && newMessages[newMessages.length - 1].content !== reply) {
+           // Fallback in case loop exited strangely and the final reply wasn't pushed
+           pushContext(channelId, "assistant", reply);
+        }
       }
 
       // ─ Log usage ─────────────────────────────────────────────────
-      const totalTokens = result.input_tokens + result.output_tokens;
       const cost = estimateCost(
         settings.aiModel,
-        result.input_tokens,
-        result.output_tokens,
+        totalInputTokens,
+        totalOutputTokens,
       );
 
       await appwrite.logAIUsage({
@@ -1080,16 +1139,16 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         userId: message.author.id,
         provider: settings.aiProvider,
         model: settings.aiModel,
-        input_tokens: result.input_tokens,
-        output_tokens: result.output_tokens,
-        total_tokens: totalTokens,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        total_tokens: totalInputTokens + totalOutputTokens,
         estimated_cost: cost,
         action,
         key_source: keySource,
       });
 
       moduleManager.logger.info(
-        `[AI] ${message.author.tag} → ${totalTokens} tokens (${settings.aiProvider}/${settings.aiModel}) [${keySource} key] [${action}]`,
+        `[AI] ${message.author.tag} → ${totalInputTokens + totalOutputTokens} tokens (${settings.aiProvider}/${settings.aiModel}) [${keySource} key] [${action}]`,
         guildId,
         "ai",
       );
