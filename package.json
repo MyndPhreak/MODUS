@@ -4,7 +4,7 @@
   "private": true,
   "description": "MODUS — A modular Discord bot with web dashboard",
   "scripts": {
-    "postinstall": "pnpm --filter @modus/db run build"
+    "postinstall": "corepack pnpm --filter @modus/db run build"
   },
   "pnpm": {
     "patchedDependencies": {
@@ -15,7 +15,9 @@
       "devalue": ">=5.8.1",
       "fast-xml-parser": ">=5.7.0",
       "fast-xml-builder": ">=1.2.0",
-      "esbuild": ">=0.25.0"
+      "esbuild": ">=0.25.0",
+      "tar": ">=7.5.13",
+      "brace-expansion": ">=5.0.6"
     }
   }
 }

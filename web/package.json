@@ -22,15 +22,15 @@
     "jszip": "^3.10.1",
     "konva": "^10.2.5",
     "lucide-vue-next": "latest",
-    "nuxt": "^4.4.2",
+    "nuxt": "^4.4.6",
     "nuxt-auth-utils": "^0.5.25",
     "openai": "^6.34.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "tailwindcss": "latest",
-    "vue": "^3.5.32",
+    "vue": "^3.5.34",
     "vue-konva": "^3.4.0",
-    "vue-router": "^5.0.4",
+    "vue-router": "^5.0.7",
     "wavesurfer.js": "^7.12.6"
   },
   "devDependencies": {
