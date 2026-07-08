@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.14.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.13.0...modus-v1.14.0) (2026-07-06)
+
+
+### ✨ Features
+
+* add visual trigger builder with wildcard filter support ([a91776a](https://github.com/MyndPhreak/MODUS/commit/a91776aebde7b5015cd8b78570ee6d9dd1b0a17d))
+* **bot:** auto-register guilds on join and reconcile presence on boot ([ae4329f](https://github.com/MyndPhreak/MODUS/commit/ae4329f1cb5d4b684faa9b34150f0c4b9412cfaa))
+* **bot:** support parallel tool calls with agentic loop in AI module ([3699142](https://github.com/MyndPhreak/MODUS/commit/3699142cfe4482cd8282ce0d517235c25e32ed44))
+* **db:** add upsertByGuildId + markOffline on ServerRepository ([7070af8](https://github.com/MyndPhreak/MODUS/commit/7070af88a0c69817f6226faef4126d2478b20afd))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** register global slash commands from shard 0 only ([99ccddd](https://github.com/MyndPhreak/MODUS/commit/99ccddd06df96fc4a8708a5872c9447b14e4d228))
+* **bot:** reply when a command arrives before modules finish loading ([721531b](https://github.com/MyndPhreak/MODUS/commit/721531b36ea78ae9fb01994f11e4a9088398766b))
+* **bot:** stop Logger DB failures surfacing as unhandled rejections ([607a601](https://github.com/MyndPhreak/MODUS/commit/607a601249ba0646e22dcf6e983b62fae5c28ae1))
+* **web:** stop client permission check from granting access the server won't honor ([e4971ee](https://github.com/MyndPhreak/MODUS/commit/e4971eea1ab810ba0b046b973c5fc5a301eb4451))
+* **web:** update legal pages for post-Appwrite infrastructure and Groq disclosure ([afaaa59](https://github.com/MyndPhreak/MODUS/commit/afaaa59a121cb51b677b1af6efcdb6ebf6ed80d4))
+
+
+### ⚡ Performance
+
+* **bot:** batch server log writes into periodic multi-row inserts ([039f2d5](https://github.com/MyndPhreak/MODUS/commit/039f2d5f8b3305c9ee2787dd892634b7fc169085))
+
+
+### ♻️ Refactors
+
+* **bot:** auto-register module event listeners via registerEvents hook ([6dc9ec2](https://github.com/MyndPhreak/MODUS/commit/6dc9ec2925c9faa419892a74a0f9187d08eeaa1e))
+* **bot:** dedupe button/select/modal dispatch in ModuleManager ([f0e148b](https://github.com/MyndPhreak/MODUS/commit/f0e148b28dc6679be654c63fe79b269a2e71b00d))
+* **bot:** rename stale appwrite locals to db and fix stale comments ([ad73fe0](https://github.com/MyndPhreak/MODUS/commit/ad73fe00bc5fafcad8da58ba080165ea2a9444f1))
+* **bot:** type BotModule command definitions instead of any ([f42ce13](https://github.com/MyndPhreak/MODUS/commit/f42ce13340bbc0d52621947edad20d077952415c))
+* **web:** extract Discord ADMINISTRATOR bit-check into a shared util ([9ac4d85](https://github.com/MyndPhreak/MODUS/commit/9ac4d858ce60f7fd683fb72e47cf55f80a0a1f51))
+
+
+### 📖 Documentation
+
+* correct BotModule interface description in CLAUDE.md ([5841a2d](https://github.com/MyndPhreak/MODUS/commit/5841a2d0166c2e8b446842867ae13e59bcc0f14a))
+
 ## [1.13.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.12.0...modus-v1.13.0) (2026-04-23)
 
 
