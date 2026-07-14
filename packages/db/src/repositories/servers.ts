@@ -1,7 +1,7 @@
 /**
  * ServerRepository — guild metadata + premium flag + admin/dashboard ACLs.
  */
-import { count, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../client";
 import { servers, type Server } from "../schema";
 
@@ -40,6 +40,40 @@ export class ServerRepository {
   async listAll(): Promise<ServerDoc[]> {
     const rows = await this.db.select().from(servers);
     return rows.map(toDoc);
+  }
+
+  /**
+   * Filtered page + total count for the admin servers table.
+   * Omitted filters are not applied; `status` maps onto the boolean
+   * `status` column. Ordered by lowercased name to match the sort the
+   * dashboard previously did client-side.
+   */
+  async listPage(opts: {
+    status?: "online" | "offline";
+    premium?: boolean;
+    offset: number;
+    limit: number;
+  }): Promise<{ rows: ServerDoc[]; total: number }> {
+    const conditions = [];
+    if (opts.status) {
+      conditions.push(eq(servers.status, opts.status === "online"));
+    }
+    if (opts.premium !== undefined) {
+      conditions.push(eq(servers.premium, opts.premium));
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [rows, totalRows] = await Promise.all([
+      this.db
+        .select()
+        .from(servers)
+        .where(where)
+        .orderBy(asc(sql`lower(${servers.name})`))
+        .limit(opts.limit)
+        .offset(opts.offset),
+      this.db.select({ c: count() }).from(servers).where(where),
+    ]);
+    return { rows: rows.map(toDoc), total: totalRows[0]?.c ?? 0 };
   }
 
   async getByGuildId(guildId: string): Promise<ServerDoc | null> {
