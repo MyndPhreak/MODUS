@@ -22,9 +22,10 @@ export default defineEventHandler(async (event) => {
 
   const q = getQuery(event);
   const page = Math.max(1, Number.parseInt(String(q.page ?? ""), 10) || 1);
+  const parsedLimit = Number.parseInt(String(q.limit ?? ""), 10);
   const limit = Math.min(
     100,
-    Math.max(1, Number.parseInt(String(q.limit ?? ""), 10) || 25),
+    Math.max(1, Number.isNaN(parsedLimit) ? 25 : parsedLimit),
   );
   const status =
     q.status === "online" || q.status === "offline" ? q.status : undefined;
