@@ -1,9 +1,10 @@
 /**
  * GET /api/admin/servers
  *
- * Admin-only. Returns every registered server row for the admin servers
- * page. Unbounded list — at MODUS's scale the server count is low
- * enough that this is fine; add pagination if it ever isn't.
+ * Admin-only. Paginated server rows for the admin servers page.
+ * Query params: page (>=1, default 1), limit (1-100, default 25),
+ * status (online|offline|all, default all), premium (true to narrow).
+ * Returns { rows, total, page, limit }.
  */
 import { getRepos } from "../../utils/db";
 import { requireBotAdmin } from "../../utils/session";
@@ -19,11 +20,27 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const q = getQuery(event);
+  const page = Math.max(1, Number.parseInt(String(q.page ?? ""), 10) || 1);
+  const limit = Math.min(
+    100,
+    Math.max(1, Number.parseInt(String(q.limit ?? ""), 10) || 25),
+  );
+  const status =
+    q.status === "online" || q.status === "offline" ? q.status : undefined;
+  const premium = q.premium === "true" ? true : undefined;
+
   try {
-    return await repos.servers.listAll();
+    const { rows, total } = await repos.servers.listPage({
+      status,
+      premium,
+      offset: (page - 1) * limit,
+      limit,
+    });
+    return { rows, total, page, limit };
   } catch (error: any) {
     console.error(
-      "[Admin Servers API] listAll failed:",
+      "[Admin Servers API] listPage failed:",
       error?.message || error,
     );
     throw createError({
