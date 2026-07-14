@@ -249,6 +249,11 @@ const fetchServers = async () => {
     );
     servers.value = res.rows;
     total.value = res.total;
+    // Data shrank while we sat on a deep page (e.g. refresh) — snap back;
+    // the page watcher refetches.
+    if (res.rows.length === 0 && res.total > 0 && page.value > 1) {
+      page.value = 1;
+    }
   } catch (error) {
     console.error("Error fetching servers:", error);
     toast.add({
