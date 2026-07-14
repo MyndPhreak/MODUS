@@ -68,7 +68,7 @@ export class ServerRepository {
         .select()
         .from(servers)
         .where(where)
-        .orderBy(asc(sql`lower(${servers.name})`))
+        .orderBy(asc(sql`lower(${servers.name})`), asc(servers.id))
         .limit(opts.limit)
         .offset(opts.offset),
       this.db.select({ c: count() }).from(servers).where(where),
