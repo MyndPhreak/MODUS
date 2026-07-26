@@ -21,7 +21,10 @@ export type ServerDoc = Server & {
 function toDoc(row: Server): ServerDoc {
   return {
     ...row,
-    $id: row.id,
+    // Appwrite-era contract: the web frontend treats `$id` as the Discord
+    // guild ID (routes, icon URLs, isInSystem checks). Post-migration rows
+    // have a UUID primary key, so `$id` must map to guild_id, not row.id.
+    $id: row.guildId,
     guild_id: row.guildId,
     member_count: row.memberCount,
     shard_id: row.shardId,
