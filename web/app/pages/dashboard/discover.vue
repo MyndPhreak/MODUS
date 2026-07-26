@@ -576,7 +576,7 @@ const fetchGuilds = async () => {
 const addServer = async (guild: any) => {
   addingId.value = guild.id;
   try {
-    await fetch("/api/servers/add", {
+    const response = await fetch("/api/servers/add", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -586,6 +586,13 @@ const addServer = async (guild: any) => {
         icon: guild.icon || null,
       }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.statusMessage || `Failed to add server (${response.status})`,
+      );
+    }
 
     toast.add({
       title: "Server Connected",
