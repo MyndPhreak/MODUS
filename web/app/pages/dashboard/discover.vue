@@ -13,7 +13,7 @@
         </h1>
       </div>
       <p class="text-gray-400 font-medium ml-14">
-        Select a server where you have administrative privileges or a
+        Select a server where you have Manage Server permission or a
         dashboard role to add it to your management dashboard.
       </p>
     </div>
@@ -87,7 +87,7 @@
       </div>
       <h3 class="text-2xl font-bold text-white mb-2">No servers found</h3>
       <p class="text-gray-400 mb-8 max-w-sm mx-auto">
-        We couldn't find any servers where you have administrator privileges
+        We couldn't find any servers where you have Manage Server permission
         or a dashboard role. Try refreshing your session.
       </p>
       <UButton
@@ -345,7 +345,7 @@
 </template>
 
 <script setup lang="ts">
-import { hasAdministratorPermission } from "#shared/discord-permissions";
+import { canManageGuild } from "#shared/discord-permissions";
 
 const userStore = useUserStore();
 const toast = useToast();
@@ -382,7 +382,7 @@ const dashboardRoleGuildIds = ref<Set<string>>(new Set());
 const adminGuilds = computed(() => {
   return guilds.value.filter((guild: any) => {
     return (
-      hasAdministratorPermission(guild.permissions) ||
+      canManageGuild(guild.permissions) ||
       dashboardRoleGuildIds.value.has(guild.id)
     );
   });
@@ -534,9 +534,9 @@ const fetchGuilds = async () => {
 
         // For each server with dashboard roles, check if the user has a matching role
         const roleChecks = serversWithRoles.map(async (server: any) => {
-          // Skip if user already has admin on this guild
+          // Skip if user already qualifies via Discord permissions
           const guild = guilds.value.find((g: any) => g.id === server.$id);
-          if (guild && hasAdministratorPermission(guild.permissions)) return;
+          if (guild && canManageGuild(guild.permissions)) return;
 
           try {
             const memberRes = await $fetch<{ roles: string[] }>(

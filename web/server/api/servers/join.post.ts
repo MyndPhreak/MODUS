@@ -13,7 +13,7 @@ import {
   getResolvedDiscordId,
   requireAuthedUserId,
 } from "../../utils/session";
-import { hasAdministratorPermission } from "#shared/discord-permissions";
+import { canManageGuild } from "#shared/discord-permissions";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // ── Discord ADMINISTRATOR check ──────────────────────────────────────
+  // ── Discord ADMINISTRATOR / MANAGE_GUILD check ───────────────────────
   let hasAdminPerm = false;
   try {
     const guildsResponse = await $fetch("/api/discord/guilds", {
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
     const targetGuild = guilds.find((g: any) => g.id === guild_id);
 
     if (targetGuild) {
-      hasAdminPerm = hasAdministratorPermission(targetGuild.permissions);
+      hasAdminPerm = canManageGuild(targetGuild.permissions);
     }
   } catch (err) {
     console.error(
@@ -96,7 +96,7 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 403,
         statusMessage:
-          "You do not have Administrator permission or a dashboard role on this Discord server.",
+          "You do not have Manage Server permission or a dashboard role on this Discord server.",
       });
     }
   }
