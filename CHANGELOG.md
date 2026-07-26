@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.15.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.14.0...modus-v1.15.0) (2026-07-26)
+
+
+### ✨ Features
+
+* **api:** paginate admin servers endpoint with status and premium filters ([556b916](https://github.com/MyndPhreak/MODUS/commit/556b916c735db3c8379ffd621697d362e2bf8b72))
+* **db:** add paginated server listing with status/premium filters ([e2b0e45](https://github.com/MyndPhreak/MODUS/commit/e2b0e45273d68644403605ebe2bef9f9ddae736f))
+* **web:** render admin servers as paginated table with status/premium filters ([585479e](https://github.com/MyndPhreak/MODUS/commit/585479ecc1be7bd52f46298694edeb4fa0a24717))
+
+
+### 🐛 Bug Fixes
+
+* **api:** clamp explicit limit=0 to 1 instead of falling back to default ([ea22c3d](https://github.com/MyndPhreak/MODUS/commit/ea22c3d1f0b6f641880f2f2ba7e4b702e0d5f523))
+* **api:** require Manage Server permission to register a server ([9258542](https://github.com/MyndPhreak/MODUS/commit/9258542143e17c6cddfc9a03324b2437f786ba3b))
+* **db:** add id tie-breaker to listPage ordering for stable pagination ([71132dd](https://github.com/MyndPhreak/MODUS/commit/71132dd2acf099ece9669567cffdd1a5192537fb))
+* **db:** map server doc $id to guild_id instead of the row UUID ([e24efa7](https://github.com/MyndPhreak/MODUS/commit/e24efa73c553009e3c23790d20731ee46f08f4a4))
+* **web:** allow Manage Server permission to connect guilds to the dashboard ([7f5a9f4](https://github.com/MyndPhreak/MODUS/commit/7f5a9f4707831357431d357d0ccf34b17815fb82))
+* **web:** snap back to page 1 when refresh lands on an out-of-range page ([9aaff0f](https://github.com/MyndPhreak/MODUS/commit/9aaff0f16d891863f7c8f09409d7cf344920be05))
+* **web:** surface add-server API errors on the discover page ([25d2b55](https://github.com/MyndPhreak/MODUS/commit/25d2b55172ef169375ff2ed18c564b22e8f16c95))
+
 ## [1.14.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.13.0...modus-v1.14.0) (2026-07-06)
 
 
