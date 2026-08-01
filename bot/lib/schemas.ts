@@ -171,9 +171,11 @@ export const AISettingsSchema = z.object({
   aiApiKey: z.string().default(""),
   aiModel: z.string().default("llama-3.3-70b-versatile"),
   aiBaseUrl: z.string().default(""),
-  systemPrompt: z.string().default(""),
+  // Clamp (not .max) — parseSettings fails the whole object on a rejected field,
+  // which would wipe all AI settings for a guild with an over-long stored prompt.
+  systemPrompt: z.string().default("").transform((s) => s.slice(0, 2000)),
   maxInputTokens: z.number().default(500),
-  maxOutputTokens: z.number().default(300),
+  maxOutputTokens: z.number().default(512),
   rateLimitSeconds: z.number().default(60),
   respondToDMs: z.boolean().default(false),
   toolUseEnabled: z.boolean().default(false),

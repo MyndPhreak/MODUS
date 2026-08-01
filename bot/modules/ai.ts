@@ -11,6 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { BotModule, ModuleManager } from "../ModuleManager";
 import { AISettingsSchema } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
+import { buildSystemPrompt } from "../lib/aiPrompt";
 import {
   musicPlay,
   musicSkip,
@@ -182,44 +183,36 @@ function buildContextMessages(
 }
 
 // ── Cost Estimation ────────────────────────────────────────────────
-// Approximate per-million-token pricing (input / output) in USD
+// `estimated_cost` is a rough analytics figure, not billing. Rather than
+// hardcode a price catalog that rots as models and prices change, we read
+// optional per-million-token rates from the environment:
+//
+//   AI_PRICE_INPUT_PER_MTOK   USD per 1M input tokens
+//   AI_PRICE_OUTPUT_PER_MTOK  USD per 1M output tokens
+//
+// If neither is set (e.g. a free-tier provider like Groq), we log exact token
+// counts only and leave estimated_cost NULL. Token counts are always accurate;
+// the dollar figure is best-effort and opt-in.
 
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // OpenAI
-  "gpt-4o": { input: 2.5, output: 10.0 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
-  "gpt-4-turbo": { input: 10.0, output: 30.0 },
-  "gpt-3.5-turbo": { input: 0.5, output: 1.5 },
-  // Anthropic
-  "claude-opus-4": { input: 15.0, output: 75.0 },
-  "claude-sonnet-4": { input: 3.0, output: 15.0 },
-  "claude-haiku-3-5": { input: 0.8, output: 4.0 },
-  "claude-3-5-sonnet": { input: 3.0, output: 15.0 },
-  "claude-3-5-haiku": { input: 0.8, output: 4.0 },
-  // Google Gemini
-  "gemini-1.5-flash": { input: 0.075, output: 0.3 },
-  "gemini-1.5-pro": { input: 3.5, output: 10.5 },
-  "gemini-2.0-flash": { input: 0.1, output: 0.4 },
-  // Groq (free tier — cost is ~0)
-  "llama-3.3-70b-versatile": { input: 0.0, output: 0.0 },
-  "llama-3.1-8b-instant": { input: 0.0, output: 0.0 },
-  "mixtral-8x7b-32768": { input: 0.0, output: 0.0 },
-};
+function envRate(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 function estimateCost(
-  model: string,
   inputTokens: number,
   outputTokens: number,
-): number {
-  // Exact match → prefix match → default to 0
-  let pricing = MODEL_PRICING[model];
-  if (!pricing) {
-    const prefix = Object.keys(MODEL_PRICING).find((k) => model.startsWith(k));
-    pricing = prefix ? MODEL_PRICING[prefix] : { input: 0, output: 0 };
-  }
+): number | undefined {
+  const inRate = envRate("AI_PRICE_INPUT_PER_MTOK");
+  const outRate = envRate("AI_PRICE_OUTPUT_PER_MTOK");
+  const haveIn = inRate !== undefined;
+  const haveOut = outRate !== undefined;
+  if (!haveIn && !haveOut) return undefined;
   return (
-    (inputTokens / 1_000_000) * pricing.input +
-    (outputTokens / 1_000_000) * pricing.output
+    (haveIn ? (inputTokens / 1_000_000) * inRate! : 0) +
+    (haveOut ? (outputTokens / 1_000_000) * outRate! : 0)
   );
 }
 
@@ -724,31 +717,14 @@ function getCooldownRemaining(
 
 // ── Defaults ───────────────────────────────────────────────────────
 
-const DEFAULT_SYSTEM_PROMPT = `You are Modus, a helpful and friendly AI assistant built into a Discord bot. \
-You have a witty, upbeat personality. Keep responses concise (2-4 sentences max) and conversational. \
-You can help with questions, have casual conversations, and assist server members. \
-Do not pretend to have capabilities you don't have. Stay on topic and be helpful.`;
-
-const TOOL_USE_SYSTEM_PROMPT_APPENDIX = `
-
-You also have direct control over the music player for this Discord server. \
-When a user asks you to play, skip, stop, pause, resume, adjust volume, view the queue, or shuffle, \
-use the appropriate music tool rather than describing what to do. \
-Always execute the action and report what you did.
-
-You can also search the web for current information using the web_search tool. \
-Use it when the user asks about recent events, news, live scores, current prices, or anything \
-that requires up-to-date information you might not have. \
-Do NOT use web_search for general knowledge questions you can already answer accurately.`;
-
 const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
   aiProvider: "Groq",
   aiApiKey: "",
   aiModel: "llama-3.3-70b-versatile",
   aiBaseUrl: "",
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  systemPrompt: "",
   maxInputTokens: 500,
-  maxOutputTokens: 300,
+  maxOutputTokens: 512,
   rateLimitSeconds: 60,
   respondToDMs: false,
   toolUseEnabled: false,
@@ -887,7 +863,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           return;
         }
 
-        // 1️⃣ Try admin-set global config from Appwrite
+        // 1️⃣ Try admin-set global config (Postgres, via guild_configs)
         const globalConfig = await db.getGlobalAIConfig();
 
         if (globalConfig?.aiApiKey) {
@@ -927,7 +903,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         // Enforce shared-key token/rate limits regardless of guild settings
         settings.rateLimitSeconds = 60;
         settings.maxInputTokens = 500;
-        settings.maxOutputTokens = 300;
+        settings.maxOutputTokens = 512;
       }
 
       // ─ Rate limit check ─────────────────────────────────────────
@@ -973,14 +949,11 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       }
 
       // ─ Build effective system prompt ─────────────────────────────
-      // Guard: fall back to default prompt if the guild saved an empty string
-      let effectiveSystemPrompt =
-        settings.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
-
-      // Append music tool hint when tool use is enabled
-      if (settings.toolUseEnabled) {
-        effectiveSystemPrompt += TOOL_USE_SYSTEM_PROMPT_APPENDIX;
-      }
+      // Core rules (always) + guild personality (appended) + tool appendix.
+      const effectiveSystemPrompt = buildSystemPrompt(
+        settings.systemPrompt,
+        settings.toolUseEnabled,
+      );
 
       // ─ Build messages array with conversation context ────────────
       const channelId = message.channel.id;
@@ -1128,11 +1101,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       }
 
       // ─ Log usage ─────────────────────────────────────────────────
-      const cost = estimateCost(
-        settings.aiModel,
-        totalInputTokens,
-        totalOutputTokens,
-      );
+      const cost = estimateCost(totalInputTokens, totalOutputTokens);
 
       await db.logAIUsage({
         guildId,
@@ -1142,7 +1111,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         input_tokens: totalInputTokens,
         output_tokens: totalOutputTokens,
         total_tokens: totalInputTokens + totalOutputTokens,
-        estimated_cost: cost,
+        ...(cost !== undefined ? { estimated_cost: cost } : {}),
         action,
         key_source: keySource,
       });

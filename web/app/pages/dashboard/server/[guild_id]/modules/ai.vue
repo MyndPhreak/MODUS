@@ -69,12 +69,12 @@
     />
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- ── Card 1: Provider Configuration ───────────────────────── -->
+      <!-- ── Card 1: Provider & Model ─────────────────────────────── -->
       <UCard class="xl:col-span-2">
         <template #header>
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-key" class="w-5 h-5 text-violet-400" />
-            <h2 class="font-semibold text-base">Provider Configuration</h2>
+            <h2 class="font-semibold text-base">Provider & Model</h2>
           </div>
         </template>
 
@@ -160,7 +160,7 @@
         </div>
       </UCard>
 
-      <!-- ── Card 2: System Prompt ─────────────────────────────────── -->
+      <!-- ── Card 2: Personality & Instructions ───────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
@@ -169,9 +169,7 @@
                 name="i-heroicons-chat-bubble-left-ellipsis"
                 class="w-5 h-5 text-blue-400"
               />
-              <h2 class="font-semibold text-base">
-                Personality & System Prompt
-              </h2>
+              <h2 class="font-semibold text-base">Personality &amp; Instructions</h2>
             </div>
             <UButton
               size="xs"
@@ -184,27 +182,84 @@
           </div>
         </template>
 
-        <UFormField label="System Prompt">
+        <UFormField>
           <UTextarea
             v-model="settings.systemPrompt"
-            :rows="8"
-            placeholder="You are Modus, a helpful Discord bot assistant..."
+            :rows="6"
+            :maxlength="2000"
+            placeholder="Describe the tone and any extra instructions…"
             class="font-mono text-sm w-full"
             resize
           />
         </UFormField>
 
         <div class="mt-2 flex justify-between items-center">
-          <span class="text-xs text-gray-500">
-            {{ settings.systemPrompt?.length ?? 0 }} characters
+          <span
+            class="text-xs"
+            :class="(settings.systemPrompt?.length ?? 0) > 1800 ? 'text-amber-400' : 'text-gray-500'"
+          >
+            {{ settings.systemPrompt?.length ?? 0 }} / 2000 characters
           </span>
           <span class="text-xs text-gray-500">
-            This prompt sets the bot's personality and behavior.
+            Added on top of Modus's built-in behavior. Leave blank for the default friendly tone.
           </span>
+        </div>
+
+        <UCollapsible class="mt-4">
+          <UButton
+            variant="ghost"
+            color="neutral"
+            size="xs"
+            trailing-icon="i-heroicons-chevron-down"
+            label="Built-in behavior (always applied)"
+          />
+          <template #content>
+            <p class="text-xs text-gray-400 leading-relaxed bg-gray-900/40 rounded-lg p-3 mt-2">
+              {{ CORE_BEHAVIOR_PREVIEW }}
+            </p>
+          </template>
+        </UCollapsible>
+      </UCard>
+
+      <!-- ── Card 3: Behavior & Features ──────────────────────────── -->
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-fuchsia-400" />
+            <h2 class="font-semibold text-base">Behavior & Features</h2>
+          </div>
+        </template>
+
+        <div class="space-y-5">
+          <UFormField
+            label="DM Responses"
+            hint="Allow the bot to respond to @mentions in DMs."
+          >
+            <USwitch v-model="settings.respondToDMs" label="Respond in DMs" />
+          </UFormField>
+
+          <UFormField
+            label="Tool Use — Music & Web Search"
+            hint="Let the AI control music (play/skip/pause/queue) and search the web on @mention."
+          >
+            <USwitch
+              v-model="settings.toolUseEnabled"
+              label="Enable tool use"
+            />
+          </UFormField>
+
+          <UAlert
+            v-if="settings.toolUseEnabled && toolUseWarning"
+            color="warning"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="toolUseWarning"
+            description="Tool use works best with 70B+ models. Try llama-3.3-70b-versatile (Groq, free) or gpt-4o-mini (OpenAI) for reliable results."
+          />
         </div>
       </UCard>
 
-      <!-- ── Card 3: Conversation Memory ──────────────────────────── -->
+      <!-- ── Card 4: Conversation Memory ──────────────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
@@ -273,7 +328,7 @@
         </div>
       </UCard>
 
-      <!-- ── Card 4: Rate Limiting & Limits ────────────────────────── -->
+      <!-- ── Card 5: Limits & Rate Limiting ────────────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
@@ -345,38 +400,11 @@
               </span>
             </div>
           </UFormField>
-
-          <UFormField
-            label="DM Responses"
-            hint="Allow the bot to respond to @mentions in DMs."
-          >
-            <USwitch v-model="settings.respondToDMs" label="Respond in DMs" />
-          </UFormField>
-
-          <UFormField
-            label="Tool Use — Music Control"
-            hint="Allow the AI to play, skip, pause, and control music on @mention commands."
-          >
-            <USwitch
-              v-model="settings.toolUseEnabled"
-              label="Enable music tool use"
-            />
-          </UFormField>
-
-          <!-- Low-capability model warning -->
-          <UAlert
-            v-if="settings.toolUseEnabled && toolUseWarning"
-            color="warning"
-            variant="soft"
-            icon="i-heroicons-exclamation-triangle"
-            :title="toolUseWarning"
-            description="Tool use works best with 70B+ models. Try llama-3.3-70b-versatile (Groq, free) or gpt-4o-mini (OpenAI) for reliable results."
-          />
         </div>
       </UCard>
     </div>
 
-    <!-- ── Card 4: Usage & Spending ──────────────────────────────────── -->
+    <!-- ── Card 6: Usage & Spending ──────────────────────────────────── -->
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
@@ -563,19 +591,29 @@ const savingEnabled = ref(false);
 const saving = ref(false);
 const isPremium = ref(false);
 
-const DEFAULT_SYSTEM_PROMPT = `You are Modus, a helpful and friendly AI assistant built into a Discord bot. 
-You have a witty, upbeat personality. Keep responses concise (2-4 sentences max) and conversational. 
-You can help with questions, have casual conversations, and assist server members. 
-Do not pretend to have capabilities you don't have. Stay on topic and be helpful.`;
+const DEFAULT_PERSONALITY = `You have a witty, upbeat personality and keep a conversational, friendly tone.`;
+
+// Full default prompts shipped before the append-model change. If a guild has one
+// stored verbatim, show the tone default instead of the old wall of text.
+const LEGACY_DEFAULT_PROMPTS = [
+  `You are Modus, a helpful and friendly AI assistant built into a Discord bot. \nYou have a witty, upbeat personality. Keep responses concise (2-4 sentences max) and conversational. \nYou can help with questions, have casual conversations, and assist server members. \nDo not pretend to have capabilities you don't have. Stay on topic and be helpful.`,
+];
+
+// Read-only preview of the bot-owned rules the personality is appended to.
+const CORE_BEHAVIOR_PREVIEW = `You are Modus, a helpful AI assistant built into a Discord bot. Always give a complete answer — include the specific facts, numbers, and details asked for. When tools are enabled, act instead of narrating (never say "let me look that up" — just do it, then answer). Never pretend to have capabilities you don't have.`;
+
+function normalizeWhitespace(s: string | undefined | null) {
+  return (s ?? "").replace(/\s+/g, " ").trim();
+}
 
 const settings = ref({
   aiProvider: "Groq" as string,
   aiApiKey: "",
   aiModel: "llama-3.3-70b-versatile",
   aiBaseUrl: "",
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  systemPrompt: DEFAULT_PERSONALITY,
   maxInputTokens: 500,
-  maxOutputTokens: 300,
+  maxOutputTokens: 512,
   rateLimitSeconds: 60,
   respondToDMs: false,
   toolUseEnabled: false,
@@ -587,7 +625,6 @@ const settings = ref({
 const availableModels = ref<string[]>([
   "llama-3.3-70b-versatile",
   "llama-3.1-8b-instant",
-  "mixtral-8x7b-32768",
 ]);
 const modelsLoading = ref(false);
 const modelsWarning = ref("");
@@ -665,7 +702,6 @@ const SMALL_MODELS = [
   "llama-3.2-3b",
   "gemma-7b",
   "gemma2-9b",
-  "mixtral-8x7b-32768", // older, less reliable for tool use
 ];
 const toolUseWarning = computed(() => {
   if (!settings.value.toolUseEnabled) return "";
@@ -712,6 +748,13 @@ async function loadSettings() {
     );
     moduleEnabled.value = cfg.enabled;
     settings.value = { ...settings.value, ...(cfg.settings ?? {}) };
+
+    // Legacy full prompt or empty → show the tone default (append-model migration).
+    const norm = normalizeWhitespace(settings.value.systemPrompt);
+    const isLegacy = LEGACY_DEFAULT_PROMPTS.some(
+      (p) => normalizeWhitespace(p) === norm,
+    );
+    if (!norm || isLegacy) settings.value.systemPrompt = DEFAULT_PERSONALITY;
 
     // Premium flag lives on the servers row. by-guild-ids returns just
     // the public projection we need without paginating the whole list.
@@ -865,7 +908,7 @@ watch(
 );
 
 function resetSystemPrompt() {
-  settings.value.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  settings.value.systemPrompt = DEFAULT_PERSONALITY;
 }
 
 function formatTime(ts: string) {
