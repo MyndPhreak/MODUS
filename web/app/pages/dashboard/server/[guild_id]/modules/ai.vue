@@ -69,12 +69,12 @@
     />
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- ── Card 1: Provider Configuration ───────────────────────── -->
+      <!-- ── Card 1: Provider & Model ─────────────────────────────── -->
       <UCard class="xl:col-span-2">
         <template #header>
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-key" class="w-5 h-5 text-violet-400" />
-            <h2 class="font-semibold text-base">Provider Configuration</h2>
+            <h2 class="font-semibold text-base">Provider & Model</h2>
           </div>
         </template>
 
@@ -221,7 +221,45 @@
         </UCollapsible>
       </UCard>
 
-      <!-- ── Card 3: Conversation Memory ──────────────────────────── -->
+      <!-- ── Card 3: Behavior & Features ──────────────────────────── -->
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-fuchsia-400" />
+            <h2 class="font-semibold text-base">Behavior & Features</h2>
+          </div>
+        </template>
+
+        <div class="space-y-5">
+          <UFormField
+            label="DM Responses"
+            hint="Allow the bot to respond to @mentions in DMs."
+          >
+            <USwitch v-model="settings.respondToDMs" label="Respond in DMs" />
+          </UFormField>
+
+          <UFormField
+            label="Tool Use — Music & Web Search"
+            hint="Let the AI control music (play/skip/pause/queue) and search the web on @mention."
+          >
+            <USwitch
+              v-model="settings.toolUseEnabled"
+              label="Enable tool use"
+            />
+          </UFormField>
+
+          <UAlert
+            v-if="settings.toolUseEnabled && toolUseWarning"
+            color="warning"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="toolUseWarning"
+            description="Tool use works best with 70B+ models. Try llama-3.3-70b-versatile (Groq, free) or gpt-4o-mini (OpenAI) for reliable results."
+          />
+        </div>
+      </UCard>
+
+      <!-- ── Card 4: Conversation Memory ──────────────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
@@ -290,7 +328,7 @@
         </div>
       </UCard>
 
-      <!-- ── Card 4: Rate Limiting & Limits ────────────────────────── -->
+      <!-- ── Card 5: Limits & Rate Limiting ────────────────────────── -->
       <UCard>
         <template #header>
           <div class="flex items-center gap-2">
@@ -362,38 +400,11 @@
               </span>
             </div>
           </UFormField>
-
-          <UFormField
-            label="DM Responses"
-            hint="Allow the bot to respond to @mentions in DMs."
-          >
-            <USwitch v-model="settings.respondToDMs" label="Respond in DMs" />
-          </UFormField>
-
-          <UFormField
-            label="Tool Use — Music Control"
-            hint="Allow the AI to play, skip, pause, and control music on @mention commands."
-          >
-            <USwitch
-              v-model="settings.toolUseEnabled"
-              label="Enable music tool use"
-            />
-          </UFormField>
-
-          <!-- Low-capability model warning -->
-          <UAlert
-            v-if="settings.toolUseEnabled && toolUseWarning"
-            color="warning"
-            variant="soft"
-            icon="i-heroicons-exclamation-triangle"
-            :title="toolUseWarning"
-            description="Tool use works best with 70B+ models. Try llama-3.3-70b-versatile (Groq, free) or gpt-4o-mini (OpenAI) for reliable results."
-          />
         </div>
       </UCard>
     </div>
 
-    <!-- ── Card 4: Usage & Spending ──────────────────────────────────── -->
+    <!-- ── Card 6: Usage & Spending ──────────────────────────────────── -->
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
