@@ -281,7 +281,12 @@ export function useServerSettings(guildId: string) {
   // ── Initialization ──
   const fetchModules = async () => {
     try {
-      state.value.modules = await $fetch<ModuleDoc[]>("/api/modules");
+      const all = await $fetch<ModuleDoc[]>("/api/modules");
+      // Hide modules an admin has disabled globally: a fleet-wide kill switch
+      // should remove them from every server's dashboard, not just make the
+      // per-server toggle non-functional. `enabled` here is the global flag
+      // from the modules table (per-server state lives in guildConfigs).
+      state.value.modules = all.filter((m) => m.enabled);
     } catch (error) {
       console.error("Error fetching modules:", error);
     }
