@@ -14,6 +14,7 @@
  * Channel names are duplicated from bot/EventBus.ts because this package
  * doesn't import from bot. Keep them in sync.
  */
+import { randomUUID } from "node:crypto";
 import Redis, { type RedisOptions } from "ioredis";
 
 export const CHANNEL_LOGS = "modus:realtime:logs";
@@ -39,6 +40,9 @@ interface Clients {
 let clients: Clients | null = null;
 const handlers = new Map<string, Set<Handler>>();
 const subscribedChannels = new Set<string>();
+
+/** Stable per-process origin so bot subscribers can ignore our own publishes. */
+const originId = `web:${randomUUID()}`;
 
 function getClients(): Clients | null {
   if (clients) return clients;
@@ -100,6 +104,24 @@ function getClients(): Clients | null {
 /** True when REDIS_URL is configured. SSE endpoints early-return when not. */
 export function isRealtimeAvailable(): boolean {
   return !!process.env.REDIS_URL;
+}
+
+/**
+ * Publish a message to a channel, wrapped in the same `{ origin, ts, payload }`
+ * envelope the bot's EventBus emits and subscribes to (bot/EventBus.ts). Used by
+ * dashboard write routes to notify the running bot fleet of changes (e.g. an
+ * admin toggling a module's global enabled flag). No-op when REDIS_URL is unset —
+ * in that case the bot only picks up changes on restart.
+ */
+export async function publish<T = unknown>(
+  channel: string,
+  payload: T,
+): Promise<void> {
+  const c = getClients();
+  if (!c) return;
+
+  const envelope: Envelope<T> = { origin: originId, ts: Date.now(), payload };
+  await c.primary.publish(channel, JSON.stringify(envelope));
 }
 
 /**
