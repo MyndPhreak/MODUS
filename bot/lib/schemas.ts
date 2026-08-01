@@ -173,7 +173,7 @@ export const AISettingsSchema = z.object({
   aiBaseUrl: z.string().default(""),
   systemPrompt: z.string().default(""),
   maxInputTokens: z.number().default(500),
-  maxOutputTokens: z.number().default(300),
+  maxOutputTokens: z.number().default(512),
   rateLimitSeconds: z.number().default(60),
   respondToDMs: z.boolean().default(false),
   toolUseEnabled: z.boolean().default(false),
