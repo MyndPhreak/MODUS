@@ -194,18 +194,25 @@ function buildContextMessages(
 // counts only and leave estimated_cost NULL. Token counts are always accurate;
 // the dollar figure is best-effort and opt-in.
 
+function envRate(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function estimateCost(
   inputTokens: number,
   outputTokens: number,
 ): number | undefined {
-  const inRate = Number(process.env.AI_PRICE_INPUT_PER_MTOK);
-  const outRate = Number(process.env.AI_PRICE_OUTPUT_PER_MTOK);
-  const haveIn = Number.isFinite(inRate);
-  const haveOut = Number.isFinite(outRate);
+  const inRate = envRate("AI_PRICE_INPUT_PER_MTOK");
+  const outRate = envRate("AI_PRICE_OUTPUT_PER_MTOK");
+  const haveIn = inRate !== undefined;
+  const haveOut = outRate !== undefined;
   if (!haveIn && !haveOut) return undefined;
   return (
-    (haveIn ? (inputTokens / 1_000_000) * inRate : 0) +
-    (haveOut ? (outputTokens / 1_000_000) * outRate : 0)
+    (haveIn ? (inputTokens / 1_000_000) * inRate! : 0) +
+    (haveOut ? (outputTokens / 1_000_000) * outRate! : 0)
   );
 }
 
