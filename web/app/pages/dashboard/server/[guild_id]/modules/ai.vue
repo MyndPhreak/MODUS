@@ -182,7 +182,7 @@
           </div>
         </template>
 
-        <UFormField label="Personality & Instructions">
+        <UFormField>
           <UTextarea
             v-model="settings.systemPrompt"
             :rows="6"
@@ -613,7 +613,7 @@ const settings = ref({
   aiBaseUrl: "",
   systemPrompt: DEFAULT_PERSONALITY,
   maxInputTokens: 500,
-  maxOutputTokens: 300,
+  maxOutputTokens: 512,
   rateLimitSeconds: 60,
   respondToDMs: false,
   toolUseEnabled: false,
