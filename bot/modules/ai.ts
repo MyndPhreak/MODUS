@@ -11,6 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { BotModule, ModuleManager } from "../ModuleManager";
 import { AISettingsSchema } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
+import { buildSystemPrompt } from "../lib/aiPrompt";
 import {
   musicPlay,
   musicSkip,
@@ -709,41 +710,12 @@ function getCooldownRemaining(
 
 // ── Defaults ───────────────────────────────────────────────────────
 
-const DEFAULT_SYSTEM_PROMPT = `You are Modus, a helpful and friendly AI assistant built into a Discord bot. \
-You have a witty, upbeat personality and keep a conversational tone. \
-Be as concise as you can WHILE still giving a COMPLETE answer — always include the specific \
-facts, numbers, and details the user actually asked for (e.g. the current temperature, the exact price, \
-the actual result) rather than a vague summary that leaves them out. Don't pad, but don't cut the answer short either. \
-You can help with questions, have casual conversations, and assist server members. \
-Do not pretend to have capabilities you don't have. Stay on topic and be helpful.`;
-
-const TOOL_USE_SYSTEM_PROMPT_APPENDIX = `
-
-You also have direct control over the music player for this Discord server. \
-When a user asks you to play, skip, stop, pause, resume, adjust volume, view the queue, or shuffle, \
-use the appropriate music tool rather than describing what to do. \
-Always execute the action and report what you did.
-
-You can also search the web for current information using the web_search tool. \
-Use it when the user asks about recent events, news, live scores, current prices, weather, or anything \
-that requires up-to-date information you might not have. \
-Do NOT use web_search for general knowledge questions you can already answer accurately.
-
-IMPORTANT — when tools are involved, ACT instead of narrating:
-- Never tell the user you are "about to" search, that you'll "look it up", "dig that up", or "try to find" something. \
-Do not describe your plan. Just call the tool immediately and silently.
-- After a tool returns, reply to the user with the actual answer to their question, using the data from the results.
-- If the first results don't clearly contain the answer, call web_search AGAIN with a better query \
-(for example add the country/region, or the phrase "current conditions" / "right now") before you respond. \
-Try at least twice before telling the user you couldn't find it.
-- Your reply to the user must be a finished, complete answer — never a promise to do something next.`;
-
 const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
   aiProvider: "Groq",
   aiApiKey: "",
   aiModel: "llama-3.3-70b-versatile",
   aiBaseUrl: "",
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  systemPrompt: "",
   maxInputTokens: 500,
   maxOutputTokens: 512,
   rateLimitSeconds: 60,
@@ -970,14 +942,11 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       }
 
       // ─ Build effective system prompt ─────────────────────────────
-      // Guard: fall back to default prompt if the guild saved an empty string
-      let effectiveSystemPrompt =
-        settings.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
-
-      // Append music tool hint when tool use is enabled
-      if (settings.toolUseEnabled) {
-        effectiveSystemPrompt += TOOL_USE_SYSTEM_PROMPT_APPENDIX;
-      }
+      // Core rules (always) + guild personality (appended) + tool appendix.
+      const effectiveSystemPrompt = buildSystemPrompt(
+        settings.systemPrompt,
+        settings.toolUseEnabled,
+      );
 
       // ─ Build messages array with conversation context ────────────
       const channelId = message.channel.id;
