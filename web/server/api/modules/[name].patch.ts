@@ -8,6 +8,7 @@
  */
 import { getRepos } from "../../utils/db";
 import { requireBotAdmin } from "../../utils/session";
+import { CHANNEL_MODULES, publish } from "../../utils/eventbus";
 
 export default defineEventHandler(async (event) => {
   await requireBotAdmin(event);
@@ -35,6 +36,10 @@ export default defineEventHandler(async (event) => {
 
   try {
     await repos.modules.setEnabled(name, body.enabled);
+    // Notify the running bot fleet so every shard re-reads the modules table
+    // and refreshes its in-memory enabled set. Without this the toggle only
+    // takes effect on the next bot restart. No-op when Redis is unconfigured.
+    await publish(CHANNEL_MODULES, { kind: "changed" });
     return { success: true };
   } catch (error: any) {
     console.error(
