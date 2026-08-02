@@ -48,17 +48,20 @@ function buildPages(moduleManager: ModuleManager): ModulePage[] {
 
     if (mod.commands && mod.commands.length > 0) {
       for (const cmd of mod.commands) {
+        const desc = "description" in cmd && typeof cmd.description === "string" ? cmd.description : "No description.";
         commands.push({
           name: `/${cmd.name}`,
-          description: cmd.description || "No description.",
+          description: desc,
         });
       }
     } else if (mod.data) {
+      const desc = "description" in mod.data && typeof mod.data.description === "string" ? mod.data.description : "No description.";
       commands.push({
         name: `/${mod.data.name}`,
-        description: mod.data.description || "No description.",
+        description: desc,
       });
     }
+
 
     pages.push({
       name: mod.name,
