@@ -35,6 +35,8 @@
     "wavesurfer.js": "^7.12.6"
   },
   "devDependencies": {
+    "@iconify-json/heroicons": "^1.2.3",
+    "@iconify-json/simple-icons": "^1.2.92",
     "@types/node": "^25.6.0",
     "vue-tsc": "^3.3.6"
   }
