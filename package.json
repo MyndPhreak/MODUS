@@ -4,7 +4,8 @@
   "private": true,
   "description": "MODUS — A modular Discord bot with web dashboard",
   "scripts": {
-    "postinstall": "corepack pnpm --filter @modus/db run build"
+    "postinstall": "corepack pnpm --filter @modus/db run build",
+    "licenses:generate": "node scripts/generate-third-party-licenses.js"
   },
   "pnpm": {
     "patchedDependencies": {

@@ -122,8 +122,21 @@
             </button>
           </div>
         </div>
+
+        <div class="pt-3 border-t border-white/5 flex items-center justify-between">
+          <div>
+            <label class="block text-sm font-medium text-gray-200">
+              Card Mode
+            </label>
+            <p class="text-xs text-gray-400">
+              Wrap content inside a container card with border styling.
+            </p>
+          </div>
+          <USwitch v-model="form.useContainer" size="md" />
+        </div>
       </div>
     </details>
+
 
     <!-- Author Section -->
     <details v-if="sections.author" class="group">
@@ -387,6 +400,174 @@
         </div>
       </div>
     </details>
+
+    <!-- Buttons Section -->
+    <details v-if="sections.buttons" class="group">
+      <summary
+        class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-4 cursor-pointer list-none select-none hover:border-white/20 transition-colors"
+      >
+        <div
+          class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none"
+        />
+        <div class="relative flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div
+              class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
+            >
+              <UIcon
+                name="i-heroicons-cursor-arrow-rays"
+                class="text-indigo-400 text-sm"
+              />
+            </div>
+            <h3 class="text-sm font-semibold text-white">Buttons</h3>
+            <UBadge
+              :color="form.buttons.length >= 5 ? 'error' : 'neutral'"
+              variant="soft"
+              size="xs"
+            >
+              {{ form.buttons.length }}/5
+            </UBadge>
+          </div>
+          <div class="flex items-center gap-2">
+            <UButton
+              icon="i-heroicons-plus"
+              size="xs"
+              :disabled="form.buttons.length >= 5"
+              @click.stop="addButton"
+            >
+              Add
+            </UButton>
+            <UIcon
+              name="i-heroicons-chevron-down"
+              class="text-gray-400 transition-transform group-open:rotate-180"
+            />
+          </div>
+        </div>
+      </summary>
+      <div
+        class="rounded-b-xl border border-t-0 border-white/10 bg-gray-900/50 p-4 -mt-1"
+      >
+        <div v-if="form.buttons.length === 0" class="py-4 text-center">
+          <UIcon
+            name="i-heroicons-cursor-arrow-ripple"
+            class="text-3xl text-gray-600 mb-1"
+          />
+          <p class="text-xs text-gray-500">
+            No buttons yet. Click "Add" to attach an interactive button.
+          </p>
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="(btn, index) in form.buttons"
+            :key="index"
+            class="relative group/btn p-3 rounded-lg bg-gray-800/50 border border-white/5 hover:border-white/10 transition-colors"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-gray-400"
+                >Button {{ index + 1 }}</span
+              >
+              <UButton
+                icon="i-heroicons-trash"
+                size="xs"
+                color="error"
+                variant="ghost"
+                @click="removeButton(index)"
+              />
+            </div>
+            <div class="space-y-2">
+              <UInput
+                v-model="btn.label"
+                placeholder="Button Label (e.g. Visit Website)"
+                class="w-full"
+              />
+              <UInput
+                v-model="btn.url"
+                placeholder="URL (https://example.com)"
+                class="w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Media Gallery Section -->
+    <details v-if="sections.mediaGallery" class="group">
+      <summary
+        class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-4 cursor-pointer list-none select-none hover:border-white/20 transition-colors"
+      >
+        <div
+          class="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none"
+        />
+        <div class="relative flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div
+              class="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+            >
+              <UIcon
+                name="i-heroicons-squares-2x2"
+                class="text-emerald-400 text-sm"
+              />
+            </div>
+            <h3 class="text-sm font-semibold text-white">Media Gallery</h3>
+            <UBadge
+              :color="form.mediaGallery.length >= 4 ? 'error' : 'neutral'"
+              variant="soft"
+              size="xs"
+            >
+              {{ form.mediaGallery.length }}/4
+            </UBadge>
+          </div>
+          <div class="flex items-center gap-2">
+            <UButton
+              icon="i-heroicons-plus"
+              size="xs"
+              :disabled="form.mediaGallery.length >= 4"
+              @click.stop="addMediaGalleryItem"
+            >
+              Add Media
+            </UButton>
+            <UIcon
+              name="i-heroicons-chevron-down"
+              class="text-gray-400 transition-transform group-open:rotate-180"
+            />
+          </div>
+        </div>
+      </summary>
+      <div
+        class="rounded-b-xl border border-t-0 border-white/10 bg-gray-900/50 p-4 -mt-1 space-y-3"
+      >
+        <div v-if="form.mediaGallery.length === 0" class="py-4 text-center">
+          <UIcon
+            name="i-heroicons-photo"
+            class="text-3xl text-gray-600 mb-1"
+          />
+          <p class="text-xs text-gray-500">
+            No gallery items yet. Click "Add Media" to create a V2 image grid (up to 4).
+          </p>
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="(_, index) in form.mediaGallery"
+            :key="index"
+            class="flex items-center gap-2"
+          >
+            <UInput
+              v-model="form.mediaGallery[index]"
+              placeholder="Media URL (https://...)"
+              class="flex-1"
+            />
+            <UButton
+              icon="i-heroicons-trash"
+              size="xs"
+              color="error"
+              variant="ghost"
+              @click="removeMediaGalleryItem(index)"
+            />
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 </template>
 
@@ -399,6 +580,8 @@ const form = defineModel<EmbedForm>({ required: true });
 interface SectionVisibility {
   author?: boolean;
   fields?: boolean;
+  buttons?: boolean;
+  mediaGallery?: boolean;
   images?: boolean;
   footer?: boolean;
 }
@@ -411,6 +594,8 @@ const props = withDefaults(
     sections: () => ({
       author: true,
       fields: true,
+      buttons: true,
+      mediaGallery: true,
       images: true,
       footer: true,
     }),
@@ -420,6 +605,8 @@ const props = withDefaults(
 const sections = computed<Required<SectionVisibility>>(() => ({
   author: props.sections.author ?? true,
   fields: props.sections.fields ?? true,
+  buttons: props.sections.buttons ?? true,
+  mediaGallery: props.sections.mediaGallery ?? true,
   images: props.sections.images ?? true,
   footer: props.sections.footer ?? true,
 }));
@@ -435,12 +622,14 @@ const presetColors: Record<string, string> = {
   Purple: "#9b59b6",
 };
 
-const descriptionRef = ref<{ textareaRef: HTMLTextAreaElement | null } | null>(
-  null,
-);
-const descriptionEl = computed(
-  () => descriptionRef.value?.textareaRef ?? null,
-);
+const descriptionRef = ref<any>(null);
+const descriptionEl = computed<HTMLTextAreaElement | null>(() => {
+  if (!descriptionRef.value) return null;
+  if (descriptionRef.value instanceof HTMLTextAreaElement) return descriptionRef.value;
+  if (descriptionRef.value.textareaRef) return descriptionRef.value.textareaRef;
+  if (descriptionRef.value.$el) return descriptionRef.value.$el.querySelector("textarea") ?? null;
+  return null;
+});
 
 function addField() {
   if (form.value.fields.length >= 25) return;
@@ -450,4 +639,24 @@ function addField() {
 function removeField(index: number) {
   form.value.fields.splice(index, 1);
 }
+
+function addButton() {
+  if (form.value.buttons.length >= 5) return;
+  form.value.buttons.push({ label: "", url: "", style: "primary" });
+}
+
+function removeButton(index: number) {
+  form.value.buttons.splice(index, 1);
+}
+
+function addMediaGalleryItem() {
+  if (form.value.mediaGallery.length >= 4) return;
+  form.value.mediaGallery.push("");
+}
+
+function removeMediaGalleryItem(index: number) {
+  form.value.mediaGallery.splice(index, 1);
+}
 </script>
+
+

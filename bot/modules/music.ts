@@ -23,6 +23,7 @@ import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
 import type { AiTool } from "../lib/aiTools";
+import { buildV2Layout } from "../lib/components-v2";
 import { activeSessions as recordingActiveSessions } from "./recording";
 import { MusicSettingsSchema, type MusicSettings } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
@@ -205,6 +206,24 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       // safe to skip if unavailable
     }
 
+      const v2Components = buildV2Layout({
+      title: "🎵 Now Playing",
+      description: `**[${track.title}](${track.url})**`,
+      color: 0x5865f2,
+      thumbnailUrl: track.thumbnail || undefined,
+      fields: [
+        { name: "Duration", value: track.duration || "Live", inline: true },
+        {
+          name: "Requested by",
+          value: track.requestedBy?.toString() || "Unknown",
+          inline: true,
+        },
+      ],
+      footer: `Volume: ${queue.node.volume}%`,
+      components: [buildNowPlayingButtons(false)],
+      useContainer: true,
+    });
+
     // Update bot nickname to current track (if setting enabled)
     try {
       const settings = await getSettings(moduleManager, queue.guild.id);
@@ -217,52 +236,27 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
 
     await ensureSpotifyThumbnail(track);
 
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle("🎵 Now Playing")
-      .setDescription(`**[${track.title}](${track.url})**`)
-      .addFields(
-        { name: "Duration", value: track.duration || "Live", inline: true },
-        {
-          name: "Requested by",
-          value: track.requestedBy?.toString() || "Unknown",
-          inline: true,
-        },
-      )
-      .setThumbnail(track.thumbnail || null)
-      .setFooter({ text: `Volume: ${queue.node.volume}%` });
-
-    // If we have a pending interaction (first track), update it instead of
-    // sending a new message. Consume the reference so subsequent tracks in
-    // the same queue still use channel.send.
     const pendingInteraction = metadata?.pendingInteraction;
     if (pendingInteraction) {
       metadata.pendingInteraction = null;
       const msg = await pendingInteraction
         .editReply({
           content: "",
-          embeds: [embed],
-          components: [buildNowPlayingButtons(false)],
+          components: v2Components,
         })
         .catch(() => null);
-      // Always store the message so playlist tracks can edit it later
       if (msg) {
         metadata.nowPlayingMessage = msg;
       }
     } else if (metadata?.isPlaylist && metadata?.nowPlayingMessage) {
-      // Playlist: edit the existing Now Playing embed instead of flooding
-      // the channel with a new message for every track.
       await metadata.nowPlayingMessage
         .edit({
-          embeds: [embed],
-          components: [buildNowPlayingButtons(false)],
+          components: v2Components,
         })
         .catch(() => {
-          // Message was deleted — fall back to sending a fresh one
           channel
             .send({
-              embeds: [embed],
-              components: [buildNowPlayingButtons(false)],
+              components: v2Components,
             })
             .then((msg: any) => {
               metadata.nowPlayingMessage = msg;
@@ -272,8 +266,7 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
     } else {
       channel
         .send({
-          embeds: [embed],
-          components: [buildNowPlayingButtons(false)],
+          components: v2Components,
         })
         .catch(() => {});
     }

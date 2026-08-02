@@ -1,15 +1,16 @@
 // Shared form shape for the embed editor/preview pair.
-//
-// Both pages (embed builder + tags editor) operate on the same reactive
-// object so we can swap in `<EmbedEditor v-model>` without each caller
-// reinventing the field set. `toEmbedPayload` serializes this to the
-// Discord-embed JSON shape we send to /api/discord/send-embed; `fromEmbedData`
-// does the reverse for edit mode.
 
 export interface EmbedFieldForm {
   name: string;
   value: string;
   inline: boolean;
+}
+
+export interface EmbedButtonForm {
+  label: string;
+  url?: string;
+  customId?: string;
+  style?: "primary" | "secondary" | "success" | "danger" | "link";
 }
 
 export interface EmbedForm {
@@ -26,6 +27,11 @@ export interface EmbedForm {
   footerText: string;
   footerIconUrl: string;
   showTimestamp: boolean;
+  useContainer: boolean; // Card Container wrapper toggle (default true)
+  buttons: EmbedButtonForm[]; // Array of interactive buttons
+  mediaGallery: string[]; // Array of image URLs for MediaGalleryBuilder (max 4)
+  buttonLabel?: string; // Legacy single button support
+  buttonUrl?: string;
 }
 
 export const DEFAULT_EMBED_COLOR = "#5865f2";
@@ -45,6 +51,11 @@ export function emptyEmbedForm(): EmbedForm {
     footerText: "",
     footerIconUrl: "",
     showTimestamp: false,
+    useContainer: true,
+    buttons: [],
+    mediaGallery: [],
+    buttonLabel: "",
+    buttonUrl: "",
   };
 }
 
@@ -56,7 +67,10 @@ export function hasEmbedContent(form: EmbedForm): boolean {
       form.authorName ||
       form.imageUrl ||
       form.thumbnailUrl ||
-      form.footerText,
+      form.footerText ||
+      form.buttons.length > 0 ||
+      form.mediaGallery.length > 0 ||
+      form.buttonLabel,
   );
 }
 
@@ -71,9 +85,7 @@ export function colorIntToHex(n: number | undefined | null): string {
   return `#${n.toString(16).padStart(6, "0")}`;
 }
 
-// Serialize a form into the Discord embed JSON payload. Fields with empty
-// names/values are normalized to a zero-width space so Discord still renders
-// the field — otherwise it'd reject the embed.
+// Serialize a form into the Discord embed JSON payload.
 export function toEmbedPayload(form: EmbedForm): Record<string, any> {
   const embed: Record<string, any> = { color: colorHexToInt(form.color) };
   if (form.title) embed.title = form.title;
@@ -104,12 +116,34 @@ export function toEmbedPayload(form: EmbedForm): Record<string, any> {
 
   if (form.showTimestamp) embed.timestamp = true;
 
+  // Components V2 properties
+  embed.use_container = form.useContainer ?? true;
+
+  if (form.mediaGallery && form.mediaGallery.length > 0) {
+    embed.media_gallery = form.mediaGallery.filter((url) => Boolean(url.trim())).slice(0, 4);
+  }
+
+  if (form.buttons && form.buttons.length > 0) {
+    embed.buttons = form.buttons.map((b) => ({
+      label: b.label || "Button",
+      url: b.url,
+      custom_id: b.customId,
+      style: b.style ?? "primary",
+    }));
+  } else if (form.buttonLabel) {
+    embed.buttons = [
+      {
+        label: form.buttonLabel,
+        url: form.buttonUrl,
+        style: "primary",
+      },
+    ];
+  }
+
   return embed;
 }
 
 // Hydrate a form from an embed JSON object (what the tags table stores).
-// `embedData` may be a JSON string (the tags API shape) or an already-parsed
-// object — we accept both.
 export function fromEmbedData(embedData: unknown): EmbedForm {
   const form = emptyEmbedForm();
   if (!embedData) return form;
@@ -153,6 +187,27 @@ export function fromEmbedData(embedData: unknown): EmbedForm {
   }
 
   form.showTimestamp = Boolean(data.timestamp);
+  form.useContainer = data.use_container ?? true;
+
+  if (Array.isArray(data.media_gallery)) {
+    form.mediaGallery = data.media_gallery.filter((url: any) => typeof url === "string");
+  }
+
+  if (Array.isArray(data.buttons)) {
+    form.buttons = data.buttons.map((b: any) => ({
+      label: typeof b?.label === "string" ? b.label : "",
+      url: typeof b?.url === "string" ? b.url : "",
+      customId: typeof b?.custom_id === "string" ? b.custom_id : "",
+      style: b?.style ?? "primary",
+    }));
+  } else if (typeof data.button_label === "string") {
+    form.buttonLabel = data.button_label;
+    form.buttonUrl = data.button_url ?? "";
+    form.buttons = [{ label: data.button_label, url: data.button_url ?? "", style: "primary" }];
+  }
 
   return form;
 }
+
+
+

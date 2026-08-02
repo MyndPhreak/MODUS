@@ -1,14 +1,15 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   ComponentType,
-  MessageFlags,
+  type AnyComponentBuilder,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,11 @@ const MODULE_ICONS: Record<string, string> = {
   embeds: "📝",
   reload: "🔄",
   welcome: "👋",
+  tickets: "🎫",
+  moderation: "🛡️",
+  automod: "🤖",
+  antiraid: "🚨",
+  ai: "🧠",
 };
 
 function getModuleIcon(name: string): string {
@@ -61,49 +67,51 @@ function buildPages(moduleManager: ModuleManager): ModulePage[] {
     });
   }
 
-  // Sort alphabetically for consistency
   pages.sort((a, b) => a.name.localeCompare(b.name));
   return pages;
 }
 
-function buildEmbed(pages: ModulePage[], pageIndex: number): EmbedBuilder {
+function buildV2HelpPage(pages: ModulePage[], pageIndex: number): any[] {
+
   const page = pages[pageIndex];
   const icon = getModuleIcon(page.name);
   const totalPages = pages.length;
 
-  const commandList =
-    page.commands.length > 0
-      ? page.commands
-          .map((cmd) => `> **${cmd.name}**\n> ${cmd.description}`)
-          .join("\n\n")
-      : "> *No commands registered.*";
+  const fields = page.commands.map((cmd) => ({
+    name: cmd.name,
+    value: cmd.description,
+  }));
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setAuthor({
-      name: `Module Help — Page ${pageIndex + 1} of ${totalPages}`,
-    })
-    .setTitle(
-      `${icon}  ${page.name.charAt(0).toUpperCase() + page.name.slice(1)}`,
-    )
-    .setDescription(`*${page.description}*`)
-    .addFields({
-      name: "Commands",
-      value: commandList,
-    })
-    .setFooter({
-      text: `Use the buttons below to browse modules • ${totalPages} modules loaded`,
-    })
-    .setTimestamp();
-
-  return embed;
+  return buildV2Layout({
+    title: `${icon} ${page.name.charAt(0).toUpperCase() + page.name.slice(1)} Module`,
+    description: `*${page.description}*\n\nPage ${pageIndex + 1} of ${totalPages}`,
+    fields,
+    footer: `Use the navigation buttons or dropdown below • ${totalPages} modules loaded`,
+    useContainer: true,
+  });
 }
 
-function buildButtons(
+function buildInteractiveRows(
+  pages: ModulePage[],
   pageIndex: number,
-  totalPages: number,
-  disabled: boolean = false,
-): ActionRowBuilder<ButtonBuilder> {
+  disabled = false,
+): ActionRowBuilder<any>[] {
+  const totalPages = pages.length;
+
+  // Category select dropdown
+  const selectOptions = pages.slice(0, 25).map((p, idx) => ({
+    label: `${getModuleIcon(p.name)} ${p.name.charAt(0).toUpperCase() + p.name.slice(1)}`,
+    value: idx.toString(),
+    description: p.description.slice(0, 50),
+    default: idx === pageIndex,
+  }));
+
+  const categorySelect = new StringSelectMenuBuilder()
+    .setCustomId("help_category_select")
+    .setPlaceholder("Jump to a module...")
+    .addOptions(selectOptions)
+    .setDisabled(disabled);
+
   const prevButton = new ButtonBuilder()
     .setCustomId("help_prev")
     .setLabel("◀ Previous")
@@ -114,7 +122,7 @@ function buildButtons(
     .setCustomId("help_page_indicator")
     .setLabel(`${pageIndex + 1} / ${totalPages}`)
     .setStyle(ButtonStyle.Primary)
-    .setDisabled(true); // Always disabled — just a label
+    .setDisabled(true);
 
   const nextButton = new ButtonBuilder()
     .setCustomId("help_next")
@@ -122,11 +130,14 @@ function buildButtons(
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(disabled || pageIndex === totalPages - 1);
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(categorySelect);
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     prevButton,
     pageIndicator,
     nextButton,
   );
+
+  return [row1, row2];
 }
 
 // ─── Module Export ────────────────────────────────────────────────────────
@@ -155,49 +166,48 @@ const helpModule: BotModule = {
 
     let currentPage = 0;
 
-    const embed = buildEmbed(pages, currentPage);
-    const buttons = buildButtons(currentPage, pages.length);
+    const v2Layout = buildV2HelpPage(pages, currentPage);
+    const interactiveRows = buildInteractiveRows(pages, currentPage);
 
     const reply = await interaction.editReply({
-      embeds: [embed],
-      components: [buttons],
+      components: [...v2Layout, ...interactiveRows],
     });
 
-    // Create a collector that only responds to the original user
     const collector = reply.createMessageComponentCollector({
-      componentType: ComponentType.Button,
       filter: (i) => i.user.id === interaction.user.id,
-      time: 2 * 60 * 1000, // 2 minutes
+      time: 3 * 60 * 1000,
     });
 
-    collector.on("collect", async (buttonInteraction) => {
-      if (buttonInteraction.customId === "help_prev") {
-        currentPage = Math.max(0, currentPage - 1);
-      } else if (buttonInteraction.customId === "help_next") {
-        currentPage = Math.min(pages.length - 1, currentPage + 1);
+    collector.on("collect", async (componentInteraction) => {
+      if (componentInteraction.isStringSelectMenu() && componentInteraction.customId === "help_category_select") {
+        currentPage = parseInt(componentInteraction.values[0], 10);
+      } else if (componentInteraction.isButton()) {
+        if (componentInteraction.customId === "help_prev") {
+          currentPage = Math.max(0, currentPage - 1);
+        } else if (componentInteraction.customId === "help_next") {
+          currentPage = Math.min(pages.length - 1, currentPage + 1);
+        }
       }
 
-      const updatedEmbed = buildEmbed(pages, currentPage);
-      const updatedButtons = buildButtons(currentPage, pages.length);
+      const updatedV2Layout = buildV2HelpPage(pages, currentPage);
+      const updatedRows = buildInteractiveRows(pages, currentPage);
 
-      await buttonInteraction.update({
-        embeds: [updatedEmbed],
-        components: [updatedButtons],
+      await componentInteraction.update({
+        components: [...updatedV2Layout, ...updatedRows],
       });
     });
 
     collector.on("end", async () => {
-      // Disable buttons after timeout
       try {
-        const disabledButtons = buildButtons(currentPage, pages.length, true);
+        const disabledRows = buildInteractiveRows(pages, currentPage, true);
+        const finalV2Layout = buildV2HelpPage(pages, currentPage);
         await interaction.editReply({
-          components: [disabledButtons],
+          components: [...finalV2Layout, ...disabledRows],
         });
-      } catch {
-        // Message may have been deleted
-      }
+      } catch {}
     });
   },
 };
 
 export default helpModule;
+

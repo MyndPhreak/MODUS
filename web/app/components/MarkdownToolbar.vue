@@ -51,25 +51,28 @@ const actions = computed<Action[]>(() => [
   { key: "quote", title: "Quote", icon: "i-heroicons-chat-bubble-left", kind: "linePrefix", prefix: "> " },
   { key: "list", title: "Bullet list", icon: "i-heroicons-list-bullet", kind: "linePrefix", prefix: "- " },
   { key: "h1", title: "Heading", label: "H", labelClass: "font-bold", kind: "linePrefix", prefix: "## " },
+  { key: "separator", title: "Insert Separator (---)", icon: "i-heroicons-minus", kind: "insert", template: "\n---\n" },
 ]);
 
 function run(action: Action) {
   const el = props.target;
-  if (!el) return;
-
   const value = model.value ?? "";
-  const start = el.selectionStart ?? value.length;
-  const end = el.selectionEnd ?? value.length;
+  const start = el?.selectionStart ?? value.length;
+  const end = el?.selectionEnd ?? value.length;
 
   if (action.kind === "wrap") {
     applyWrap(el, value, start, end, action);
   } else if (action.kind === "linePrefix") {
     applyLinePrefix(el, value, start, end, action);
+  } else if (action.kind === "insert") {
+    const textToInsert = action.template ?? "";
+    const next = value.slice(0, start) + textToInsert + value.slice(end);
+    commit(el, next, start + textToInsert.length, start + textToInsert.length);
   }
 }
 
 function applyWrap(
-  el: HTMLTextAreaElement | HTMLInputElement,
+  el: HTMLTextAreaElement | HTMLInputElement | null | undefined,
   value: string,
   start: number,
   end: number,
@@ -84,7 +87,7 @@ function applyWrap(
 }
 
 function applyLinePrefix(
-  el: HTMLTextAreaElement | HTMLInputElement,
+  el: HTMLTextAreaElement | HTMLInputElement | null | undefined,
   value: string,
   start: number,
   end: number,
@@ -105,16 +108,16 @@ function applyLinePrefix(
 }
 
 function commit(
-  el: HTMLTextAreaElement | HTMLInputElement,
+  el: HTMLTextAreaElement | HTMLInputElement | null | undefined,
   next: string,
   selStart: number,
   selEnd: number,
 ) {
   model.value = next;
-  // Wait for Vue to flush the v-model update, then restore selection.
+  if (!el) return;
   requestAnimationFrame(() => {
-    el.focus();
     try {
+      el.focus();
       el.setSelectionRange(selStart, selEnd);
     } catch {
       // Some input types don't support setSelectionRange — ignore.

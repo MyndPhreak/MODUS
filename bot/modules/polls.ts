@@ -13,6 +13,7 @@ import {
   ModalSubmitInteraction,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -223,28 +224,31 @@ const pollsModule: BotModule = {
 
       if (!description) description = "*No answers available.*";
 
-      const embed = new EmbedBuilder()
-        .setTitle(`📊 ${question}`)
-        .setDescription(description.trimEnd())
-        .setColor(isFinalized ? 0x57f287 : 0x00bfff)
-        .addFields({
-          name: isFinalized ? "🏁 Status" : "⏳ Status",
-          value: isFinalized
-            ? "Finalized"
-            : expiresAt
-              ? `Active — ends <t:${Math.floor(expiresAt.getTime() / 1000)}:R>`
-              : "Active",
-          inline: true,
-        })
-        .addFields({
-          name: "🗳️ Total Votes",
-          value: String(totalVotes),
-          inline: true,
-        })
-        .setFooter({ text: `Message ID: ${messageId}` })
-        .setTimestamp();
+      const components = buildV2Layout({
+        title: `📊 ${question}`,
+        description: description.trimEnd(),
+        color: isFinalized ? 0x57f287 : 0x00bfff,
+        fields: [
+          {
+            name: isFinalized ? "🏁 Status" : "⏳ Status",
+            value: isFinalized
+              ? "Finalized"
+              : expiresAt
+                ? `Active — ends <t:${Math.floor(expiresAt.getTime() / 1000)}:R>`
+                : "Active",
+            inline: true,
+          },
+          {
+            name: "🗳️ Total Votes",
+            value: String(totalVotes),
+            inline: true,
+          },
+        ],
+        footer: `Message ID: ${messageId}`,
+        useContainer: true,
+      });
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ components });
     }
   },
 
