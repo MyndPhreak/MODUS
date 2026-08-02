@@ -1,4 +1,5 @@
 import http from "http";
+import crypto from "crypto";
 import { URL } from "url";
 import { Player, useMainPlayer, QueryType } from "discord-player";
 import { YoutubeiExtractor } from "discord-player-youtubei";
@@ -165,8 +166,32 @@ async function savePreQueue(
 
 // ─── Music API ──────────────────────────────────────────────────────────────
 
+/**
+ * Constant-time check of the shared secret guarding the /music/* control and
+ * query API. Returns true when the request is allowed to proceed:
+ *   - no BOT_API_SECRET configured → allowed (legacy behaviour, warned at boot)
+ *   - configured and the X-Bot-Secret header matches → allowed
+ */
+function musicRequestAuthorized(req: http.IncomingMessage): boolean {
+  const secret = process.env.BOT_API_SECRET;
+  if (!secret) return true;
+  const provided = req.headers["x-bot-secret"];
+  if (typeof provided !== "string" || provided.length !== secret.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
+}
+
 export function registerMusicAPI(server: http.Server, client: Client) {
   const originalHandler = server.listeners("request")[0] as Function;
+
+  if (!process.env.BOT_API_SECRET) {
+    console.warn(
+      "[MusicAPI] BOT_API_SECRET is not set — the /music control API is " +
+        "reachable without authentication. Set BOT_API_SECRET on the bot and " +
+        "NUXT_BOT_API_SECRET on the web app to lock it down.",
+    );
+  }
 
   // Remove the original handler and replace with our router
   server.removeAllListeners("request");
@@ -189,6 +214,14 @@ export function registerMusicAPI(server: http.Server, client: Client) {
         });
         res.end();
         return;
+      }
+
+      // Shared-secret gate for the whole /music surface. This defends the
+      // control/query API even when the bot's HTTP port is reachable directly
+      // (not only through the now-authenticated web proxy). Non-/music paths
+      // fall through to the webhook/health handlers, which have their own auth.
+      if (pathname.startsWith("/music/") && !musicRequestAuthorized(req)) {
+        return sendJson(res, 401, { error: "Unauthorized" });
       }
 
       // Route: GET /music/state/:guildId
