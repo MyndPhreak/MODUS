@@ -1,6 +1,7 @@
 // ── AI System Prompt Composition ───────────────────────────────────
 // The effective system prompt is layered:
 //   CORE_SYSTEM_PROMPT            (immutable rules — always applied)
+//   + current date/time context   (appended so relative dates resolve)
 //   + guild personality/tone      (appended; owned by the dashboard field)
 //   + TOOL_USE_..._APPENDIX        (appended when tool use is enabled)
 // The guild field APPENDS to the core; it never replaces it.
@@ -55,6 +56,28 @@ function normalizeWhitespace(s: string): string {
 }
 
 /**
+ * A one-line statement of the current date/time, given in UTC so it is
+ * unambiguous across guilds. Without this the model has no idea what "today"
+ * is and refuses relative-date questions ("next weekend", "tomorrow") instead
+ * of answering or reaching for web_search.
+ */
+export function formatDateContext(now: Date): string {
+  const formatted = now.toLocaleString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
+  return `The current date and time is ${formatted}. Use this to resolve relative \
+references such as "today", "tonight", "tomorrow", "this weekend", or "next week" \
+(times are UTC unless the user names a timezone).`;
+}
+
+/**
  * Resolve the guild's stored value into the tone text to append.
  * - empty OR a known legacy default → DEFAULT_PERSONALITY
  * - anything else → the trimmed custom text
@@ -68,12 +91,18 @@ export function resolvePersonality(raw: string | null | undefined): string {
   return (raw ?? "").trim();
 }
 
-/** Compose the effective system prompt: core + tone + (optional) tool appendix. */
+/**
+ * Compose the effective system prompt: core + current date + tone +
+ * (optional) tool appendix. `now` is injectable for deterministic tests;
+ * it defaults to the moment the message is handled.
+ */
 export function buildSystemPrompt(
   rawPersonality: string | null | undefined,
   toolUseEnabled: boolean,
+  now: Date = new Date(),
 ): string {
   let prompt = CORE_SYSTEM_PROMPT;
+  prompt += "\n\n" + formatDateContext(now);
   const tone = resolvePersonality(rawPersonality);
   if (tone) prompt += "\n\n" + tone;
   if (toolUseEnabled) prompt += "\n\n" + TOOL_USE_SYSTEM_PROMPT_APPENDIX;

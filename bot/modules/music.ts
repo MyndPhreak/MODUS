@@ -22,6 +22,7 @@ import {
 import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
+import type { AiTool } from "../lib/aiTools";
 import { activeSessions as recordingActiveSessions } from "./recording";
 import { MusicSettingsSchema, type MusicSettings } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
@@ -1327,6 +1328,105 @@ function loopModeToString(mode: QueueRepeatMode): string {
   }
 }
 
+// ─── AI Tool Actions ─────────────────────────────────────────────────────
+
+export const musicAiTools: AiTool[] = [
+  {
+    name: "play_music",
+    description:
+      "Play a song or add it to the music queue. Use this when the user wants to play, queue, or listen to music.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "The song name, artist name, or a YouTube/Spotify URL to play.",
+        },
+      },
+      required: ["query"],
+    },
+    execute: async ({ guildId, message, moduleManager, args }) => {
+      const query = (args.query as string) || "";
+      if (!query) return "❌ I need a song name or URL to play something.";
+      const member = message.member as GuildMember | null;
+      const voiceChannel = member?.voice?.channel;
+      if (!voiceChannel) {
+        return "❌ You need to be in a voice channel for me to play music!";
+      }
+      const result = await musicPlay(
+        guildId,
+        voiceChannel,
+        query,
+        message.author,
+        moduleManager,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        message.channel as any,
+      );
+      return result.message;
+    },
+  },
+  {
+    name: "skip_track",
+    description: "Skip the currently playing track and move to the next one.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicSkip(guildId)).message,
+  },
+  {
+    name: "stop_music",
+    description: "Stop all music playback and clear the entire queue.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicStop(guildId, moduleManager)).message,
+  },
+  {
+    name: "pause_music",
+    description: "Pause the currently playing track.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicPause(guildId)).message,
+  },
+  {
+    name: "resume_music",
+    description: "Resume a paused track.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicResume(guildId)).message,
+  },
+  {
+    name: "set_volume",
+    description: "Set the playback volume to a specific percentage between 1 and 100.",
+    parameters: {
+      type: "object",
+      properties: {
+        level: { type: "number", description: "Volume level from 1 to 100." },
+      },
+      required: ["level"],
+    },
+    execute: async ({ guildId, moduleManager, args }) => {
+      const level = typeof args.level === "number" ? args.level : Number(args.level);
+      if (isNaN(level)) return "❌ Please specify a valid volume level (1–100).";
+      return (await musicSetVolume(guildId, level, moduleManager)).message;
+    },
+  },
+  {
+    name: "get_queue",
+    description:
+      "Show what is currently in the music queue, including what is playing and what is up next.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicGetQueue(guildId)).message,
+  },
+  {
+    name: "get_nowplaying",
+    description: "Show information about the track that is currently playing.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicGetNowPlaying(guildId)).message,
+  },
+  {
+    name: "shuffle_queue",
+    description: "Shuffle the tracks in the music queue into a random order.",
+    parameters: { type: "object", properties: {} },
+    execute: async ({ guildId }) => (await musicShuffle(guildId)).message,
+  },
+];
+
 // ─── Module Export ────────────────────────────────────────────────────────
 
 const musicModule: BotModule = {
@@ -1334,6 +1434,7 @@ const musicModule: BotModule = {
   description:
     "Play music from YouTube, Spotify, and more with queue management.",
   deferReply: false, // We handle our own defer for public replies
+  aiTools: musicAiTools,
 
   // Register all music commands as individual top-level commands
   commands: [
