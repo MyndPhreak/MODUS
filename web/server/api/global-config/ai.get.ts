@@ -5,8 +5,9 @@
  * base_url, etc.). Reads the sentinel `guild_configs` row
  * (`guildId = "__global__"`, `moduleName = "ai"`).
  *
- * Any authenticated user may read it (the fields are non-sensitive
- * flags, and the API key itself is not stored here).
+ * Any authenticated user may read it, but the shared provider API key
+ * lives in this same row (`aiApiKey`) and must never reach the client —
+ * it is stripped from the response below and replaced with a boolean flag.
  */
 import { getRepos } from "../../utils/db";
 import { requireAuthedUserId } from "../../utils/session";
@@ -23,7 +24,11 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return (await repos.guildConfigs.getGlobalAIConfig()) ?? {};
+    const config = (await repos.guildConfigs.getGlobalAIConfig()) ?? {};
+    // Strip the shared provider key — the client only needs the non-secret
+    // flags plus a signal for whether a key is configured.
+    const { aiApiKey, ...safe } = config as Record<string, any>;
+    return { ...safe, hasApiKey: Boolean(aiApiKey) };
   } catch (error: any) {
     console.error(
       "[Global AI Config] read failed:",
