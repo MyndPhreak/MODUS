@@ -67,6 +67,15 @@ export class TagRepository {
     return rows.map(toDoc);
   }
 
+  async getById(tagId: string): Promise<TagDoc | null> {
+    const rows = await this.db
+      .select()
+      .from(tags)
+      .where(eq(tags.id, tagId))
+      .limit(1);
+    return rows[0] ? toDoc(rows[0]) : null;
+  }
+
   async getByName(guildId: string, name: string): Promise<TagDoc | null> {
     const rows = await this.db
       .select()

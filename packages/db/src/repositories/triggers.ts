@@ -81,6 +81,15 @@ export class TriggerRepository {
     return rows.map(toDoc);
   }
 
+  async getById(triggerId: string): Promise<TriggerDoc | null> {
+    const rows = await this.db
+      .select()
+      .from(triggers)
+      .where(eq(triggers.id, triggerId))
+      .limit(1);
+    return rows[0] ? toDoc(rows[0]) : null;
+  }
+
   async getBySecret(secret: string): Promise<TriggerDoc | null> {
     const rows = await this.db
       .select()
