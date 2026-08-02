@@ -72,6 +72,7 @@ function buildPanelPayload(panel: ButtonRolesPanel) {
         ],
         useContainer: true,
       }),
+      flags: MessageFlags.IsComponentsV2 as const,
     };
   } else {
     // ── Button grid (max 5 per row, max 25 total) ──────────────────────
@@ -98,6 +99,7 @@ function buildPanelPayload(panel: ButtonRolesPanel) {
         components: buttonRows,
         useContainer: true,
       }),
+      flags: MessageFlags.IsComponentsV2 as const,
     };
   }
 }

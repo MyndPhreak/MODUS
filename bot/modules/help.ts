@@ -4,6 +4,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
   StringSelectMenuBuilder,
   ComponentType,
   type AnyComponentBuilder,
@@ -174,6 +175,7 @@ const helpModule: BotModule = {
 
     const reply = await interaction.editReply({
       components: [...v2Layout, ...interactiveRows],
+      flags: MessageFlags.IsComponentsV2,
     });
 
     const collector = reply.createMessageComponentCollector({
@@ -197,6 +199,7 @@ const helpModule: BotModule = {
 
       await componentInteraction.update({
         components: [...updatedV2Layout, ...updatedRows],
+        flags: MessageFlags.IsComponentsV2,
       });
     });
 
@@ -206,6 +209,7 @@ const helpModule: BotModule = {
         const finalV2Layout = buildV2HelpPage(pages, currentPage);
         await interaction.editReply({
           components: [...finalV2Layout, ...disabledRows],
+          flags: MessageFlags.IsComponentsV2,
         });
       } catch {}
     });

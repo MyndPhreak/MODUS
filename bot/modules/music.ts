@@ -241,8 +241,8 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       metadata.pendingInteraction = null;
       const msg = await pendingInteraction
         .editReply({
-          content: "",
           components: v2Components,
+          flags: MessageFlags.IsComponentsV2,
         })
         .catch(() => null);
       if (msg) {
@@ -252,11 +252,13 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       await metadata.nowPlayingMessage
         .edit({
           components: v2Components,
+          flags: MessageFlags.IsComponentsV2,
         })
         .catch(() => {
           channel
             .send({
               components: v2Components,
+              flags: MessageFlags.IsComponentsV2,
             })
             .then((msg: any) => {
               metadata.nowPlayingMessage = msg;
@@ -267,6 +269,7 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       channel
         .send({
           components: v2Components,
+          flags: MessageFlags.IsComponentsV2,
         })
         .catch(() => {});
     }

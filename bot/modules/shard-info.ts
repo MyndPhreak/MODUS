@@ -1,5 +1,6 @@
 import {
   ChatInputCommandInteraction,
+  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
@@ -167,7 +168,10 @@ const shardInfoModule: BotModule = {
       useContainer: true,
     });
 
-    await interaction.editReply({ components: v2Layout });
+    await interaction.editReply({
+      components: v2Layout,
+      flags: MessageFlags.IsComponentsV2,
+    });
   },
 };
 

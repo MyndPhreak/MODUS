@@ -16,7 +16,7 @@ import {
 } from "discord.js";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
-import { buildV2Layout } from "../lib/components-v2";
+import { buildV2Layout, createV2Text } from "../lib/components-v2";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -222,8 +222,12 @@ function registerModalHandler(client: any) {
 
         // Show preview + channel selector
         await interaction.editReply({
-          content: "**📝 V2 Component Message Preview** — Select a channel below to send it:",
-          components: [...v2Components, row],
+          components: [
+            createV2Text("**📝 V2 Component Message Preview** — Select a channel below to send it:"),
+            ...v2Components,
+            row,
+          ],
+          flags: MessageFlags.IsComponentsV2,
         });
       } catch (error) {
         _moduleManager?.logger.error("Error handling modal submit", interaction.guildId ?? undefined, error, "embeds");
@@ -269,7 +273,10 @@ function registerModalHandler(client: any) {
         }
 
         // Send V2 layout
-        await channel.send({ components: pending.v2Components });
+        await channel.send({
+          components: pending.v2Components,
+          flags: MessageFlags.IsComponentsV2,
+        });
 
         // Clean up
         pendingEmbeds.delete(key);
@@ -409,10 +416,16 @@ async function handleEmbedQuick(
   }
 
   try {
-    await channel.send({ components: v2Components });
-    await interaction.editReply({
-      content: `✅ V2 Component message sent to <#${channel.id}>!`,
+    await channel.send({
       components: v2Components,
+      flags: MessageFlags.IsComponentsV2,
+    });
+    await interaction.editReply({
+      components: [
+        createV2Text(`✅ V2 Component message sent to <#${channel.id}>!`),
+        ...v2Components,
+      ],
+      flags: MessageFlags.IsComponentsV2,
     });
   } catch (error: any) {
     moduleManager.logger.error("Quick send error", interaction.guildId ?? undefined, error, "embeds");

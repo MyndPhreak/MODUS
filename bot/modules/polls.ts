@@ -248,7 +248,10 @@ const pollsModule: BotModule = {
         useContainer: true,
       });
 
-      await interaction.editReply({ components });
+      await interaction.editReply({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
     }
   },
 

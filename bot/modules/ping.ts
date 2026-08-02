@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { BotModule, ModuleManager } from '../ModuleManager';
 import { buildV2Layout } from '../lib/components-v2';
 
@@ -25,8 +25,8 @@ const pingModule: BotModule = {
         });
 
         await interaction.editReply({
-            content: "",
             components: v2Layout,
+            flags: MessageFlags.IsComponentsV2,
         });
     },
 };

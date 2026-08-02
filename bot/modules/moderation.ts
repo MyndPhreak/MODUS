@@ -8,6 +8,7 @@ import {
   ChannelType,
   User,
   AutocompleteInteraction,
+  MessageFlags,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
 import { buildV2Layout } from "../lib/components-v2";
@@ -213,7 +214,7 @@ async function sendModLog(
       );
       if (channel && channel instanceof TextChannel) {
         const components = buildModLogEmbed(modCase, target);
-        await channel.send({ components });
+        await channel.send({ components, flags: MessageFlags.IsComponentsV2 });
       }
     } catch (err) {
       moduleManager.logger.warn("Failed to send mod log", guildId, "moderation");
