@@ -1,6 +1,8 @@
 // Proxy: POST /api/music/action
 // Forwards control actions (skip, pause, resume, stop, shuffle, play, volume, remove, reorder, search)
 // to the bot's HTTP API
+import { requireGuildManager } from "../../utils/session";
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { guild_id, action, ...params } = body || {};
@@ -11,6 +13,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id or action",
     });
   }
+
+  await requireGuildManager(event, guild_id);
 
   const validActions = [
     "skip",

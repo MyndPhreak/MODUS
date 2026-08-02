@@ -5,6 +5,8 @@
  * Query params:
  *   - guild_id: The Discord guild ID
  */
+import { requireGuildManager } from "../../utils/session";
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const query = getQuery(event);
@@ -16,6 +18,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id parameter.",
     });
   }
+
+  await requireGuildManager(event, guildId);
 
   const botToken = config.discordBotToken as string;
   if (!botToken) {
