@@ -12,6 +12,7 @@ import { AISettingsSchema } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
 import { buildSystemPrompt } from "../lib/aiPrompt";
 import { AiTool, collectAiTools, toOpenAiTools, toAnthropicTools } from "../lib/aiTools";
+import { getWeather } from "../lib/weather";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -515,6 +516,23 @@ const aiCoreTools: AiTool[] = [
       const results = await performWebSearch(query);
       return results.slice(0, 3200);
     },
+  },
+  {
+    name: "get_weather",
+    description:
+      "Get current weather and a 7-day forecast for a location. Use this for ANY weather question — current conditions or the forecast for a specific day (today, tomorrow, this weekend). Prefer this over web_search for weather.",
+    parameters: {
+      type: "object",
+      properties: {
+        location: {
+          type: "string",
+          description:
+            "City, with state/country if ambiguous, e.g. 'North Augusta SC' or 'Tokyo'.",
+        },
+      },
+      required: ["location"],
+    },
+    execute: async ({ args }) => getWeather((args.location as string) || ""),
   },
 ];
 
