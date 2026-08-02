@@ -5,6 +5,7 @@
  *   - guild_id, name, content?, embed_data?, allowed_roles?, created_by?
  */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 function slugify(name: string): string {
   return String(name)
@@ -36,6 +37,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing required fields: guild_id, name.",
     });
   }
+
+  await requireGuildManager(event, guild_id);
 
   const slug = slugify(name);
   if (!slug) {

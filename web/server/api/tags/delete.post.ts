@@ -4,6 +4,7 @@
  * POST body: { tag_id, guild_id }
  */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -24,6 +25,15 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
     });
   }
+
+  // Resolve the tag's real owning guild and authorize against it, so a caller
+  // can't delete another guild's tag by passing a guild_id they happen to
+  // manage alongside an arbitrary tag_id.
+  const existing = await repos.tags.getById(tag_id);
+  if (!existing) {
+    throw createError({ statusCode: 404, statusMessage: "Tag not found." });
+  }
+  await requireGuildManager(event, existing.guild_id);
 
   try {
     await repos.tags.delete(tag_id);
