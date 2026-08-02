@@ -101,6 +101,61 @@ const triggersModule: BotModule = {
         ),
     )
     .addSubcommand((sub) =>
+      sub
+        .setName("edit")
+        .setDescription("Edit an existing trigger configuration")
+        .addStringOption((opt) =>
+          opt
+            .setName("name")
+            .setDescription("Name of the trigger to edit")
+            .setRequired(true)
+            .setAutocomplete(true),
+        )
+        .addChannelOption((opt) =>
+          opt
+            .setName("channel")
+            .setDescription("New channel to post trigger messages to")
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("provider")
+            .setDescription("New provider type")
+            .setRequired(false)
+            .addChoices(
+              { name: "Generic Webhook", value: "webhook" },
+              { name: "GitHub", value: "github" },
+              { name: "Twitch", value: "twitch" },
+            ),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("new_name")
+            .setDescription("New name for this trigger")
+            .setRequired(false)
+            .setMaxLength(128),
+        )
+        .addBooleanOption((opt) =>
+          opt
+            .setName("enabled")
+            .setDescription("Enable or disable this trigger")
+            .setRequired(false),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("template")
+            .setDescription("New custom embed template (JSON)")
+            .setRequired(false),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("filter")
+            .setDescription("New filter conditions (JSON)")
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
       sub.setName("list").setDescription("List all triggers for this server"),
     )
     .addSubcommand((sub) =>
@@ -258,6 +313,120 @@ const triggersModule: BotModule = {
           .setFooter({
             text: "Paste this URL into your service's webhook settings",
           });
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      // ── Edit ────────────────────────────────────────────────────────
+      case "edit": {
+        const name = interaction.options.getString("name", true);
+        const channel = interaction.options.getChannel("channel");
+        const provider = interaction.options.getString("provider");
+        const newName = interaction.options.getString("new_name")?.trim();
+        const enabled = interaction.options.getBoolean("enabled");
+        const templateStr = interaction.options.getString("template");
+        const filterStr = interaction.options.getString("filter");
+
+        const triggers = await db.listTriggers(guildId);
+        const trigger = triggers.find(
+          (t: any) => t.name.toLowerCase() === name.toLowerCase(),
+        );
+
+        if (!trigger) {
+          await interaction.editReply(`❌ No trigger named **${name}** found.`);
+          return;
+        }
+
+        const patch: Record<string, any> = {};
+
+        if (channel) {
+          patch.channel_id = channel.id;
+        }
+
+        if (provider) {
+          patch.provider = provider;
+        }
+
+        if (enabled !== null && enabled !== undefined) {
+          patch.enabled = enabled;
+        }
+
+        if (newName) {
+          if (
+            newName.toLowerCase() !== trigger.name.toLowerCase() &&
+            triggers.some(
+              (t: any) => t.name.toLowerCase() === newName.toLowerCase(),
+            )
+          ) {
+            await interaction.editReply(
+              `❌ A trigger named **${newName}** already exists. Choose a different name.`,
+            );
+            return;
+          }
+          patch.name = newName;
+        }
+
+        if (templateStr !== null && templateStr !== undefined) {
+          try {
+            JSON.parse(templateStr);
+            patch.embed_template = templateStr;
+          } catch {
+            await interaction.editReply(
+              "❌ Invalid JSON format for embed template.",
+            );
+            return;
+          }
+        }
+
+        if (filterStr !== null && filterStr !== undefined) {
+          try {
+            JSON.parse(filterStr);
+            patch.filters = filterStr;
+          } catch {
+            await interaction.editReply(
+              "❌ Invalid JSON format for filter conditions.",
+            );
+            return;
+          }
+        }
+
+        if (Object.keys(patch).length === 0) {
+          await interaction.editReply(
+            "⚠️ No changes provided. Please specify at least one option to update.",
+          );
+          return;
+        }
+
+        await db.updateTrigger(trigger.$id, patch);
+
+        const updatedName = patch.name || trigger.name;
+        const finalChannelId = patch.channel_id || trigger.channel_id;
+        const finalProvider = patch.provider || trigger.provider;
+        const finalEnabled =
+          patch.enabled !== undefined ? patch.enabled : trigger.enabled;
+
+        const embed = new EmbedBuilder()
+          .setColor(0x57f287)
+          .setTitle("✅ Trigger Updated")
+          .setDescription(`Successfully updated trigger **${updatedName}**.`)
+          .addFields(
+            {
+              name: "Channel",
+              value: `<#${finalChannelId}>`,
+              inline: true,
+            },
+            {
+              name: "Provider",
+              value: finalProvider,
+              inline: true,
+            },
+            {
+              name: "Status",
+              value: finalEnabled ? "Active ✅" : "Disabled ❌",
+              inline: true,
+            },
+          );
 
         await interaction.editReply({ embeds: [embed] });
         break;
