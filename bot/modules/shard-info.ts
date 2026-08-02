@@ -1,9 +1,9 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 
 function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -48,7 +48,6 @@ const shardInfoModule: BotModule = {
     const currentShardId = client.shard?.ids[0] ?? 0;
     const totalShards = client.shard?.count ?? 1;
 
-    // ─── Gather stats from ALL shards via broadcastEval ───────────────
     interface ShardStats {
       id: number;
       guilds: number;
@@ -65,7 +64,6 @@ const shardInfoModule: BotModule = {
 
     try {
       if (client.shard) {
-        // Multi-shard: broadcast across all shards
         const results = (await client.shard.broadcastEval((c) => {
           const mem = process.memoryUsage();
           return {
@@ -82,7 +80,6 @@ const shardInfoModule: BotModule = {
         })) as ShardStats[];
         allShardStats = results;
       } else {
-        // Single process (no sharding manager)
         const mem = process.memoryUsage();
         allShardStats = [
           {
@@ -103,7 +100,6 @@ const shardInfoModule: BotModule = {
       }
     } catch (err) {
       moduleManager.logger.error("broadcastEval failed", interaction.guildId ?? undefined, err, "shard-info");
-      // Fallback to local stats only
       const mem = process.memoryUsage();
       allShardStats = [
         {
@@ -120,7 +116,6 @@ const shardInfoModule: BotModule = {
       ];
     }
 
-    // ─── Aggregate totals ─────────────────────────────────────────────
     const totals = allShardStats.reduce(
       (acc, s) => ({
         guilds: acc.guilds + s.guilds,
@@ -132,26 +127,19 @@ const shardInfoModule: BotModule = {
       { guilds: 0, users: 0, channels: 0, memUsed: 0, memRss: 0 },
     );
 
-    // ─── Build embed ──────────────────────────────────────────────────
-    const embed = new EmbedBuilder()
-      .setTitle("🔧 Shard Diagnostics")
-      .setColor(0x5865f2)
-      .setTimestamp();
+    const fields = [
+      {
+        name: "📊 Cluster Overview",
+        value: [
+          `**Shards:** ${totalShards}`,
+          `**Total Guilds:** ${totals.guilds.toLocaleString()}`,
+          `**Total Users:** ${totals.users.toLocaleString()}`,
+          `**Total Channels:** ${totals.channels.toLocaleString()}`,
+          `**Total Memory (RSS):** ${formatBytes(totals.memRss)}`,
+        ].join("\n"),
+      },
+    ];
 
-    // Cluster overview
-    embed.addFields({
-      name: "📊 Cluster Overview",
-      value: [
-        `**Shards:** ${totalShards}`,
-        `**Total Guilds:** ${totals.guilds.toLocaleString()}`,
-        `**Total Users:** ${totals.users.toLocaleString()}`,
-        `**Total Channels:** ${totals.channels.toLocaleString()}`,
-        `**Total Memory (RSS):** ${formatBytes(totals.memRss)}`,
-      ].join("\n"),
-      inline: false,
-    });
-
-    // Per-shard breakdown
     for (const shard of allShardStats) {
       const isCurrent = shard.id === currentShardId;
       const label = isCurrent
@@ -160,7 +148,7 @@ const shardInfoModule: BotModule = {
       const pingColor =
         shard.ping < 100 ? "🟢" : shard.ping < 200 ? "🟡" : "🔴";
 
-      embed.addFields({
+      fields.push({
         name: label,
         value: [
           `${pingColor} **Ping:** ${shard.ping}ms`,
@@ -169,17 +157,19 @@ const shardInfoModule: BotModule = {
           `💾 **Heap:** ${memBar(shard.memUsed, shard.memTotal)} (${formatBytes(shard.memUsed)} / ${formatBytes(shard.memTotal)})`,
           `📦 **RSS:** ${formatBytes(shard.memRss)}`,
         ].join("\n"),
-        inline: allShardStats.length <= 6, // side-by-side for ≤6 shards
       });
     }
 
-    // Footer with node version
-    embed.setFooter({
-      text: `Node.js ${process.version} • discord.js v${require("discord.js").version}`,
+    const v2Layout = buildV2Layout({
+      title: "🔧 Shard Diagnostics",
+      fields,
+      footer: `Node.js ${process.version} • discord.js v${require("discord.js").version}`,
+      useContainer: true,
     });
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ components: v2Layout });
   },
 };
 
 export default shardInfoModule;
+

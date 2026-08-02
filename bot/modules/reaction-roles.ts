@@ -16,6 +16,7 @@ import {
   Interaction,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 import {
   ButtonRolesSettingsSchema,
   ButtonRolesSettingsType,
@@ -47,19 +48,7 @@ const STYLE_MAP: Record<string, ButtonStyle> = {
 
 function buildPanelPayload(panel: ButtonRolesPanel) {
   const embedCfg = panel.embed;
-
-  // Embed (always shown to provide context)
-  const embed = new EmbedBuilder().setDescription(
-    embedCfg?.description || "Select a role from the options below.",
-  );
-  if (embedCfg?.title) embed.setTitle(embedCfg.title);
-  if (embedCfg?.color) {
-    const c = parseHexColor(embedCfg.color);
-    if (c !== null) embed.setColor(c);
-  }
-
-  const components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] =
-    [];
+  const color = embedCfg?.color ? parseHexColor(embedCfg.color) : null;
 
   if (panel.type === "dropdown") {
     // ── Select menu (max 25 options) ─────────────────────────────────
@@ -69,40 +58,48 @@ function buildPanelPayload(panel: ButtonRolesPanel) {
       emoji: entry.emoji || undefined,
     }));
 
-    if (options.length > 0) {
-      const select = new StringSelectMenuBuilder()
-        .setCustomId(`${SELECT_PREFIX}:${panel.id}`)
-        .setPlaceholder("Select roles to toggle…")
-        .setMinValues(0)
-        .setMaxValues(options.length)
-        .addOptions(options);
-
-      components.push(
-        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select),
-      );
-    }
+    return {
+      components: buildV2Layout({
+        title: embedCfg?.title || undefined,
+        description: embedCfg?.description || "Select a role from the options below.",
+        color: color ?? 0x5865f2,
+        selectMenus: [
+          {
+            customId: `rr:select:${panel.id}`,
+            placeholder: "Select roles to toggle…",
+            options,
+          },
+        ],
+        useContainer: true,
+      }),
+    };
   } else {
-    // ── Buttons (up to 5 per row × 5 rows) ───────────────────────────
-    const chunks: ButtonRoleEntry[][] = [];
+    // ── Button grid (max 5 per row, max 25 total) ──────────────────────
+    const buttonRows: ActionRowBuilder<ButtonBuilder>[] = [];
     for (let i = 0; i < panel.entries.length; i += 5) {
-      chunks.push(panel.entries.slice(i, i + 5));
+      const chunk = panel.entries.slice(i, i + 5);
+      const row = new ActionRowBuilder<ButtonBuilder>();
+      for (const entry of chunk) {
+        const btn = new ButtonBuilder()
+          .setCustomId(`rr:btn:${panel.id}:${entry.id}`)
+          .setLabel(entry.label)
+          .setStyle(STYLE_MAP[entry.style] ?? ButtonStyle.Primary);
+        if (entry.emoji) btn.setEmoji(entry.emoji);
+        row.addComponents(btn);
+      }
+      buttonRows.push(row);
     }
-    for (const chunk of chunks.slice(0, 5)) {
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        chunk.map((entry) => {
-          const b = new ButtonBuilder()
-            .setCustomId(`${BTN_PREFIX}:${panel.id}:${entry.id}`)
-            .setLabel(entry.label)
-            .setStyle(STYLE_MAP[entry.style] ?? ButtonStyle.Primary);
-          if (entry.emoji) b.setEmoji(entry.emoji);
-          return b;
-        }),
-      );
-      components.push(row);
-    }
-  }
 
-  return { embeds: [embed], components } as any;
+    return {
+      components: buildV2Layout({
+        title: embedCfg?.title || undefined,
+        description: embedCfg?.description || "Select a role from the options below.",
+        color: color ?? 0x5865f2,
+        components: buttonRows,
+        useContainer: true,
+      }),
+    };
+  }
 }
 
 /**

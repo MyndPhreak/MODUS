@@ -1,0 +1,1477 @@
+[
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "status",
+        "description": "Show AI module status and current configuration",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable the AI module for this server",
+        "options": []
+      }
+    ],
+    "name": "ai",
+    "description": "Configure the AI assistant module",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "add",
+        "description": "Add a new social media alert source",
+        "options": [
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "YouTube",
+                "value": "youtube"
+              },
+              {
+                "name": "Twitch",
+                "value": "twitch"
+              },
+              {
+                "name": "RSS Feed",
+                "value": "rss"
+              },
+              {
+                "name": "GitHub",
+                "value": "github"
+              }
+            ],
+            "name": "platform",
+            "description": "Platform to monitor",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "handle",
+            "description": "YouTube: channel ID (UC...) · Twitch: login name · RSS: feed URL · GitHub: owner/repo",
+            "required": true
+          },
+          {
+            "channel_types": [
+              0,
+              5
+            ],
+            "name": "channel",
+            "description": "Where to post the alerts",
+            "required": true,
+            "type": 7
+          },
+          {
+            "type": 3,
+            "name": "message",
+            "description": "Custom ping message (e.g. 'Hey @everyone, new video!')",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "remove",
+        "description": "Remove an alert configuration",
+        "options": [
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "YouTube",
+                "value": "youtube"
+              },
+              {
+                "name": "Twitch",
+                "value": "twitch"
+              },
+              {
+                "name": "RSS Feed",
+                "value": "rss"
+              },
+              {
+                "name": "GitHub",
+                "value": "github"
+              }
+            ],
+            "name": "platform",
+            "description": "Platform",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "handle",
+            "description": "The handle, ID, or URL to remove",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "list",
+        "description": "List active alerts",
+        "options": []
+      }
+    ],
+    "name": "alerts",
+    "description": "Configure social media alerts",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "config",
+        "description": "Set the Anti-Raid triggers",
+        "options": [
+          {
+            "min_value": 2,
+            "type": 4,
+            "name": "threshold",
+            "description": "Number of joins to trigger action",
+            "required": true
+          },
+          {
+            "max_value": 300,
+            "min_value": 1,
+            "type": 4,
+            "name": "window",
+            "description": "Time window in seconds",
+            "required": true
+          },
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "Lockdown Server",
+                "value": "lockdown"
+              },
+              {
+                "name": "Kick Raiders",
+                "value": "kick"
+              },
+              {
+                "name": "Ban Raiders",
+                "value": "ban"
+              }
+            ],
+            "name": "action",
+            "description": "Action to take when triggered",
+            "required": true
+          },
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "alert_channel",
+            "description": "Channel to send raid alerts",
+            "required": false,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "unlock",
+        "description": "Lift a raid lockdown and restore channel permissions",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable Anti-Raid protection",
+        "options": []
+      }
+    ],
+    "name": "antiraid",
+    "description": "Configure Anti-Raid protection",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "automod",
+    "description": "View AutoMod rules status",
+    "default_member_permissions": "32",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "embed",
+    "description": "Create a rich embed message using a dialog",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "channel_types": [
+          0,
+          5
+        ],
+        "name": "channel",
+        "description": "Channel to send the embed to",
+        "required": true,
+        "type": 7
+      },
+      {
+        "type": 3,
+        "name": "title",
+        "description": "Embed title",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "description",
+        "description": "Embed description (supports markdown)",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "color",
+        "description": "Hex color (#5865F2) or preset: blurple, green, red, etc.",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "footer",
+        "description": "Footer text",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "image",
+        "description": "Image URL for the embed",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "thumbnail",
+        "description": "Thumbnail URL for the embed",
+        "required": false
+      }
+    ],
+    "name": "embed-quick",
+    "description": "Quickly send a simple embed to a channel",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "create",
+        "description": "Create a new scheduled event (opens a form)",
+        "options": [
+          {
+            "type": 3,
+            "name": "description",
+            "description": "Optional event description",
+            "required": false
+          }
+        ]
+      }
+    ],
+    "name": "event",
+    "description": "Manage server events",
+    "default_member_permissions": "8589934592",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "help",
+    "description": "Browse all available modules and commands.",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "logging",
+    "description": "View logging module status",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "leaderboard",
+        "description": "View the server's character milestone leaderboard",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "check",
+        "description": "Check your character stats",
+        "options": [
+          {
+            "name": "user",
+            "description": "User to check (defaults to yourself)",
+            "required": false,
+            "type": 6
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "optin",
+        "description": "Opt in to character milestone tracking",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "optout",
+        "description": "Opt out of character milestone tracking",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "preferences",
+        "description": "Set your milestone notification preference",
+        "options": [
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "🎉 Public — Announce in channel for everyone",
+                "value": "public"
+              },
+              {
+                "name": "🔒 Private — Send me a DM only",
+                "value": "private"
+              },
+              {
+                "name": "🔕 Silent — Track only, no notifications",
+                "value": "silent"
+              }
+            ],
+            "name": "mode",
+            "description": "How you want to be notified about milestones",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "name": "milestones",
+    "description": "Character milestone tracker",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to kick",
+        "required": true,
+        "type": 6
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for the kick",
+        "required": false
+      }
+    ],
+    "name": "kick",
+    "description": "Kick a member from the server",
+    "default_member_permissions": "2",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to ban",
+        "required": true,
+        "type": 6
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for the ban",
+        "required": false
+      },
+      {
+        "max_value": 7,
+        "min_value": 0,
+        "type": 4,
+        "name": "delete_days",
+        "description": "Number of days of messages to delete (0-7)",
+        "required": false
+      }
+    ],
+    "name": "ban",
+    "description": "Ban a member from the server",
+    "default_member_permissions": "4",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 3,
+        "name": "user_id",
+        "description": "The user ID to unban",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for the unban",
+        "required": false
+      }
+    ],
+    "name": "unban",
+    "description": "Unban a user from the server",
+    "default_member_permissions": "4",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to timeout",
+        "required": true,
+        "type": 6
+      },
+      {
+        "type": 3,
+        "name": "duration",
+        "description": "Duration (e.g. 10m, 1h, 1d). Max 28 days.",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for the timeout",
+        "required": false
+      }
+    ],
+    "name": "timeout",
+    "description": "Timeout a member (prevent them from chatting)",
+    "default_member_permissions": "1099511627776",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to untimeout",
+        "required": true,
+        "type": 6
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for removing the timeout",
+        "required": false
+      }
+    ],
+    "name": "untimeout",
+    "description": "Remove a timeout from a member",
+    "default_member_permissions": "1099511627776",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to warn",
+        "required": true,
+        "type": 6
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for the warning",
+        "required": true
+      }
+    ],
+    "name": "warn",
+    "description": "Issue a warning to a member",
+    "default_member_permissions": "1099511627776",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to check",
+        "required": true,
+        "type": 6
+      }
+    ],
+    "name": "warnings",
+    "description": "View warnings for a member",
+    "default_member_permissions": "1099511627776",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "user",
+        "description": "The user to clear warnings for",
+        "required": true,
+        "type": 6
+      }
+    ],
+    "name": "clearwarnings",
+    "description": "Clear all warnings for a member",
+    "default_member_permissions": "1099511627776",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "max_value": 100,
+        "min_value": 1,
+        "type": 4,
+        "name": "amount",
+        "description": "Number of messages to delete (1-100)",
+        "required": true
+      },
+      {
+        "name": "user",
+        "description": "Only delete messages from this user",
+        "required": false,
+        "type": 6
+      }
+    ],
+    "name": "purge",
+    "description": "Bulk delete messages from a channel",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "max_value": 21600,
+        "min_value": 0,
+        "type": 4,
+        "name": "seconds",
+        "description": "Slowmode delay in seconds (0 = off, max 21600)",
+        "required": true
+      },
+      {
+        "channel_types": [
+          0
+        ],
+        "name": "channel",
+        "description": "The channel (defaults to current)",
+        "required": false,
+        "type": 7
+      }
+    ],
+    "name": "slowmode",
+    "description": "Set slowmode for a channel",
+    "default_member_permissions": "16",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "channel_types": [
+          0
+        ],
+        "name": "channel",
+        "description": "The channel to lock (defaults to current)",
+        "required": false,
+        "type": 7
+      },
+      {
+        "type": 3,
+        "name": "reason",
+        "description": "Reason for locking",
+        "required": false
+      }
+    ],
+    "name": "lock",
+    "description": "Lock a channel (prevent @everyone from sending messages)",
+    "default_member_permissions": "16",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "channel_types": [
+          0
+        ],
+        "name": "channel",
+        "description": "The channel to unlock (defaults to current)",
+        "required": false,
+        "type": 7
+      }
+    ],
+    "name": "unlock",
+    "description": "Unlock a channel (allow @everyone to send messages)",
+    "default_member_permissions": "16",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "channel_types": [
+          0
+        ],
+        "name": "channel",
+        "description": "The channel for mod logs",
+        "required": true,
+        "type": 7
+      }
+    ],
+    "name": "modlog",
+    "description": "Set the moderation log channel",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "autocomplete": true,
+        "type": 3,
+        "name": "query",
+        "description": "Song name, YouTube/Spotify URL",
+        "required": true
+      }
+    ],
+    "name": "play",
+    "description": "Play a song or add it to the queue",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "playqueue",
+    "description": "Play all songs queued from the web dashboard",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "skip",
+    "description": "Skip the current track",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "stop",
+    "description": "Stop playback and clear the queue",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "pause",
+    "description": "Pause playback",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "resume",
+    "description": "Resume playback",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "min_value": 1,
+        "type": 4,
+        "name": "page",
+        "description": "Page number",
+        "required": false
+      }
+    ],
+    "name": "queue",
+    "description": "Show the current queue",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "nowplaying",
+    "description": "Show the currently playing track",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "max_value": 100,
+        "min_value": 1,
+        "type": 4,
+        "name": "level",
+        "description": "Volume level (1-100)",
+        "required": true
+      }
+    ],
+    "name": "volume",
+    "description": "Set the playback volume",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "shuffle",
+    "description": "Shuffle the queue",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 3,
+        "choices": [
+          {
+            "name": "Off",
+            "value": "off"
+          },
+          {
+            "name": "Track",
+            "value": "track"
+          },
+          {
+            "name": "Queue",
+            "value": "queue"
+          }
+        ],
+        "name": "mode",
+        "description": "Loop mode",
+        "required": true
+      }
+    ],
+    "name": "loop",
+    "description": "Set loop mode",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "music-settings",
+    "description": "Show music settings for this server",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 3,
+        "choices": [
+          {
+            "name": "🚫 Remove All",
+            "value": "clear"
+          },
+          {
+            "name": "🔊 Bass Boost",
+            "value": "bassboost"
+          },
+          {
+            "name": "💥 Bass Boost (Heavy)",
+            "value": "bassboost_high"
+          },
+          {
+            "name": "🌙 Nightcore",
+            "value": "nightcore"
+          },
+          {
+            "name": "🌊 Vaporwave",
+            "value": "vaporwave"
+          },
+          {
+            "name": "🎧 8D Audio",
+            "value": "8D"
+          },
+          {
+            "name": "🎤 Karaoke",
+            "value": "karaoke"
+          },
+          {
+            "name": "〰️ Tremolo",
+            "value": "tremolo"
+          },
+          {
+            "name": "🎻 Vibrato",
+            "value": "vibrato"
+          },
+          {
+            "name": "📻 Lo-Fi",
+            "value": "lofi"
+          },
+          {
+            "name": "🔮 Phaser",
+            "value": "phaser"
+          },
+          {
+            "name": "👥 Chorus",
+            "value": "chorus"
+          },
+          {
+            "name": "✨ Flanger",
+            "value": "flanger"
+          },
+          {
+            "name": "🔔 Treble Boost",
+            "value": "treble"
+          },
+          {
+            "name": "📊 Normalizer",
+            "value": "normalizer"
+          },
+          {
+            "name": "🌅 Fade In",
+            "value": "fadein"
+          },
+          {
+            "name": "🔈 Surround",
+            "value": "surrounding"
+          }
+        ],
+        "name": "effect",
+        "description": "Audio effect to toggle",
+        "required": true
+      },
+      {
+        "name": "save",
+        "description": "Save as default for this server (auto-applied to new queues)",
+        "required": false,
+        "type": 5
+      }
+    ],
+    "name": "filter",
+    "description": "Toggle an audio effect on the current playback",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "ping",
+    "description": "Replies with Pong!",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "create",
+        "description": "Create a new native Discord poll",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "end",
+        "description": "End an active poll early",
+        "options": [
+          {
+            "type": 3,
+            "name": "message_id",
+            "description": "The message ID of the poll to end",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "results",
+        "description": "Show the current standings of an active or ended poll",
+        "options": [
+          {
+            "type": 3,
+            "name": "message_id",
+            "description": "The message ID of the poll",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "name": "poll",
+    "description": "Create and manage polls",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "deploy",
+        "description": "Post (or refresh) a configured panel in a channel",
+        "options": [
+          {
+            "type": 3,
+            "name": "panel",
+            "description": "Name of the panel to deploy",
+            "required": true
+          },
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post the panel in",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "list",
+        "description": "List all configured button-role panels",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable the button-roles module",
+        "options": []
+      }
+    ],
+    "name": "buttonroles",
+    "description": "Manage button/dropdown role panels",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "start",
+        "description": "Start recording the voice channel",
+        "options": [
+          {
+            "name": "multitrack",
+            "description": "Record each user as a separate track (Premium only)",
+            "required": false,
+            "type": 5
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "stop",
+        "description": "Stop the current recording",
+        "options": [
+          {
+            "type": 3,
+            "name": "title",
+            "description": "Optional title for the recording",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "status",
+        "description": "Check if a recording is in progress",
+        "options": []
+      }
+    ],
+    "name": "record",
+    "description": "Record voice channel audio",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "reload",
+    "description": "Reloads all bot modules.",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "shard-info",
+    "description": "Shows shard diagnostics and performance metrics",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "autocomplete": true,
+        "type": 3,
+        "name": "name",
+        "description": "Tag name to post",
+        "required": true
+      }
+    ],
+    "name": "tag",
+    "description": "Post a saved tag/snippet",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 3,
+        "name": "name",
+        "description": "Tag name (lowercase, no spaces — use hyphens)",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "content",
+        "description": "Plain text content for the tag",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "embed-title",
+        "description": "Embed title (creates an embed tag)",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "embed-description",
+        "description": "Embed description",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "embed-color",
+        "description": "Embed color hex (e.g., #5865F2)",
+        "required": false
+      }
+    ],
+    "name": "tag-create",
+    "description": "Create a new tag/snippet",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "autocomplete": true,
+        "type": 3,
+        "name": "name",
+        "description": "Tag name to delete",
+        "required": true
+      }
+    ],
+    "name": "tag-delete",
+    "description": "Delete an existing tag",
+    "default_member_permissions": "8192",
+    "type": 1
+  },
+  {
+    "options": [],
+    "name": "tag-list",
+    "description": "List all available tags in this server",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "lobby",
+        "description": "Set a voice channel as a Join-to-Create lobby",
+        "options": [
+          {
+            "channel_types": [
+              2
+            ],
+            "name": "channel",
+            "description": "The voice channel to use as the lobby",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "remove-lobby",
+        "description": "Remove a lobby channel",
+        "options": [
+          {
+            "channel_types": [
+              2
+            ],
+            "name": "channel",
+            "description": "The lobby channel to remove",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "rename",
+        "description": "Rename your temporary voice channel",
+        "options": [
+          {
+            "type": 3,
+            "name": "name",
+            "description": "The new name for your channel",
+            "required": true,
+            "max_length": 100
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "lock",
+        "description": "Lock your temp channel — prevent others from joining",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "unlock",
+        "description": "Unlock your temp channel — allow others to join",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "claim",
+        "description": "Claim ownership of the temp channel you're in (if owner left)",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "info",
+        "description": "Show info about the current temp channel",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "template",
+        "description": "Set the default naming template for new temp channels",
+        "options": [
+          {
+            "type": 3,
+            "name": "pattern",
+            "description": "Name pattern — use {username} or {displayname} as placeholders",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "limit",
+        "description": "Set the default user limit for new temp channels",
+        "options": [
+          {
+            "max_value": 99,
+            "min_value": 0,
+            "type": 4,
+            "name": "count",
+            "description": "Default user limit (0 = unlimited)",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "name": "tempvoice",
+    "description": "Manage temporary voice channels",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "create",
+        "description": "Create a new webhook trigger",
+        "options": [
+          {
+            "type": 3,
+            "name": "name",
+            "description": "Unique name for this trigger",
+            "required": true,
+            "max_length": 128
+          },
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "Generic Webhook",
+                "value": "webhook"
+              },
+              {
+                "name": "GitHub",
+                "value": "github"
+              },
+              {
+                "name": "Twitch",
+                "value": "twitch"
+              }
+            ],
+            "name": "provider",
+            "description": "Provider type",
+            "required": true
+          },
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post trigger messages to",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "list",
+        "description": "List all triggers for this server",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "delete",
+        "description": "Delete a trigger",
+        "options": [
+          {
+            "autocomplete": true,
+            "type": 3,
+            "name": "name",
+            "description": "Name of the trigger to delete",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "test",
+        "description": "Send a test message for a trigger",
+        "options": [
+          {
+            "autocomplete": true,
+            "type": 3,
+            "name": "name",
+            "description": "Name of the trigger to test",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "template",
+        "description": "Set a custom embed template (JSON)",
+        "options": [
+          {
+            "autocomplete": true,
+            "type": 3,
+            "name": "name",
+            "description": "Trigger name",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "json",
+            "description": "Embed JSON, e.g. {\"title\":\"PR {pr.title}\",\"color\":65280}",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "filter",
+        "description": "Set filter conditions (JSON)",
+        "options": [
+          {
+            "autocomplete": true,
+            "type": 3,
+            "name": "name",
+            "description": "Trigger name",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "json",
+            "description": "Filter JSON, e.g. {\"action\":\"closed\",\"merged\":true}",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "name": "triggers",
+    "description": "Manage custom webhook triggers",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "deploy",
+        "description": "Post (or refresh) the verification panel in a channel",
+        "options": [
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post the panel in",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable the verification system",
+        "options": []
+      }
+    ],
+    "name": "verification",
+    "description": "Set up or manage the verification panel",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "channel",
+        "description": "Set the channel for welcome messages",
+        "options": [
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "The channel to send welcome images to",
+            "required": true,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "test",
+        "description": "Send a test welcome image for yourself",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable welcome messages for this server",
+        "options": []
+      }
+    ],
+    "name": "welcome",
+    "description": "Configure the welcome image module",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "config",
+        "description": "Deploy or update the ticket panel",
+        "options": [
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post the ticket panel in",
+            "required": true,
+            "type": 7
+          },
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "parent_channel",
+            "description": "Text channel where ticket threads are created (defaults to panel channel)",
+            "required": false,
+            "type": 7
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable the ticketing system",
+        "options": []
+      }
+    ],
+    "name": "tickets",
+    "description": "Configure the ticketing system",
+    "default_member_permissions": "32",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "close",
+        "description": "Close this ticket and generate a transcript",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "claim",
+        "description": "Claim or unclaim this ticket",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "add",
+        "description": "Add a user to this ticket",
+        "options": [
+          {
+            "name": "user",
+            "description": "User to add",
+            "required": true,
+            "type": 6
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "remove",
+        "description": "Remove a user from this ticket",
+        "options": [
+          {
+            "name": "user",
+            "description": "User to remove",
+            "required": true,
+            "type": 6
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "rename",
+        "description": "Rename this ticket thread",
+        "options": [
+          {
+            "type": 3,
+            "name": "name",
+            "description": "New name for the thread",
+            "required": true,
+            "max_length": 96
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "priority",
+        "description": "Set the priority of this ticket",
+        "options": [
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "🟢 Low",
+                "value": "low"
+              },
+              {
+                "name": "🔵 Normal",
+                "value": "normal"
+              },
+              {
+                "name": "🟠 High",
+                "value": "high"
+              },
+              {
+                "name": "🔴 Critical",
+                "value": "critical"
+              }
+            ],
+            "name": "level",
+            "description": "Priority level",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "transcript",
+        "description": "Generate and download the current transcript",
+        "options": []
+      }
+    ],
+    "name": "ticket",
+    "description": "Manage the current ticket thread",
+    "type": 1
+  }
+]

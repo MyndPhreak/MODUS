@@ -10,6 +10,7 @@ import {
   AutocompleteInteraction,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 import {
   ModerationSettingsSchema,
   type ModerationSettingsType,
@@ -83,7 +84,7 @@ const COLORS = {
   purge: 0x3498db,
 };
 
-function buildModLogEmbed(modCase: ModerationCase, target: User): EmbedBuilder {
+function buildModLogEmbed(modCase: ModerationCase, target: User): any[] {
   const actionEmojis: Record<string, string> = {
     warn: "⚠️",
     kick: "👢",
@@ -94,34 +95,21 @@ function buildModLogEmbed(modCase: ModerationCase, target: User): EmbedBuilder {
     purge: "🗑️",
   };
 
-  const embed = new EmbedBuilder()
-    .setColor(COLORS[modCase.action] || 0x5865f2)
-    .setTitle(
-      `${actionEmojis[modCase.action] || "📋"} ${modCase.action.charAt(0).toUpperCase() + modCase.action.slice(1)} | Case #${modCase.caseId}`,
-    )
-    .setThumbnail(target.displayAvatarURL({ extension: "png", size: 128 }))
-    .addFields(
-      {
-        name: "User",
-        value: `${target.tag} (<@${target.id}>)`,
-        inline: true,
-      },
-      {
-        name: "Moderator",
-        value: `<@${modCase.moderatorId}>`,
-        inline: true,
-      },
-      {
-        name: "Reason",
-        value: modCase.reason || "No reason provided",
-        inline: false,
-      },
-    )
-    .setFooter({ text: `User ID: ${target.id}` })
-    .setTimestamp();
+  const fields = [
+    {
+      name: "User",
+      value: `${target.tag} (<@${target.id}>)`,
+      inline: true,
+    },
+    {
+      name: "Moderator",
+      value: `<@${modCase.moderatorId}>`,
+      inline: true,
+    },
+  ];
 
   if (modCase.duration) {
-    embed.addFields({
+    fields.push({
       name: "Duration",
       value: formatDuration(modCase.duration),
       inline: true,
@@ -129,14 +117,27 @@ function buildModLogEmbed(modCase: ModerationCase, target: User): EmbedBuilder {
   }
 
   if (modCase.messageCount !== undefined) {
-    embed.addFields({
+    fields.push({
       name: "Messages Deleted",
       value: `${modCase.messageCount}`,
       inline: true,
     });
   }
 
-  return embed;
+  fields.push({
+    name: "Reason",
+    value: modCase.reason || "No reason provided",
+    inline: false,
+  });
+
+  return buildV2Layout({
+    title: `${actionEmojis[modCase.action] || "📋"} ${modCase.action.charAt(0).toUpperCase() + modCase.action.slice(1)} | Case #${modCase.caseId}`,
+    color: COLORS[modCase.action] || 0x5865f2,
+    thumbnailUrl: target.displayAvatarURL({ extension: "png", size: 128 }),
+    fields,
+    footer: `User ID: ${target.id}`,
+    useContainer: true,
+  });
 }
 
 function formatDuration(minutes: number): string {
@@ -211,8 +212,8 @@ async function sendModLog(
         settings.modLogChannelId,
       );
       if (channel && channel instanceof TextChannel) {
-        const embed = buildModLogEmbed(modCase, target);
-        await channel.send({ embeds: [embed] });
+        const components = buildModLogEmbed(modCase, target);
+        await channel.send({ components });
       }
     } catch (err) {
       moduleManager.logger.warn("Failed to send mod log", guildId, "moderation");

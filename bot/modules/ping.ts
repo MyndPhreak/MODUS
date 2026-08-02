@@ -1,20 +1,35 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 import { BotModule, ModuleManager } from '../ModuleManager';
+import { buildV2Layout } from '../lib/components-v2';
 
 const pingModule: BotModule = {
     name: 'ping',
-    description: 'Replies with Pong!',
+    description: 'Replies with Pong and latency metrics!',
     data: new SlashCommandBuilder()
         .setName('ping')
-        .setDescription('Replies with Pong!')
+        .setDescription('Replies with Pong and latency metrics!')
         .toJSON(),
     execute: async (interaction: ChatInputCommandInteraction, moduleManager: ModuleManager) => {
-        const sent = await interaction.editReply('Pinging...');
+        const sent = await interaction.fetchReply();
         const roundtrip = sent.createdTimestamp - interaction.createdTimestamp;
         const apiPing = interaction.client.ws.ping;
 
-        await interaction.editReply(`Pong! 🏓\nRoundtrip Latency: **${roundtrip}ms**\nAPI Latency: **${apiPing}ms**`);
+        const v2Layout = buildV2Layout({
+            title: "🏓 Pong!",
+            fields: [
+                { name: "Roundtrip Latency", value: `**${roundtrip}ms**`, inline: true },
+                { name: "WebSocket API Latency", value: `**${apiPing}ms**`, inline: true },
+            ],
+            footer: `Shard ${interaction.guild?.shardId ?? 0}`,
+            useContainer: true,
+        });
+
+        await interaction.editReply({
+            content: "",
+            components: v2Layout,
+        });
     },
 };
 
 export default pingModule;
+

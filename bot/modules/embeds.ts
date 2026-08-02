@@ -5,20 +5,18 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  ModalSubmitInteraction,
-  EmbedBuilder,
   ChannelType,
   TextChannel,
   PermissionFlagsBits,
   Events,
   Interaction,
   StringSelectMenuBuilder,
-  StringSelectMenuInteraction,
-  ComponentType,
   MessageFlags,
+  type AnyComponentBuilder,
 } from "discord.js";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
+import { buildV2Layout } from "../lib/components-v2";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -50,28 +48,34 @@ const PRESET_COLORS: Record<string, number> = {
 
 const embedCommand = new SlashCommandBuilder()
   .setName("embed")
-  .setDescription("Create a rich embed message using a dialog")
+  .setDescription("Create a rich V2 component message using a dialog")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
 const embedQuickCommand = new SlashCommandBuilder()
   .setName("embed-quick")
-  .setDescription("Quickly send a simple embed to a channel")
+  .setDescription("Quickly send a V2 component message to a channel")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .addChannelOption((opt) =>
     opt
       .setName("channel")
-      .setDescription("Channel to send the embed to")
+      .setDescription("Channel to send the message to")
       .setRequired(true)
       .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
   )
   .addStringOption((opt) =>
-    opt.setName("title").setDescription("Embed title").setRequired(true),
+    opt.setName("title").setDescription("Message title").setRequired(true),
   )
   .addStringOption((opt) =>
     opt
       .setName("description")
-      .setDescription("Embed description (supports markdown)")
+      .setDescription("Message description (supports markdown)")
       .setRequired(true),
+  )
+  .addBooleanOption((opt) =>
+    opt
+      .setName("container")
+      .setDescription("Wrap layout in a V2 card container (default true)")
+      .setRequired(false),
   )
   .addStringOption((opt) =>
     opt
@@ -86,14 +90,20 @@ const embedQuickCommand = new SlashCommandBuilder()
   )
   .addStringOption((opt) =>
     opt
-      .setName("image")
-      .setDescription("Image URL for the embed")
+      .setName("thumbnail")
+      .setDescription("Thumbnail URL for the message")
       .setRequired(false),
   )
   .addStringOption((opt) =>
     opt
-      .setName("thumbnail")
-      .setDescription("Thumbnail URL for the embed")
+      .setName("button_label")
+      .setDescription("Label for an interactive button accessory")
+      .setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName("button_url")
+      .setDescription("URL for the interactive button accessory")
       .setRequired(false),
   );
 
@@ -102,15 +112,16 @@ const embedQuickCommand = new SlashCommandBuilder()
 const MODAL_ID_PREFIX = "embed_builder_modal_";
 const CHANNEL_SELECT_PREFIX = "embed_channel_select_";
 
-// Track pending embeds from modals (guildId-userId → embed data)
+// Track pending V2 layouts from modals (guildId-userId → components)
 const pendingEmbeds = new Map<
   string,
   {
-    embed: EmbedBuilder;
+    v2Components: any[];
     guildId: string;
     userId: string;
   }
 >();
+
 
 // ─── Modal Interaction Handler (registered globally once) ───────────────
 
@@ -135,31 +146,25 @@ function registerModalHandler(client: any) {
         const footer = interaction.fields.getTextInputValue("embed_footer");
         const imageUrl = interaction.fields.getTextInputValue("embed_image");
 
-        // Build the embed
-        const embed = new EmbedBuilder();
-
-        if (title) embed.setTitle(title);
-        if (description) embed.setDescription(description);
-
         // Parse color
+        let colorInt = 0x5865f2;
         const lowerColor = (colorInput || "").toLowerCase().trim();
         if (PRESET_COLORS[lowerColor]) {
-          embed.setColor(PRESET_COLORS[lowerColor]);
+          colorInt = PRESET_COLORS[lowerColor];
         } else {
-          const parsedColor = parseColor(colorInput);
-          if (parsedColor !== null) {
-            embed.setColor(parsedColor);
-          } else {
-            embed.setColor(0x5865f2); // Default blurple
-          }
+          const parsed = parseColor(colorInput);
+          if (parsed !== null) colorInt = parsed;
         }
 
-        if (footer) embed.setFooter({ text: footer });
-        if (imageUrl && /^https?:\/\//.test(imageUrl.trim())) {
-          embed.setImage(imageUrl.trim());
-        }
-
-        embed.setTimestamp();
+        // Build V2 layout components
+        const v2Components = buildV2Layout({
+          title: title || undefined,
+          description: description || undefined,
+          color: colorInt,
+          footer: footer || undefined,
+          thumbnailUrl: imageUrl && /^https?:\/\//.test(imageUrl.trim()) ? imageUrl.trim() : undefined,
+          useContainer: true,
+        });
 
         // Now show a channel selector
         const guild = interaction.guild;
@@ -185,7 +190,7 @@ function registerModalHandler(client: any) {
             value: c.id,
             description: c.parent?.name || undefined,
           }))
-          .slice(0, 25); // Discord select menu limit
+          .slice(0, 25);
 
         if (textChannels.length === 0) {
           await interaction.editReply({
@@ -197,7 +202,7 @@ function registerModalHandler(client: any) {
 
         const key = `${guild.id}-${interaction.user.id}`;
         pendingEmbeds.set(key, {
-          embed,
+          v2Components,
           guildId: guild.id,
           userId: interaction.user.id,
         });
@@ -207,7 +212,7 @@ function registerModalHandler(client: any) {
 
         const selectMenu = new StringSelectMenuBuilder()
           .setCustomId(`${CHANNEL_SELECT_PREFIX}${interaction.user.id}`)
-          .setPlaceholder("Select a channel to send the embed to...")
+          .setPlaceholder("Select a channel to send the V2 message to...")
           .addOptions(textChannels);
 
         const row =
@@ -217,16 +222,15 @@ function registerModalHandler(client: any) {
 
         // Show preview + channel selector
         await interaction.editReply({
-          content: "**📝 Embed Preview** — Select a channel below to send it:",
-          embeds: [embed],
-          components: [row],
+          content: "**📝 V2 Component Message Preview** — Select a channel below to send it:",
+          components: [...v2Components, row],
         });
       } catch (error) {
         _moduleManager?.logger.error("Error handling modal submit", interaction.guildId ?? undefined, error, "embeds");
         try {
           if (interaction.deferred || interaction.replied) {
             await interaction.editReply({
-              content: "❌ Failed to build embed. Please try again.",
+              content: "❌ Failed to build V2 message. Please try again.",
             });
           }
         } catch {}
@@ -245,8 +249,7 @@ function registerModalHandler(client: any) {
 
         if (!pending) {
           await interaction.editReply({
-            content: "❌ Embed data expired. Please create a new embed.",
-            embeds: [],
+            content: "❌ Message data expired. Please create a new message.",
             components: [],
           });
           return;
@@ -260,30 +263,27 @@ function registerModalHandler(client: any) {
         if (!channel) {
           await interaction.editReply({
             content: "❌ Channel not found.",
-            embeds: [],
             components: [],
           });
           return;
         }
 
-        // Send the embed
-        await channel.send({ embeds: [pending.embed] });
+        // Send V2 layout
+        await channel.send({ components: pending.v2Components });
 
         // Clean up
         pendingEmbeds.delete(key);
 
         await interaction.editReply({
-          content: `✅ Embed sent to <#${channelId}> successfully!`,
-          embeds: [pending.embed],
+          content: `✅ V2 Component message sent to <#${channelId}> successfully!`,
           components: [],
         });
       } catch (error) {
-        _moduleManager?.logger.error("Error sending embed", interaction.guildId ?? undefined, error, "embeds");
+        _moduleManager?.logger.error("Error sending V2 message", interaction.guildId ?? undefined, error, "embeds");
         try {
           await interaction.editReply({
             content:
-              "❌ Failed to send embed. Check bot permissions in the target channel.",
-            embeds: [],
+              "❌ Failed to send V2 message. Check bot permissions in the target channel.",
             components: [],
           });
         } catch {}
@@ -303,13 +303,13 @@ async function handleEmbed(
 
   const modal = new ModalBuilder()
     .setCustomId(`${MODAL_ID_PREFIX}${interaction.user.id}`)
-    .setTitle("📝 Embed Builder");
+    .setTitle("📝 V2 Component Message Builder");
 
   const titleInput = new TextInputBuilder()
     .setCustomId("embed_title")
     .setLabel("Title")
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder("Enter embed title...")
+    .setPlaceholder("Enter title...")
     .setMaxLength(256)
     .setRequired(false);
 
@@ -318,7 +318,7 @@ async function handleEmbed(
     .setLabel("Description")
     .setStyle(TextInputStyle.Paragraph)
     .setPlaceholder(
-      "Enter embed description (supports **bold**, *italic*, etc.)...",
+      "Enter description (supports **bold**, *italic*, # Headers)...",
     )
     .setMaxLength(4096)
     .setRequired(false);
@@ -341,13 +341,12 @@ async function handleEmbed(
 
   const imageInput = new TextInputBuilder()
     .setCustomId("embed_image")
-    .setLabel("Image URL")
+    .setLabel("Image / Thumbnail URL")
     .setStyle(TextInputStyle.Short)
     .setPlaceholder("https://example.com/image.png")
     .setMaxLength(2048)
     .setRequired(false);
 
-  // Each TextInput needs its own ActionRow
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
     new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput),
@@ -356,7 +355,6 @@ async function handleEmbed(
     new ActionRowBuilder<TextInputBuilder>().addComponents(imageInput),
   );
 
-  // Show the modal — must be done before deferring
   await interaction.showModal(modal);
 }
 
@@ -370,42 +368,36 @@ async function handleEmbedQuick(
   ) as TextChannel;
   const title = interaction.options.getString("title", true);
   const description = interaction.options.getString("description", true);
+  const useContainer = interaction.options.getBoolean("container") ?? true;
   const colorInput = interaction.options.getString("color");
   const footer = interaction.options.getString("footer");
-  const imageUrl = interaction.options.getString("image");
   const thumbnailUrl = interaction.options.getString("thumbnail");
-
-  // Build embed
-  const embed = new EmbedBuilder();
-  embed.setTitle(title);
-  embed.setDescription(description);
+  const buttonLabel = interaction.options.getString("button_label");
+  const buttonUrl = interaction.options.getString("button_url");
 
   // Parse color
+  let colorInt = 0x5865f2;
   if (colorInput) {
     const lowerColor = colorInput.toLowerCase().trim();
     if (PRESET_COLORS[lowerColor]) {
-      embed.setColor(PRESET_COLORS[lowerColor]);
+      colorInt = PRESET_COLORS[lowerColor];
     } else {
       const parsedColor = parseColor(colorInput);
-      if (parsedColor !== null) {
-        embed.setColor(parsedColor);
-      } else {
-        embed.setColor(0x5865f2);
-      }
+      if (parsedColor !== null) colorInt = parsedColor;
     }
-  } else {
-    embed.setColor(0x5865f2);
   }
 
-  if (footer) embed.setFooter({ text: footer });
-  if (imageUrl && /^https?:\/\//.test(imageUrl.trim())) {
-    embed.setImage(imageUrl.trim());
-  }
-  if (thumbnailUrl && /^https?:\/\//.test(thumbnailUrl.trim())) {
-    embed.setThumbnail(thumbnailUrl.trim());
-  }
-
-  embed.setTimestamp();
+  // Build V2 layout
+  const v2Components = buildV2Layout({
+    title,
+    description,
+    color: colorInt,
+    footer: footer ?? undefined,
+    thumbnailUrl: thumbnailUrl && /^https?:\/\//.test(thumbnailUrl.trim()) ? thumbnailUrl.trim() : undefined,
+    buttonLabel: buttonLabel ?? undefined,
+    buttonUrl: buttonUrl && /^https?:\/\//.test(buttonUrl.trim()) ? buttonUrl.trim() : undefined,
+    useContainer,
+  });
 
   // Check permissions
   const permissions = channel.permissionsFor(interaction.guild!.members.me!);
@@ -417,15 +409,15 @@ async function handleEmbedQuick(
   }
 
   try {
-    await channel.send({ embeds: [embed] });
+    await channel.send({ components: v2Components });
     await interaction.editReply({
-      content: `✅ Embed sent to <#${channel.id}>!`,
-      embeds: [embed],
+      content: `✅ V2 Component message sent to <#${channel.id}>!`,
+      components: v2Components,
     });
   } catch (error: any) {
     moduleManager.logger.error("Quick send error", interaction.guildId ?? undefined, error, "embeds");
     await interaction.editReply({
-      content: `❌ Failed to send embed: ${error.message}`,
+      content: `❌ Failed to send V2 message: ${error.message}`,
     });
   }
 }
@@ -434,8 +426,8 @@ async function handleEmbedQuick(
 
 const embedsModule: BotModule = {
   name: "embeds",
-  description: "Create and send rich embed messages to any channel.",
-  deferReply: false, // /embed uses showModal which requires no defer
+  description: "Create and send rich V2 Component messages to any channel.",
+  deferReply: false,
 
   commands: [embedCommand.toJSON(), embedQuickCommand.toJSON()],
 
@@ -450,7 +442,6 @@ const embedsModule: BotModule = {
       case "embed":
         return handleEmbed(interaction, moduleManager);
       case "embed-quick":
-        // embed-quick needs a deferred reply since it doesn't use a modal
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         return handleEmbedQuick(interaction, moduleManager);
       default:
@@ -463,3 +454,4 @@ const embedsModule: BotModule = {
 };
 
 export default embedsModule;
+
