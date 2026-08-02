@@ -49,6 +49,30 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Confirm the target channel actually belongs to the authorized guild.
+  // requireGuildManager only proves the caller manages `guild_id`; without
+  // this check a manager of one guild could still address a channel in a
+  // different guild the bot happens to be in.
+  let channelGuildId: string | undefined;
+  try {
+    const channel = (await $fetch(
+      `https://discord.com/api/v10/channels/${channel_id}`,
+      { headers: { Authorization: `Bot ${botToken}` } },
+    )) as { guild_id?: string };
+    channelGuildId = channel.guild_id;
+  } catch {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Channel not found or the bot cannot access it.",
+    });
+  }
+  if (channelGuildId !== guild_id) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Channel does not belong to this server.",
+    });
+  }
+
   const messageBody = buildDiscordMessageBody(embed, content);
 
   console.log(
@@ -293,6 +317,16 @@ function buildDiscordMessageBody(embed: any, content?: string): Record<string, a
   }
 
   return messageBody;
+}
+
+/**
+ * Convert a `#rrggbb` hex string to Discord's integer color form.
+ * Defined locally because the shared `app/utils` helper is a client-side
+ * auto-import and is not in scope inside Nitro server routes.
+ */
+function colorHexToInt(hex: string): number {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  return isNaN(n) ? 0x5865f2 : n;
 }
 
 /**
