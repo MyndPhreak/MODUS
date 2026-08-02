@@ -113,11 +113,12 @@ export function formatWeatherReport(
   );
   lines.push("Forecast:");
   for (let i = 0; i < fc.daily.time.length; i++) {
+    const precip = fc.daily.precipitation_probability_max[i];
     lines.push(
       `${fc.daily.time[i]}: ${describeWeatherCode(fc.daily.weather_code[i])}, ` +
         `high ${formatTemp(fc.daily.temperature_2m_max[i], units.imperial)}, ` +
         `low ${formatTemp(fc.daily.temperature_2m_min[i], units.imperial)}, ` +
-        `precip ${fc.daily.precipitation_probability_max[i]}%.`,
+        `precip ${precip == null ? "n/a" : `${precip}%`}.`,
     );
   }
   return lines.join("\n");
@@ -164,5 +165,9 @@ export async function getWeather(
     return "❌ Couldn't reach the weather service. Try again in a moment.";
   }
 
-  return formatWeatherReport(geo, fc, units);
+  if (!fc?.current || !fc?.daily?.time) {
+    return "❌ The weather service returned unexpected data. Try again in a moment.";
+  }
+
+  return formatWeatherReport(geo, fc, units).slice(0, 2000);
 }
