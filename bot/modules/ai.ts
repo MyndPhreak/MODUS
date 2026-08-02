@@ -2,7 +2,6 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   Message,
-  GuildMember,
 } from "discord.js";
 import http from "http";
 import https from "https";
@@ -735,11 +734,16 @@ export function registerAIEvents(moduleManager: ModuleManager) {
         await message.channel.sendTyping().catch(() => {});
       }
 
+      // Gather the tools this guild may use right now (enabled modules only).
+      const { tools: aiTools, lookup: aiToolLookup } = settings.toolUseEnabled
+        ? await collectAiTools(moduleManager, guildId)
+        : { tools: [] as AiTool[], lookup: new Map<string, AiTool>() };
+
       // ─ Build effective system prompt ─────────────────────────────
       // Core rules (always) + guild personality (appended) + tool appendix.
       const effectiveSystemPrompt = buildSystemPrompt(
         settings.systemPrompt,
-        settings.toolUseEnabled,
+        aiTools.length > 0,
       );
 
       // ─ Build messages array with conversation context ────────────
@@ -784,11 +788,6 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       // Add the new user message
       llmMessages.push({ role: "user", content: trimmedMessage });
       const newMessagesStartIndex = llmMessages.length - 1;
-
-      // Gather the tools this guild may use right now (enabled modules only).
-      const { tools: aiTools, lookup: aiToolLookup } = settings.toolUseEnabled
-        ? await collectAiTools(moduleManager, guildId)
-        : { tools: [] as AiTool[], lookup: new Map<string, AiTool>() };
 
       // ─ Agent Loop ─────────────────────────────────────────────
       let reply = "";

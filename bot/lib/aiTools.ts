@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import type { ModuleManager, BotModule } from "../ModuleManager";
+import type { ModuleManager } from "../ModuleManager";
 
 /** Everything a tool's execute() needs to act on the triggering message. */
 export interface AiToolContext {
@@ -59,17 +59,12 @@ export async function collectAiTools(
   moduleManager: ModuleManager,
   guildId: string,
 ): Promise<{ tools: AiTool[]; lookup: Map<string, AiTool> }> {
-  // getRegisteredModules() is keyed by COMMAND name, so a multi-command module
-  // appears more than once — dedupe by the module's own name first.
-  const uniqueModules = new Map<string, BotModule>();
-  for (const module of moduleManager.getRegisteredModules().values()) {
-    if (!uniqueModules.has(module.name)) uniqueModules.set(module.name, module);
-  }
-
+  // getRegisteredModules() already returns modules deduped by name.
   const tools: AiTool[] = [];
   const lookup = new Map<string, AiTool>();
 
-  for (const [moduleName, module] of uniqueModules) {
+  for (const module of moduleManager.getRegisteredModules().values()) {
+    const moduleName = module.name;
     if (!module.aiTools?.length) continue;
     const enabled = await moduleManager.databaseService.isModuleEnabled(
       guildId,
