@@ -42,14 +42,20 @@ export default defineEventHandler(async (event) => {
 
   const config = useRuntimeConfig();
   const botUrl = (config.public.botUrl as string) || "http://localhost:3005";
+  const botSecret = config.botApiSecret as string;
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (botSecret) headers["X-Bot-Secret"] = botSecret;
+
     const response = await fetch(`${botUrl}/music/${action}/${guild_id}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(params),
       signal: controller.signal,
     });
