@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import type { ModuleManager } from "../ModuleManager";
+import type { ModuleManager, BotModule } from "../ModuleManager";
 
 /** Everything a tool's execute() needs to act on the triggering message. */
 export interface AiToolContext {
@@ -49,4 +49,51 @@ export function toAnthropicTools(tools: AiTool[]): any[] {
     description: t.description,
     input_schema: t.parameters,
   }));
+}
+
+/**
+ * Gather the AI tools available to a guild right now: from enabled modules
+ * only, keeping tools whose isAvailable() passes, first-wins on name clashes.
+ */
+export async function collectAiTools(
+  moduleManager: ModuleManager,
+  guildId: string,
+): Promise<{ tools: AiTool[]; lookup: Map<string, AiTool> }> {
+  // getRegisteredModules() is keyed by COMMAND name, so a multi-command module
+  // appears more than once — dedupe by the module's own name first.
+  const uniqueModules = new Map<string, BotModule>();
+  for (const module of moduleManager.getRegisteredModules().values()) {
+    if (!uniqueModules.has(module.name)) uniqueModules.set(module.name, module);
+  }
+
+  const tools: AiTool[] = [];
+  const lookup = new Map<string, AiTool>();
+
+  for (const [moduleName, module] of uniqueModules) {
+    if (!module.aiTools?.length) continue;
+    const enabled = await moduleManager.databaseService.isModuleEnabled(
+      guildId,
+      moduleName,
+    );
+    if (!enabled) continue;
+
+    for (const tool of module.aiTools) {
+      if (tool.isAvailable) {
+        const ok = await tool.isAvailable({ guildId, moduleManager });
+        if (!ok) continue;
+      }
+      if (lookup.has(tool.name)) {
+        await moduleManager.logger.warn(
+          `Duplicate AI tool name "${tool.name}" from module "${moduleName}" — skipping.`,
+          guildId,
+          "ai",
+        );
+        continue;
+      }
+      lookup.set(tool.name, tool);
+      tools.push(tool);
+    }
+  }
+
+  return { tools, lookup };
 }
