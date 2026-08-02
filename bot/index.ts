@@ -12,7 +12,9 @@ import { DatabaseService } from "./DatabaseService";
 import { ServerStatusService } from "./ServerStatusService";
 import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { TranscriptRetentionWorker } from "./TranscriptRetentionWorker";
+import { ReminderWorker } from "./ReminderWorker";
 import { Logger } from "./Logger";
+
 import {
   createRedisClients,
   closeRedisClients,
@@ -266,6 +268,37 @@ client.once("ready", async () => {
   } else if (typeof shardId !== "number" || shardId === 0) {
     transcriptWorker.start();
   }
+
+  // Reminder delivery worker — polls due reminders every 15s.
+  const reminderWorker = new ReminderWorker(client, databaseService, logger);
+
+  if (redisClients) {
+    const ownerId = `${process.pid}:shard-${shardId}`;
+    new LeaderElection({
+      redis: redisClients.primary,
+      key: "modus:leader:reminders",
+      ownerId,
+      onAcquired: () => {
+        logger.info(
+          `Reminder worker: leader election won (${ownerId})`,
+          undefined,
+          "reminders",
+        );
+        reminderWorker.start();
+      },
+      onLost: () => {
+        logger.warn(
+          `Reminder worker: lost leader lease (${ownerId}) — stopping worker`,
+          undefined,
+          "reminders",
+        );
+        reminderWorker.stop();
+      },
+    }).start();
+  } else if (typeof shardId !== "number" || shardId === 0) {
+    reminderWorker.start();
+  }
+
 
   let botVersion = process.env.npm_package_version || "1.0.0";
   if (!process.env.npm_package_version) {
