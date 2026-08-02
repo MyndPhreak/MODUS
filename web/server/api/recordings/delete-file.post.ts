@@ -3,7 +3,13 @@
  *
  * Body: { fileId: <R2 object key> }
  */
-import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
+import {
+  deleteR2Object,
+  getR2,
+  guildIdFromRecordingKey,
+  looksLikeR2Key,
+} from "../../utils/r2";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -23,6 +29,17 @@ export default defineEventHandler(async (event) => {
         "fileId is not an R2 object key. Legacy Appwrite file IDs must be deleted from the Appwrite console.",
     });
   }
+
+  // Only recording objects can be deleted here, and only by a manager of the
+  // guild that owns them (the guild id is encoded in the key).
+  const ownerGuildId = guildIdFromRecordingKey(fileId);
+  if (!ownerGuildId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "fileId is not a recording object key.",
+    });
+  }
+  await requireGuildManager(event, ownerGuildId);
 
   if (!getR2()) {
     throw createError({
