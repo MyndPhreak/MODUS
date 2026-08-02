@@ -17,6 +17,7 @@ import fs from "fs";
 import path from "path";
 import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
+import type { AiTool } from "./lib/aiTools";
 
 /**
  * A slash-command definition: any command builder (SlashCommandBuilder and
@@ -75,6 +76,12 @@ export interface BotModule {
    * name so /reload cannot attach duplicate listeners.
    */
   registerEvents?: (moduleManager: ModuleManager) => void | Promise<void>;
+  /**
+   * AI tools this module exposes to the assistant. Offered to the model only
+   * when this module is enabled for the guild (and each tool's isAvailable
+   * passes). See bot/lib/aiTools.ts.
+   */
+  aiTools?: AiTool[];
 }
 
 export class ModuleManager {
