@@ -19,6 +19,37 @@
       <!-- Scrollable Content -->
       <div class="flex-1 overflow-y-auto p-6 space-y-8">
         
+        <!-- 0. General Settings -->
+        <div class="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/10">
+          <h3 class="font-medium text-white text-sm">General Settings</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <UFormField label="Name">
+              <UInput v-model="triggerName" placeholder="Trigger name" />
+            </UFormField>
+
+            <UFormField label="Target Channel">
+              <USelect
+                v-if="channelOptions && channelOptions.length > 0"
+                v-model="triggerChannelId"
+                :items="channelOptions"
+                placeholder="Select channel"
+              />
+              <UInput v-else v-model="triggerChannelId" placeholder="Channel ID" />
+            </UFormField>
+
+            <UFormField label="Provider">
+              <USelect v-model="triggerProvider" :items="providerOptions" />
+            </UFormField>
+
+            <UFormField label="Status">
+              <div class="flex items-center justify-between h-9 px-3 rounded-lg bg-white/5 border border-white/10">
+                <span class="text-xs text-gray-300 font-medium">{{ triggerEnabled ? 'Active' : 'Disabled' }}</span>
+                <USwitch v-model="triggerEnabled" />
+              </div>
+            </UFormField>
+          </div>
+        </div>
+
         <!-- 1. Sample Payload -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
@@ -150,10 +181,23 @@ import EmbedPreview from '~/components/EmbedPreview.vue';
 
 const props = defineProps<{
   trigger: TriggerDocument | null;
+  channelOptions?: { label: string; value: string }[];
 }>();
 
 const isOpen = defineModel<boolean>('open', { default: false });
 const emit = defineEmits(['save']);
+
+// General Settings
+const triggerName = ref("");
+const triggerProvider = ref("webhook");
+const triggerChannelId = ref("");
+const triggerEnabled = ref(true);
+
+const providerOptions = [
+  { label: "Generic Webhook", value: "webhook" },
+  { label: "GitHub", value: "github" },
+  { label: "Twitch", value: "twitch" },
+];
 
 const sampleJson = ref("{\n  \"content\": \"Example Payload\"\n}");
 const jsonError = ref(false);
@@ -232,6 +276,11 @@ function insertField(path: string) {
 // Initialize when opened
 watch(() => isOpen.value, (val) => {
   if (val && props.trigger) {
+    triggerName.value = props.trigger.name || "";
+    triggerProvider.value = props.trigger.provider || "webhook";
+    triggerChannelId.value = props.trigger.channel_id || "";
+    triggerEnabled.value = props.trigger.enabled ?? true;
+
     // Load filters
     try {
       if (props.trigger.filters) {
@@ -368,6 +417,10 @@ const save = async () => {
   }
 
   emit('save', {
+    name: triggerName.value,
+    provider: triggerProvider.value,
+    channel_id: triggerChannelId.value,
+    enabled: triggerEnabled.value,
     filters: Object.keys(finalFilters).length > 0 ? JSON.stringify(finalFilters) : null,
     embed_template: Object.keys(finalTemplate).length > 0 ? JSON.stringify(finalTemplate) : null
   });

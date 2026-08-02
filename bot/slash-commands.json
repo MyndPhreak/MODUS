@@ -1197,6 +1197,73 @@
       },
       {
         "type": 1,
+        "name": "edit",
+        "description": "Edit an existing trigger configuration",
+        "options": [
+          {
+            "autocomplete": true,
+            "type": 3,
+            "name": "name",
+            "description": "Name of the trigger to edit",
+            "required": true
+          },
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "New channel to post trigger messages to",
+            "required": false,
+            "type": 7
+          },
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "Generic Webhook",
+                "value": "webhook"
+              },
+              {
+                "name": "GitHub",
+                "value": "github"
+              },
+              {
+                "name": "Twitch",
+                "value": "twitch"
+              }
+            ],
+            "name": "provider",
+            "description": "New provider type",
+            "required": false
+          },
+          {
+            "type": 3,
+            "name": "new_name",
+            "description": "New name for this trigger",
+            "required": false
+          },
+          {
+            "type": 5,
+            "name": "enabled",
+            "description": "Enable or disable this trigger",
+            "required": false
+          },
+          {
+            "type": 3,
+            "name": "template",
+            "description": "New custom embed template (JSON)",
+            "required": false
+          },
+          {
+            "type": 3,
+            "name": "filter",
+            "description": "New filter conditions (JSON)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
         "name": "list",
         "description": "List all triggers for this server",
         "options": []

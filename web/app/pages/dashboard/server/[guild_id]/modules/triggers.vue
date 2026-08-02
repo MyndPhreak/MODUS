@@ -322,6 +322,7 @@
   <TriggerBuilderModal
     v-model:open="isBuilderOpen"
     :trigger="activeTriggerForBuild"
+    :channel-options="channelOptions"
     @save="onSaveBuilder"
   />
 </template>
@@ -468,7 +469,7 @@ const openBuilder = (trigger: TriggerDocument) => {
   isBuilderOpen.value = true;
 };
 
-const onSaveBuilder = async (data: { filters: string | null; embed_template: string | null }) => {
+const onSaveBuilder = async (data: Record<string, any>) => {
   if (!activeTriggerForBuild.value) return;
   try {
     await updateTrigger(activeTriggerForBuild.value.$id, data);
