@@ -419,12 +419,22 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
 
   // ── Auth ──
+  // Fail closed: this renderer loads images from URLs found in the request
+  // body and the guild's template, so it must never be callable without the
+  // shared key. A missing key is a misconfiguration, not an open door.
   const renderKey = config.renderApiKey as string;
-  if (renderKey) {
-    const providedKey = getHeader(event, "x-render-key");
-    if (providedKey !== renderKey) {
-      throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
-    }
+  if (!renderKey) {
+    console.error(
+      "[Welcome Render] NUXT_RENDER_API_KEY is not configured — refusing to render.",
+    );
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Render endpoint is not configured.",
+    });
+  }
+  const providedKey = getHeader(event, "x-render-key");
+  if (providedKey !== renderKey) {
+    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
   }
 
   // ── Parse body ──
