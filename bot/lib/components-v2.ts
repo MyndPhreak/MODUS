@@ -30,7 +30,7 @@ import {
 
 export interface V2SectionOptions {
   title?: string;
-  body: string;
+  body?: string;
   thumbnailUrl?: string;
   buttonLabel?: string;
   buttonUrl?: string;
@@ -112,7 +112,13 @@ export function createV2Section(options: V2SectionOptions): SectionBuilder {
   if (options.title) {
     textComponents.push(new TextDisplayBuilder().setContent(`**${options.title}**`));
   }
-  textComponents.push(new TextDisplayBuilder().setContent(options.body));
+  if (options.body && options.body.trim()) {
+    textComponents.push(new TextDisplayBuilder().setContent(options.body));
+  }
+  if (textComponents.length === 0) {
+    // A Section requires at least one text component.
+    textComponents.push(new TextDisplayBuilder().setContent("​"));
+  }
 
   section.addTextDisplayComponents(...textComponents);
 
@@ -175,25 +181,32 @@ export function buildV2Layout(options: V2CardOptions): any[] {
   const useContainer = options.useContainer ?? true;
   const elements: any[] = [];
 
-  // Title & Description Header with Native V2 Separator Component Parsing
-  if (options.title || options.description) {
+  // Title & Description Header
+  // When a thumbnail is present, the title/description become the text of
+  // the same Section the thumbnail is attached to (as Discord's Section
+  // component intends — rich text beside an accessory). Splitting them into
+  // a header block plus a separate placeholder-labeled Section ("Overview")
+  // left the thumbnail sitting next to near-empty filler text.
+  if (options.thumbnailUrl && (options.title || options.description)) {
+    const section = createV2Section({
+      title: options.title,
+      body: options.description,
+      thumbnailUrl: options.thumbnailUrl,
+    });
+    elements.push(section);
+  } else if (options.thumbnailUrl) {
+    const section = createV2Section({
+      body: "Details",
+      thumbnailUrl: options.thumbnailUrl,
+    });
+    elements.push(section);
+  } else if (options.title || options.description) {
     let headerText = "";
     if (options.title) headerText += `# ${options.title}\n`;
     if (options.description) headerText += options.description;
 
     const parsedBlocks = parseTextWithSeparators(headerText.trim());
     elements.push(...parsedBlocks);
-  }
-
-
-  // Thumbnail & Main Section
-  if (options.thumbnailUrl) {
-    elements.push(createV2Separator(true, SeparatorSpacingSize.Small));
-    const section = createV2Section({
-      body: options.description ? "Overview" : "Details",
-      thumbnailUrl: options.thumbnailUrl,
-    });
-    elements.push(section);
   }
 
   // Fields
