@@ -361,9 +361,19 @@ export function registerWebhookRoutes(
           req.on("error", reject);
         });
 
-        // Verify Twitch HMAC signature
+        // Verify Twitch HMAC signature. Without a configured secret we can't
+        // trust any of this payload, so we reject outright rather than
+        // fall through and let an unauthenticated caller drive Discord posts.
         const twitchSecret = process.env.TWITCH_EVENTSUB_SECRET;
-        if (twitchSecret) {
+        if (!twitchSecret) {
+          console.warn(
+            "[Alerts/Twitch] TWITCH_EVENTSUB_SECRET not set — rejecting EventSub delivery.",
+          );
+          res.writeHead(503);
+          res.end("EventSub not configured");
+          return;
+        }
+        {
           const msgId = (req.headers["twitch-eventsub-message-id"] as string) ?? "";
           const msgTs = (req.headers["twitch-eventsub-message-timestamp"] as string) ?? "";
           const sigHeader = (req.headers["twitch-eventsub-message-signature"] as string) ?? "";
@@ -373,7 +383,13 @@ export function registerWebhookRoutes(
               .createHmac("sha256", twitchSecret)
               .update(msgId + msgTs + rawBody)
               .digest("hex");
-          if (sigHeader !== expected) {
+          // Constant-time compare to avoid leaking the signature via timing.
+          const sigBuf = Buffer.from(sigHeader);
+          const expBuf = Buffer.from(expected);
+          if (
+            sigBuf.length !== expBuf.length ||
+            !crypto.timingSafeEqual(sigBuf, expBuf)
+          ) {
             console.warn("[Alerts/Twitch] Invalid HMAC signature — rejecting");
             res.writeHead(403);
             res.end("Forbidden");

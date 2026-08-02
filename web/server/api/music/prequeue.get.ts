@@ -1,5 +1,7 @@
 // Proxy: GET /api/music/prequeue?guild_id=...
 // Fetches the pre-queue from the bot's HTTP API
+import { requireGuildManager } from "../../utils/session";
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const guildId = query.guild_id as string;
@@ -8,14 +10,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "Missing guild_id" });
   }
 
+  await requireGuildManager(event, guildId);
+
   const config = useRuntimeConfig();
   const botUrl = (config.public.botUrl as string) || "http://localhost:3005";
+  const botSecret = config.botApiSecret as string;
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     const response = await fetch(`${botUrl}/music/prequeue/${guildId}`, {
+      headers: botSecret ? { "X-Bot-Secret": botSecret } : undefined,
       signal: controller.signal,
     });
 

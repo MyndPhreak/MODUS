@@ -12,6 +12,7 @@
       "@discordjs/voice": "bot/patches/@discordjs__voice.patch"
     },
     "overrides": {
+      "h3": "^1.15.11",
       "nitropack": ">=2.13.4",
       "devalue": ">=5.8.1",
       "fast-xml-parser": ">=5.7.0",

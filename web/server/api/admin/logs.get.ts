@@ -4,16 +4,16 @@
  * Most recent 200 log entries across all guilds. Used by the admin logs
  * page for the initial snapshot before the SSE stream takes over.
  *
- * Auth: requires an authenticated session. The page is gated client-side;
- * tighten here if the policy changes.
+ * Auth: bot admins only — this returns log entries across every guild, so it
+ * must not be readable by ordinary authenticated users.
  */
 import { getRepos } from "../../utils/db";
-import { requireAuthedUserId } from "../../utils/session";
+import { requireBotAdmin } from "../../utils/session";
 
 const LIMIT = 200;
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
+  await requireBotAdmin(event);
 
   const repos = getRepos();
   if (!repos) {

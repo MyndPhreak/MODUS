@@ -47,6 +47,20 @@ export function looksLikeR2Key(fileId: string): boolean {
   return fileId.includes("/");
 }
 
+/**
+ * Recording objects are stored under `recordings/<guildId>/<recordingId>/...`.
+ * Extract the owning guild id from a key so endpoints can authorize against it.
+ * Returns null when the key isn't a recording key (so callers can reject it
+ * rather than treat it as a general-purpose bucket reference).
+ */
+export function guildIdFromRecordingKey(key: string): string | null {
+  const parts = key.split("/");
+  if (parts.length < 3 || parts[0] !== "recordings") return null;
+  const guildId = parts[1];
+  if (!guildId || !/^\d{5,25}$/.test(guildId)) return null;
+  return guildId;
+}
+
 export async function presignGet(
   key: string,
   ttlSeconds?: number,

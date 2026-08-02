@@ -8,6 +8,7 @@
 
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { requireAuthedUserId } from "../../utils/session";
 
 interface RequestBody {
   provider: string;
@@ -50,6 +51,10 @@ const FALLBACK_MODELS: Record<string, string[]> = {
 };
 
 export default defineEventHandler(async (event) => {
+  // This endpoint makes outbound requests to a caller-supplied base URL with a
+  // caller-supplied key, so it must not be reachable unauthenticated.
+  await requireAuthedUserId(event);
+
   const body = await readBody<RequestBody>(event);
   const { provider, apiKey, baseUrl } = body;
 
@@ -58,6 +63,25 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       message: "provider and apiKey are required",
     });
+  }
+
+  // For the "OpenAI Compatible" provider the base URL is attacker-influenced;
+  // require a well-formed http(s) URL so it can't be pointed at non-HTTP
+  // schemes. (Private-network egress is still possible for self-hosted models
+  // by design, but the endpoint is now authenticated.)
+  if (baseUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      throw createError({ statusCode: 400, message: "baseUrl is not a valid URL" });
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw createError({
+        statusCode: 400,
+        message: "baseUrl must be an http(s) URL",
+      });
+    }
   }
 
   try {

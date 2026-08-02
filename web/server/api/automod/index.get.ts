@@ -1,16 +1,14 @@
 /**
  * GET /api/automod?guild_id=...
  *
- * List all automod rules for a guild. Read-access is open to any
- * authenticated user; writes are gated by requireGuildManager on the
- * POST/PUT/DELETE endpoints.
+ * List all automod rules for a guild. Scoped to managers of the guild,
+ * matching the POST/PUT/DELETE endpoints — rule config would otherwise
+ * leak cross-tenant to any authenticated user.
  */
 import { getRepos } from "../../utils/db";
-import { requireAuthedUserId } from "../../utils/session";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
-
   const query = getQuery(event);
   const guildId = query.guild_id as string;
   if (!guildId) {
@@ -19,6 +17,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  await requireGuildManager(event, guildId);
 
   const repos = getRepos();
   if (!repos) {

@@ -1,5 +1,6 @@
 /** List tracks for a recording. */
 import { getRecordingRepo } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -18,6 +19,14 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
     });
   }
+
+  // Resolve the owning guild from the recording so we can gate on it — the
+  // caller must manage the guild that owns this recording.
+  const recording = await repo.getById(recordingId);
+  if (!recording) {
+    throw createError({ statusCode: 404, statusMessage: "Recording not found." });
+  }
+  await requireGuildManager(event, recording.guild_id);
 
   try {
     return await repo.listTracks(recordingId);

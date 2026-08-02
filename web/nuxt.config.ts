@@ -32,6 +32,9 @@ export default defineNuxtConfig({
     // Base URL of the bot's HTTP server (server-side only, never sent to browser)
     // Docker: http://bot:3005  |  Non-Docker: https://modus-bot.ppo.gg
     botWebhookUrl: "http://bot:3005", // Set via NUXT_BOT_WEBHOOK_URL
+    // Shared secret for the bot's /music control API. Must match BOT_API_SECRET
+    // on the bot. When set, unauthenticated calls to the bot are rejected.
+    botApiSecret: "", // Set via NUXT_BOT_API_SECRET
     // ── Object storage (Cloudflare R2) ────────────────────────────────────
     // Required for recordings + welcome backgrounds.
     r2AccountId: "", // Set via NUXT_R2_ACCOUNT_ID

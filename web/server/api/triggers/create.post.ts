@@ -6,6 +6,7 @@
  *   - embed_template?, filters?, created_by? (optional)
  */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -23,6 +24,8 @@ export default defineEventHandler(async (event) => {
         "Missing required fields: guild_id, name, secret, provider, channel_id.",
     });
   }
+
+  await requireGuildManager(event, body.guild_id);
 
   const input = {
     guild_id: body.guild_id,

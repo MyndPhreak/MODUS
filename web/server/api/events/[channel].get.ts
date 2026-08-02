@@ -8,8 +8,8 @@
  * Route: GET /api/events/:channel
  *   channel ∈ { logs, modules, guild-configs }
  *
- * Auth: requires any valid session (native or legacy). Consider tightening
- * to admin-only if the channel carries sensitive data.
+ * Auth: requires any valid session. The `logs` channel carries log entries
+ * across every guild, so it is additionally restricted to bot admins.
  *
  * Heartbeat comments every 25s keep the connection alive through proxy
  * idle timeouts. The client (EventSource) reconnects automatically if
@@ -22,7 +22,7 @@ import {
   isRealtimeAvailable,
   subscribe,
 } from "../../utils/eventbus";
-import { requireAuthedUserId } from "../../utils/session";
+import { requireAuthedUserId, requireBotAdmin } from "../../utils/session";
 
 const HEARTBEAT_MS = 25_000;
 
@@ -32,15 +32,22 @@ const ROUTES: Record<string, string> = {
   "guild-configs": CHANNEL_GUILD_CONFIGS,
 };
 
-export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
+// Channels whose payloads span all guilds — bot admins only.
+const ADMIN_ONLY_CHANNELS = new Set(["logs"]);
 
+export default defineEventHandler(async (event) => {
   const channelName = getRouterParam(event, "channel");
   if (!channelName || !ROUTES[channelName]) {
     throw createError({
       statusCode: 404,
       statusMessage: "Unknown event channel",
     });
+  }
+
+  if (ADMIN_ONLY_CHANNELS.has(channelName)) {
+    await requireBotAdmin(event);
+  } else {
+    await requireAuthedUserId(event);
   }
 
   if (!isRealtimeAvailable()) {

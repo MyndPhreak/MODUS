@@ -1,5 +1,6 @@
 /** List AI usage logs for a guild. */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -10,6 +11,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  // Usage rows carry per-user Discord IDs and cost data — restrict to
+  // managers of the guild (previously this endpoint had no auth at all).
+  await requireGuildManager(event, guildId);
 
   const limit = Math.min(Number(query.limit) || 100, 250);
 

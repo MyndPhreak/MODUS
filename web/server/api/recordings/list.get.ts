@@ -1,5 +1,6 @@
 /** List recordings for a guild. */
 import { getRecordingRepo } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -10,6 +11,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  await requireGuildManager(event, guildId);
 
   const repo = getRecordingRepo();
   if (!repo) {

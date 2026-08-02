@@ -5,6 +5,7 @@
  *   - tag_id, guild_id, name?, content?, embed_data?, allowed_roles?
  */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -62,6 +63,13 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
     });
   }
+
+  // Authorize against the tag's real owning guild (not the body's guild_id).
+  const existing = await repos.tags.getById(tag_id);
+  if (!existing) {
+    throw createError({ statusCode: 404, statusMessage: "Tag not found." });
+  }
+  await requireGuildManager(event, existing.guild_id);
 
   try {
     await repos.tags.update(tag_id, normalized);

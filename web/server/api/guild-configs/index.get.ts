@@ -6,11 +6,9 @@
  * state and rehydrate settings editors.
  */
 import { getRepos } from "../../utils/db";
-import { requireAuthedUserId } from "../../utils/session";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
-
   const query = getQuery(event);
   const guildId = query.guild_id as string;
   if (!guildId) {
@@ -19,6 +17,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  // Module settings can carry secrets (e.g. the AI module's aiApiKey), so
+  // this must be scoped to managers of the guild — not any logged-in user.
+  await requireGuildManager(event, guildId);
 
   const repos = getRepos();
   if (!repos) {

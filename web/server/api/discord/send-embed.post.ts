@@ -2,6 +2,8 @@
  * Server-side endpoint to send an embed to a specific channel.
  * Uses the Discord bot token to send messages directly.
  */
+import { requireGuildManager } from "../../utils/session";
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const body = await readBody(event);
@@ -19,6 +21,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing required fields: guild_id, channel_id, embed.",
     });
   }
+
+  // Sending with the bot token is a privileged action — restrict to managers
+  // of the target guild.
+  await requireGuildManager(event, guild_id);
 
   // Validate embed has at least title or description or fields or components
   const hasContent =
@@ -40,6 +46,30 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 500,
       statusMessage: "Bot token not configured on server.",
+    });
+  }
+
+  // Confirm the target channel actually belongs to the authorized guild.
+  // requireGuildManager only proves the caller manages `guild_id`; without
+  // this check a manager of one guild could still address a channel in a
+  // different guild the bot happens to be in.
+  let channelGuildId: string | undefined;
+  try {
+    const channel = (await $fetch(
+      `https://discord.com/api/v10/channels/${channel_id}`,
+      { headers: { Authorization: `Bot ${botToken}` } },
+    )) as { guild_id?: string };
+    channelGuildId = channel.guild_id;
+  } catch {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Channel not found or the bot cannot access it.",
+    });
+  }
+  if (channelGuildId !== guild_id) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Channel does not belong to this server.",
     });
   }
 
@@ -287,6 +317,16 @@ function buildDiscordMessageBody(embed: any, content?: string): Record<string, a
   }
 
   return messageBody;
+}
+
+/**
+ * Convert a `#rrggbb` hex string to Discord's integer color form.
+ * Defined locally because the shared `app/utils` helper is a client-side
+ * auto-import and is not in scope inside Nitro server routes.
+ */
+function colorHexToInt(hex: string): number {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  return isNaN(n) ? 0x5865f2 : n;
 }
 
 /**

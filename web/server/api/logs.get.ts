@@ -6,11 +6,9 @@
  * read without seeing other guilds' logs.
  */
 import { getRepos } from "../utils/db";
-import { requireAuthedUserId } from "../utils/session";
+import { requireGuildManager } from "../utils/session";
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
-
   const query = getQuery(event);
   const guildId = query.guild_id as string;
   if (!guildId) {
@@ -19,6 +17,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  // Logs are per-guild operational data — only managers of this guild may
+  // read them (any authenticated user previously could, cross-tenant).
+  await requireGuildManager(event, guildId);
 
   const limit = Math.min(Number(query.limit) || 200, 500);
 

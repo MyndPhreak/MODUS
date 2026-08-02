@@ -1,5 +1,6 @@
 /** List triggers for a guild. */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -11,6 +12,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id query parameter.",
     });
   }
+
+  // Trigger docs include the webhook secret, so this must be gated to guild
+  // managers.
+  await requireGuildManager(event, guildId);
 
   const repos = getRepos();
   if (!repos) {

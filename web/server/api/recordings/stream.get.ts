@@ -6,7 +6,13 @@
  *
  * Query: file_id (R2 object key).
  */
-import { getR2, looksLikeR2Key, presignGet } from "../../utils/r2";
+import {
+  getR2,
+  guildIdFromRecordingKey,
+  looksLikeR2Key,
+  presignGet,
+} from "../../utils/r2";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -25,6 +31,19 @@ export default defineEventHandler(async (event) => {
         "file_id is not an R2 object key. Legacy Appwrite file IDs are no longer served by this endpoint.",
     });
   }
+
+  // The key encodes its owning guild (`recordings/<guildId>/...`). Reject
+  // anything that isn't a recording key so this can't be turned into a
+  // general-purpose presign oracle for the whole bucket, and require the
+  // caller to manage that guild.
+  const ownerGuildId = guildIdFromRecordingKey(fileId);
+  if (!ownerGuildId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "file_id is not a recording object key.",
+    });
+  }
+  await requireGuildManager(event, ownerGuildId);
 
   if (!getR2()) {
     throw createError({

@@ -5,11 +5,9 @@
  * Convenience endpoint for dashboard pages editing a specific module.
  */
 import { getRepos } from "../../../utils/db";
-import { requireAuthedUserId } from "../../../utils/session";
+import { requireGuildManager } from "../../../utils/session";
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
-
   const guildId = getRouterParam(event, "guild_id");
   const moduleName = getRouterParam(event, "module");
   if (!guildId || !moduleName) {
@@ -18,6 +16,11 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id or module route param.",
     });
   }
+
+  // Module settings can contain secrets (e.g. the AI provider API key), so
+  // this must be restricted to managers of the specific guild rather than any
+  // authenticated user.
+  await requireGuildManager(event, guildId);
 
   const repos = getRepos();
   if (!repos) {
