@@ -39,7 +39,8 @@
           </h1>
 
           <p class="hero-subtitle">
-            MODUS is a modular Discord bot with 20+ powerful features - from
+            MODUS is a modular Discord bot with {{ moduleList.length }}+
+            powerful features - from
             music and moderation to AI, anti-raid, recordings, and more. Take
             control of your server with ease, right from the Web Dashboard.
           </p>
@@ -158,7 +159,7 @@
           <h2
             class="text-4xl md:text-5xl font-black text-white tracking-tight mb-4"
           >
-            20+ Modules, One Bot
+            {{ moduleList.length }}+ Modules, One Bot
           </h2>
           <p class="text-gray-400 max-w-2xl mx-auto text-lg">
             Every module is independently configurable from the web dashboard.
@@ -522,6 +523,18 @@ const moduleList = [
     icon: "i-heroicons-question-mark-circle",
     tagline: "Auto-generated command help",
     color: "rgba(107,114,128,0.2)",
+  },
+  {
+    name: "Reminders",
+    icon: "i-heroicons-clock",
+    tagline: "Natural-language reminders",
+    color: "rgba(56,189,248,0.2)",
+  },
+  {
+    name: "Text-to-Speech",
+    icon: "i-heroicons-megaphone",
+    tagline: "AI voice speaks in your channel",
+    color: "rgba(217,70,239,0.2)",
   },
 ];
 
