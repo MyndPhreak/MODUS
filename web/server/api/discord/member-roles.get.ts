@@ -5,11 +5,9 @@
  *   - guild_id: The Discord guild ID
  *   - discord_uid: The Discord user ID
  */
-import { requireAuthedUserId } from "../../utils/session";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
-  await requireAuthedUserId(event);
-
   const config = useRuntimeConfig();
   const query = getQuery(event);
   const guildId = query.guild_id as string;
@@ -21,6 +19,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Missing guild_id or discord_uid parameter.",
     });
   }
+
+  // Reads any member's roles via the bot token — restrict to managers of the
+  // target guild so it can't be used to enumerate members cross-tenant.
+  await requireGuildManager(event, guildId);
 
   const botToken = config.discordBotToken as string;
   if (!botToken) {
