@@ -4,6 +4,7 @@
  * Body: { trigger_id, data: { ... } }
  */
 import { getRepos } from "../../utils/db";
+import { requireGuildManager } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -22,6 +23,13 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
     });
   }
+
+  // Authorize against the trigger's owning guild before mutating it.
+  const existing = await repos.triggers.getById(body.trigger_id);
+  if (!existing) {
+    throw createError({ statusCode: 404, statusMessage: "Trigger not found." });
+  }
+  await requireGuildManager(event, existing.guild_id);
 
   try {
     await repos.triggers.update(body.trigger_id, body.data);
