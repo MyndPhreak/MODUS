@@ -560,3 +560,37 @@ export const ticketMessages = pgTable(
 
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type NewTicketMessage = typeof ticketMessages.$inferInsert;
+
+// ── reminders ─────────────────────────────────────────────────────────────
+
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id"),
+    channelId: text("channel_id").notNull(),
+    userId: text("user_id").notNull(),
+    reminder: text("reminder").notNull(),
+    remindAt: timestamp("remind_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("pending"),
+    messageId: text("message_id"),
+    messageUrl: text("message_url"),
+    quotedContent: text("quoted_content"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byUser: index("reminders_user_id_idx").on(t.userId),
+    byPendingRemindAt: index("reminders_pending_remind_at_idx")
+      .on(t.status, t.remindAt)
+      .where(sql`status = 'pending'`),
+  }),
+);
+
+export type Reminder = typeof reminders.$inferSelect;
+export type NewReminder = typeof reminders.$inferInsert;
+

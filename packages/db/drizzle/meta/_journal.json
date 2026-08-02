@@ -15,6 +15,13 @@
       "when": 1776923631905,
       "tag": "0001_wakeful_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785646082847,
+      "tag": "0002_magenta_husk",
+      "breakpoints": true
     }
   ]
 }

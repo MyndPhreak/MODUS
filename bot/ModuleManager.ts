@@ -2,6 +2,7 @@ import {
   Client,
   Message,
   ChatInputCommandInteraction,
+  ContextMenuCommandInteraction,
   AutocompleteInteraction,
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -10,7 +11,7 @@ import {
   Routes,
   Interaction,
   MessageFlags,
-  type RESTPostAPIChatInputApplicationCommandsJSONBody,
+  type RESTPostAPIApplicationCommandsJSONBody,
 } from "discord.js";
 import { Player } from "discord-player";
 import fs from "fs";
@@ -24,11 +25,11 @@ import type { AiTool } from "./lib/aiTools";
  * friends, matched structurally) or the already-serialized REST JSON body.
  */
 export type SlashCommandData =
-  | RESTPostAPIChatInputApplicationCommandsJSONBody
+  | RESTPostAPIApplicationCommandsJSONBody
   | {
       name: string;
-      description: string;
-      toJSON(): RESTPostAPIChatInputApplicationCommandsJSONBody;
+      description?: string;
+      toJSON(): RESTPostAPIApplicationCommandsJSONBody;
     };
 
 export interface BotModule {
@@ -47,9 +48,11 @@ export interface BotModule {
    */
   skipDefer?: boolean;
   execute: (
-    interaction: ChatInputCommandInteraction,
+    interaction: any,
     moduleManager: ModuleManager,
   ) => Promise<void>;
+
+
   /** Optional autocomplete handler for slash command options. */
   autocomplete?: (
     interaction: AutocompleteInteraction,
@@ -393,8 +396,9 @@ export class ModuleManager {
       return this.dispatchComponent(interaction, "handleModal", "modal");
     }
 
-    // ─── Chat Input Commands ──────────────────────────────────────────
-    if (!interaction.isChatInputCommand()) return;
+    // ─── Chat Input & Context Menu Commands ─────────────────────────────
+    if (!interaction.isChatInputCommand() && !interaction.isContextMenuCommand()) return;
+
 
     const { commandName, guildId } = interaction;
     const module = resolveModule(commandName);
