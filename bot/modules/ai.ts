@@ -390,11 +390,33 @@ async function callLLM(
 
 // ── Web Search ─────────────────────────────────────────────────────
 
-async function performWebSearch(query: string): Promise<string> {
+// Compose the SearXNG query URL. `category` picks the vertical (general|news);
+// `timeRange` (day|week|month) restricts recency when provided.
+export function buildSearchUrl(
+  baseUrl: string,
+  query: string,
+  category: string,
+  timeRange?: string,
+): string {
+  const params = new URLSearchParams({
+    q: query,
+    format: "json",
+    categories: category,
+    language: "en",
+  });
+  if (timeRange) params.set("time_range", timeRange);
+  return `${baseUrl}/search?${params.toString()}`;
+}
+
+async function performWebSearch(
+  query: string,
+  category: string = "general",
+  timeRange?: string,
+): Promise<string> {
   const baseUrl = process.env.SEARXNG_URL?.replace(/\/$/, "");
   if (!baseUrl) throw new Error("SEARXNG_URL not configured");
 
-  const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json&categories=general&language=en`;
+  const searchUrl = buildSearchUrl(baseUrl, query, category, timeRange);
   const parsed = new URL(searchUrl);
   const requester = parsed.protocol === "https:" ? https : http;
 
@@ -498,11 +520,25 @@ const aiCoreTools: AiTool[] = [
   {
     name: "web_search",
     description:
-      "Search the web for current, real-time information. Use this when the user asks about recent events, news, current prices, weather, live scores, or anything that requires up-to-date information you might not have.",
+      "Search the web for current, real-time information (recent events, news, prices, live scores, facts). For headlines or 'latest' questions, set category='news' and recency='day'. Use category='general' for stock prices, sports scores, and factual lookups. ALWAYS include the location or country in the query when the question is location-specific. (For weather, use get_weather instead.)",
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "The search query to look up on the web." },
+        query: {
+          type: "string",
+          description:
+            "The search query. Include location/country when relevant, e.g. 'election results South Carolina'.",
+        },
+        category: {
+          type: "string",
+          enum: ["general", "news"],
+          description: "'news' for headlines/current events; 'general' (default) for everything else.",
+        },
+        recency: {
+          type: "string",
+          enum: ["day", "week", "month"],
+          description: "Restrict to recent results. Use 'day' for today's news. Omit for timeless queries.",
+        },
       },
       required: ["query"],
     },
@@ -513,7 +549,11 @@ const aiCoreTools: AiTool[] = [
       if (!process.env.SEARXNG_URL) {
         return "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.";
       }
-      const results = await performWebSearch(query);
+      const category = args.category === "news" ? "news" : "general";
+      const recency = args.recency;
+      const timeRange =
+        recency === "day" || recency === "week" || recency === "month" ? recency : undefined;
+      const results = await performWebSearch(query, category, timeRange);
       return results.slice(0, 3200);
     },
   },
