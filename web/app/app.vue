@@ -1,6 +1,12 @@
 <script setup lang="ts">
 const userStore = useUserStore();
+const route = useRoute();
 const isAuthReady = ref(false);
+
+// Only /dashboard/** renders per-user content that needs to wait on the
+// session check — public pages (landing, legal, login) look the same
+// regardless of auth state and would otherwise flash this mask for no reason.
+const needsAuthGate = computed(() => route.path.startsWith("/dashboard"));
 
 onMounted(async () => {
   await userStore.init();
@@ -10,10 +16,10 @@ onMounted(async () => {
 
 <template>
   <UApp>
-    <!-- Zero-Flash Auth Gate: mask all content until session check completes -->
+    <!-- Zero-Flash Auth Gate: mask dashboard content until session check completes -->
     <ClientOnly>
       <Transition name="auth-fade">
-        <div v-if="!isAuthReady" class="auth-mask">
+        <div v-if="needsAuthGate && !isAuthReady" class="auth-mask">
           <div class="auth-mask-content">
             <img
               src="/modus2-animated.svg"
