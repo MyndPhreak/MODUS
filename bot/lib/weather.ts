@@ -94,3 +94,75 @@ export function buildForecastUrl(lat: number, lon: number, units: UnitChoice): s
   });
   return `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
 }
+
+export function formatWeatherReport(
+  geo: GeocodeResult,
+  fc: ForecastResponse,
+  units: UnitChoice,
+): string {
+  const place = [geo.name, geo.admin1, geo.country].filter(Boolean).join(", ");
+  const windUnit = units.imperial ? "mph" : "km/h";
+  const lines: string[] = [];
+  lines.push(`Weather for ${place} (local time ${fc.current.time}, ${fc.timezone}):`);
+  lines.push(
+    `Now: ${formatTemp(fc.current.temperature_2m, units.imperial)}, ` +
+      `feels like ${formatTemp(fc.current.apparent_temperature, units.imperial)}, ` +
+      `${describeWeatherCode(fc.current.weather_code)}, ` +
+      `wind ${Math.round(fc.current.wind_speed_10m)} ${windUnit}, ` +
+      `humidity ${fc.current.relative_humidity_2m}%.`,
+  );
+  lines.push("Forecast:");
+  for (let i = 0; i < fc.daily.time.length; i++) {
+    lines.push(
+      `${fc.daily.time[i]}: ${describeWeatherCode(fc.daily.weather_code[i])}, ` +
+        `high ${formatTemp(fc.daily.temperature_2m_max[i], units.imperial)}, ` +
+        `low ${formatTemp(fc.daily.temperature_2m_min[i], units.imperial)}, ` +
+        `precip ${fc.daily.precipitation_probability_max[i]}%.`,
+    );
+  }
+  return lines.join("\n");
+}
+
+// Minimal shape we need from a fetch response — keeps getWeather testable.
+type FetchLike = (url: string) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+}>;
+
+const defaultFetch: FetchLike = (url) =>
+  fetch(url, { signal: AbortSignal.timeout(8000) }) as unknown as ReturnType<FetchLike>;
+
+/** Geocode a location, fetch its current+7-day forecast, and format it for the model. */
+export async function getWeather(
+  location: string,
+  fetchImpl: FetchLike = defaultFetch,
+): Promise<string> {
+  if (!location.trim()) return "❌ I need a location to check the weather.";
+
+  let geoJson: { results?: GeocodeResult[] };
+  try {
+    const res = await fetchImpl(buildGeocodeUrl(location));
+    if (!res.ok) return `❌ Weather lookup failed (geocoding HTTP ${res.status}).`;
+    geoJson = (await res.json()) as { results?: GeocodeResult[] };
+  } catch {
+    return "❌ Couldn't reach the geocoding service. Try again in a moment.";
+  }
+  const geo = geoJson?.results?.[0];
+  if (!geo) {
+    return `❌ I couldn't find a location called "${location}". Try adding a state or country.`;
+  }
+
+  const units = selectUnits(geo.country_code);
+
+  let fc: ForecastResponse;
+  try {
+    const res = await fetchImpl(buildForecastUrl(geo.latitude, geo.longitude, units));
+    if (!res.ok) return `❌ Weather lookup failed (forecast HTTP ${res.status}).`;
+    fc = (await res.json()) as ForecastResponse;
+  } catch {
+    return "❌ Couldn't reach the weather service. Try again in a moment.";
+  }
+
+  return formatWeatherReport(geo, fc, units);
+}
