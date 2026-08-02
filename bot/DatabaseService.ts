@@ -28,6 +28,7 @@ import {
   TempVoiceChannelRepository,
   TriggerRepository,
   TranscriptRepository,
+  RemindersRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -59,6 +60,7 @@ export class DatabaseService {
   public readonly tempVoice: TempVoiceChannelRepository;
   public readonly triggers: TriggerRepository;
   public readonly transcripts: TranscriptRepository;
+  public readonly reminders: RemindersRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -110,6 +112,8 @@ export class DatabaseService {
     this.tempVoice = new TempVoiceChannelRepository(db);
     this.triggers = new TriggerRepository(db);
     this.transcripts = new TranscriptRepository(db);
+    this.reminders = new RemindersRepository(db);
+
 
     // Periodic log flush. unref() so a pending timer never holds the
     // process open during shutdown — gracefulShutdown calls flushLogs().
