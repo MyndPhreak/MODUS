@@ -206,23 +206,7 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       // safe to skip if unavailable
     }
 
-      const v2Components = buildV2Layout({
-      title: "🎵 Now Playing",
-      description: `**[${track.title}](${track.url})**`,
-      color: 0x5865f2,
-      thumbnailUrl: track.thumbnail || undefined,
-      fields: [
-        { name: "Duration", value: track.duration || "Live", inline: true },
-        {
-          name: "Requested by",
-          value: track.requestedBy?.toString() || "Unknown",
-          inline: true,
-        },
-      ],
-      footer: `Volume: ${queue.node.volume}%`,
-      components: [buildNowPlayingButtons(false)],
-      useContainer: true,
-    });
+    const v2Components = buildNowPlayingCard(track, queue, false);
 
     // Update bot nickname to current track (if setting enabled)
     try {
@@ -241,10 +225,23 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       metadata.pendingInteraction = null;
       const msg = await pendingInteraction
         .editReply({
+          // The initial reply set content to "🎵 Loading track...".
+          // Discord rejects V2-flagged edits that still carry non-empty
+          // content, so it must be explicitly cleared (content: null),
+          // not just omitted — omitting it leaves the old value in place.
+          content: null,
           components: v2Components,
           flags: MessageFlags.IsComponentsV2,
         })
-        .catch(() => null);
+        .catch((err: unknown) => {
+          moduleManager.logger.error(
+            "Failed to replace loading message with now-playing card",
+            queue.guild.id,
+            err,
+            "music",
+          );
+          return null;
+        });
       if (msg) {
         metadata.nowPlayingMessage = msg;
       }
@@ -580,6 +577,30 @@ function buildNowPlayingButtons(
       .setLabel("Stop")
       .setStyle(ButtonStyle.Danger),
   );
+}
+
+function buildNowPlayingCard(
+  track: { title: string; url: string; thumbnail?: string; duration?: string; requestedBy?: { toString(): string } | null },
+  queue: GuildQueue,
+  isPaused: boolean,
+): any[] {
+  return buildV2Layout({
+    title: "🎵 Now Playing",
+    description: `**[${track.title}](${track.url})**`,
+    color: 0x5865f2,
+    thumbnailUrl: track.thumbnail || undefined,
+    fields: [
+      { name: "Duration", value: track.duration || "Live", inline: true },
+      {
+        name: "Requested by",
+        value: track.requestedBy?.toString() || "Unknown",
+        inline: true,
+      },
+    ],
+    footer: `Volume: ${queue.node.volume}%`,
+    components: [buildNowPlayingButtons(isPaused)],
+    useContainer: true,
+  });
 }
 
 function requireVoiceChannel(
@@ -1645,15 +1666,34 @@ const musicModule: BotModule = {
         } else {
           queue.node.pause();
         }
+        // The whole "Now Playing" card (title/fields/footer) lives inside
+        // the V2 container alongside the buttons — replacing just the
+        // button row would wipe the rest of the card, so rebuild it whole.
         await interaction.update({
-          components: [buildNowPlayingButtons(queue.node.isPaused())],
+          components: buildNowPlayingCard(
+            queue.currentTrack,
+            queue,
+            queue.node.isPaused(),
+          ),
+          flags: MessageFlags.IsComponentsV2,
         });
         break;
       }
       case "skip": {
         queue.node.skip();
-        // Clear buttons on old message; playerStart sends a new embed
-        await interaction.update({ components: [] });
+        // Clear the card on the old message; playerStart sends a new one
+        // for the next track. A plain content-less `components: []` would
+        // leave the message with no content/embeds at all — Discord
+        // rejects that as an empty message — so leave a status line. Wrap
+        // it in a container (not a bare TextDisplay) to match the shape
+        // every other V2 reply in this codebase uses.
+        await interaction.update({
+          components: buildV2Layout({
+            description: "⏭️ Skipped.",
+            useContainer: true,
+          }),
+          flags: MessageFlags.IsComponentsV2,
+        });
         break;
       }
       case "stop": {
@@ -1673,7 +1713,13 @@ const musicModule: BotModule = {
           player.queues.delete(interaction.guildId!);
         } catch {}
 
-        await interaction.update({ components: [] });
+        await interaction.update({
+          components: buildV2Layout({
+            description: "⏹️ Stopped.",
+            useContainer: true,
+          }),
+          flags: MessageFlags.IsComponentsV2,
+        });
         break;
       }
       default:
