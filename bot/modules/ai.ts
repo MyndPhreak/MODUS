@@ -12,17 +12,7 @@ import { BotModule, ModuleManager } from "../ModuleManager";
 import { AISettingsSchema } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
 import { buildSystemPrompt } from "../lib/aiPrompt";
-import {
-  musicPlay,
-  musicSkip,
-  musicStop,
-  musicPause,
-  musicResume,
-  musicSetVolume,
-  musicGetQueue,
-  musicGetNowPlaying,
-  musicShuffle,
-} from "./music";
+import { AiTool, collectAiTools, toOpenAiTools, toAnthropicTools } from "../lib/aiTools";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -235,133 +225,6 @@ function resolveBaseUrl(provider: AIProvider, customUrl?: string): string {
   }
 }
 
-// ── Tool Schema Definitions ────────────────────────────────────────
-// OpenAI function-calling format (also used by Groq, Gemini, OpenAI Compatible).
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const OPENAI_TOOLS: any[] = [
-  {
-    type: "function",
-    function: {
-      name: "play_music",
-      description:
-        "Play a song or add it to the music queue. Use this when the user wants to play, queue, or listen to music.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description:
-              "The song name, artist name, or a YouTube/Spotify URL to play.",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "skip_track",
-      description: "Skip the currently playing track and move to the next one.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "stop_music",
-      description: "Stop all music playback and clear the entire queue.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "pause_music",
-      description: "Pause the currently playing track.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "resume_music",
-      description: "Resume a paused track.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "set_volume",
-      description:
-        "Set the playback volume to a specific percentage between 1 and 100.",
-      parameters: {
-        type: "object",
-        properties: {
-          level: {
-            type: "number",
-            description: "Volume level from 1 to 100.",
-          },
-        },
-        required: ["level"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_queue",
-      description:
-        "Show what is currently in the music queue, including what is playing and what is up next.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_nowplaying",
-      description:
-        "Show information about the track that is currently playing.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "shuffle_queue",
-      description: "Shuffle the tracks in the music queue into a random order.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "web_search",
-      description:
-        "Search the web for current, real-time information. Use this when the user asks about recent events, news, current prices, weather, live scores, or anything that requires up-to-date information you might not have.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "The search query to look up on the web.",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-];
-
-// Anthropic tool format (input_schema instead of parameters)
-const ANTHROPIC_TOOLS: Anthropic.Tool[] = OPENAI_TOOLS.map((t) => ({
-  name: (t.function as any).name as string,
-  description: ((t.function as any).description ?? "") as string,
-  input_schema: (t.function as any).parameters as Anthropic.Tool.InputSchema,
-}));
-
 // ── Unified LLM Caller ─────────────────────────────────────────────
 
 async function callLLM(
@@ -371,7 +234,7 @@ async function callLLM(
   messages: ChatMessage[],
   maxOutputTokens: number,
   baseUrl?: string,
-  toolsEnabled?: boolean,
+  tools: AiTool[] = [],
 ): Promise<LLMResponse> {
   // Separate out system prompt from conversation messages
   const systemMsg = messages.find((m) => m.role === "system");
@@ -415,13 +278,13 @@ async function callLLM(
           content: m.content,
         };
       }),
-      ...(toolsEnabled ? { tools: ANTHROPIC_TOOLS } : {}),
+      ...(tools.length ? { tools: toAnthropicTools(tools) } : {}),
     };
 
     const response = await anthropic.messages.create(createParams);
 
     // Check for tool use
-    if (toolsEnabled && response.stop_reason === "tool_use") {
+    if (tools.length && response.stop_reason === "tool_use") {
       const toolBlocks = response.content.filter((b) => b.type === "tool_use") as Anthropic.ToolUseBlock[];
       const textBlock = response.content.find((b) => b.type === "text") as Anthropic.TextBlock | undefined;
       
@@ -485,7 +348,7 @@ async function callLLM(
         };
       }),
     ],
-    ...(toolsEnabled ? { tools: OPENAI_TOOLS, tool_choice: "auto" } : {}),
+    ...(tools.length ? { tools: toOpenAiTools(tools), tool_choice: "auto" } : {}),
   });
 
   const choice = response.choices[0];
@@ -493,7 +356,7 @@ async function callLLM(
 
   // Check for tool call response
   if (
-    toolsEnabled &&
+    tools.length &&
     choice?.finish_reason === "tool_calls" &&
     choice.message?.tool_calls?.length
   ) {
@@ -580,109 +443,6 @@ async function performWebSearch(query: string): Promise<string> {
   });
 }
 
-// ── Tool Router ────────────────────────────────────────────────────
-// Executes the tool call returned by the LLM and returns the result.
-
-async function executeToolCall(
-  toolCall: ToolCall,
-  message: Message,
-  guildId: string,
-  moduleManager: ModuleManager,
-): Promise<string> {
-  const { name, args } = toolCall;
-
-  // ── Web search (no module dependency) ──────────────────────────
-  if (name === "web_search") {
-    const query = (args.query as string) || "";
-    if (!query) return "❌ I need a search query to look something up.";
-    if (!process.env.SEARXNG_URL) {
-      return "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.";
-    }
-    const results = await performWebSearch(query);
-    return results.slice(0, 3200);
-  }
-
-  // All music tools require the music module to be enabled
-  const isMusicEnabled = await moduleManager.databaseService.isModuleEnabled(
-    guildId,
-    "music",
-  );
-  if (!isMusicEnabled) {
-    return "❌ The music module is not enabled on this server. Ask an admin to enable it in the dashboard.";
-  }
-
-  switch (name) {
-    case "play_music": {
-      const query = (args.query as string) || "";
-      if (!query) return "❌ I need a song name or URL to play something.";
-
-      // Resolve the user's voice channel from the message member
-      const member = message.member as GuildMember | null;
-      const voiceChannel = member?.voice?.channel;
-      if (!voiceChannel) {
-        return "❌ You need to be in a voice channel for me to play music!";
-      }
-
-      const result = await musicPlay(
-        guildId,
-        voiceChannel,
-        query,
-        message.author,
-        moduleManager,
-        message.channel as any,
-      );
-      return result.message;
-    }
-
-    case "skip_track": {
-      const result = await musicSkip(guildId);
-      return result.message;
-    }
-
-    case "stop_music": {
-      const result = await musicStop(guildId, moduleManager);
-      return result.message;
-    }
-
-    case "pause_music": {
-      const result = await musicPause(guildId);
-      return result.message;
-    }
-
-    case "resume_music": {
-      const result = await musicResume(guildId);
-      return result.message;
-    }
-
-    case "set_volume": {
-      const level =
-        typeof args.level === "number" ? args.level : Number(args.level);
-      if (isNaN(level))
-        return "❌ Please specify a valid volume level (1–100).";
-      const result = await musicSetVolume(guildId, level, moduleManager);
-      return result.message;
-    }
-
-    case "get_queue": {
-      const result = await musicGetQueue(guildId);
-      return result.message;
-    }
-
-    case "get_nowplaying": {
-      const result = await musicGetNowPlaying(guildId);
-      return result.message;
-    }
-
-    case "shuffle_queue": {
-      const result = await musicShuffle(guildId);
-      return result.message;
-    }
-
-    default:
-      return `❓ I tried to use an unknown tool: \`${name}\`. That's a bug — please report it!`;
-  }
-}
-
 // ── Rate Limiting ──────────────────────────────────────────────────
 // In-memory cooldown map: "guildId:userId" → last call timestamp (ms)
 
@@ -733,10 +493,37 @@ const DEFAULT_SETTINGS: Required<AIModuleSettings> = {
   contextTTLMinutes: 15,
 };
 
+// ── Core AI tools (owned by the ai module itself) ──────────────────
+const aiCoreTools: AiTool[] = [
+  {
+    name: "web_search",
+    description:
+      "Search the web for current, real-time information. Use this when the user asks about recent events, news, current prices, weather, live scores, or anything that requires up-to-date information you might not have.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query to look up on the web." },
+      },
+      required: ["query"],
+    },
+    isAvailable: () => !!process.env.SEARXNG_URL,
+    execute: async ({ args }) => {
+      const query = (args.query as string) || "";
+      if (!query) return "❌ I need a search query to look something up.";
+      if (!process.env.SEARXNG_URL) {
+        return "❌ Web search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.";
+      }
+      const results = await performWebSearch(query);
+      return results.slice(0, 3200);
+    },
+  },
+];
+
 // ── Module Definition ──────────────────────────────────────────────
 
 const aiModule: BotModule = {
   name: "ai",
+  aiTools: aiCoreTools,
   registerEvents: registerAIEvents,
   description: "AI conversational assistant — @mention the bot to chat",
   data: new SlashCommandBuilder()
@@ -998,6 +785,11 @@ export function registerAIEvents(moduleManager: ModuleManager) {
       llmMessages.push({ role: "user", content: trimmedMessage });
       const newMessagesStartIndex = llmMessages.length - 1;
 
+      // Gather the tools this guild may use right now (enabled modules only).
+      const { tools: aiTools, lookup: aiToolLookup } = settings.toolUseEnabled
+        ? await collectAiTools(moduleManager, guildId)
+        : { tools: [] as AiTool[], lookup: new Map<string, AiTool>() };
+
       // ─ Agent Loop ─────────────────────────────────────────────
       let reply = "";
       let action: "chat" | "tool_use" = "chat";
@@ -1022,7 +814,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           llmMessages,
           settings.maxOutputTokens,
           settings.aiBaseUrl || undefined,
-          settings.toolUseEnabled,
+          aiTools,
         );
 
         totalInputTokens += result.input_tokens;
@@ -1050,7 +842,10 @@ export function registerAIEvents(moduleManager: ModuleManager) {
               if ("sendTyping" in message.channel) {
                 await message.channel.sendTyping().catch(() => {});
               }
-              const execResult = await executeToolCall(tc, message, guildId, moduleManager);
+              const tool = aiToolLookup.get(tc.name);
+              const execResult = tool
+                ? await tool.execute({ guildId, message, moduleManager, args: tc.args })
+                : `❓ I tried to use an unknown tool: \`${tc.name}\`. That's a bug — please report it!`;
               return {
                 role: "tool" as const,
                 content: execResult,
