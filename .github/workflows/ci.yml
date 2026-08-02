@@ -32,6 +32,37 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # ── Check third-party license notice is up to date ────────────────────────
+  check-licenses:
+    name: Check Third-Party Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate third-party licenses
+        run: pnpm run licenses:generate
+
+      - name: Fail if THIRD_PARTY_LICENSES.md is out of date
+        run: |
+          if ! git diff --quiet -- THIRD_PARTY_LICENSES.md; then
+            echo "::error file=THIRD_PARTY_LICENSES.md::THIRD_PARTY_LICENSES.md is out of date. Run 'pnpm run licenses:generate' and commit the result."
+            git diff -- THIRD_PARTY_LICENSES.md
+            exit 1
+          fi
+
   # ── Detect which services changed ─────────────────────────────────────────
   changes:
     name: Detect Changed Services
