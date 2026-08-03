@@ -728,21 +728,26 @@ async function handlePlay(
     if (wasQueued) {
       await ensureSpotifyThumbnail(track);
 
-      const embed = new EmbedBuilder()
-        .setColor(0x57f287)
-        .setTitle("✅ Added to Queue")
-        .setDescription(`**[${track.title}](${track.url})**`)
-        .addFields(
+      const components = buildV2Layout({
+        title: "✅ Added to Queue",
+        description: `**[${track.title}](${track.url})**`,
+        color: 0x57f287,
+        thumbnailUrl: track.thumbnail || undefined,
+        fields: [
           { name: "Duration", value: track.duration || "Live", inline: true },
           {
             name: "Position",
             value: `#${queue.tracks.size}`,
             inline: true,
           },
-        )
-        .setThumbnail(track.thumbnail || null);
+        ],
+        useContainer: true,
+      });
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
     } else {
       // First track — show a loading indicator; the playerStart event
       // will update this same reply with the "Now Playing" embed.
