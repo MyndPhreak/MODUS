@@ -583,10 +583,15 @@ function buildNowPlayingCard(
   track: { title: string; url: string; thumbnail?: string; duration?: string; requestedBy?: { toString(): string } | null },
   queue: GuildQueue,
   isPaused: boolean,
+  progressBar?: string,
 ): any[] {
+  const description = progressBar
+    ? `**[${track.title}](${track.url})**\n\n${progressBar}`
+    : `**[${track.title}](${track.url})**`;
+
   return buildV2Layout({
     title: "🎵 Now Playing",
-    description: `**[${track.title}](${track.url})**`,
+    description,
     color: 0x5865f2,
     thumbnailUrl: track.thumbnail || undefined,
     fields: [
@@ -596,6 +601,7 @@ function buildNowPlayingCard(
         value: track.requestedBy?.toString() || "Unknown",
         inline: true,
       },
+      { name: "Loop", value: loopModeToString(queue.repeatMode), inline: true },
     ],
     footer: `Volume: ${queue.node.volume}%`,
     components: [buildNowPlayingButtons(isPaused)],
