@@ -589,14 +589,15 @@ function buildNowPlayingButtons(
 }
 
 function buildNowPlayingCard(
-  track: { title: string; url: string; thumbnail?: string; duration?: string; requestedBy?: { toString(): string } | null },
+  track: { title: string; url: string; author?: string; thumbnail?: string; duration?: string; requestedBy?: { toString(): string } | null },
   queue: GuildQueue,
   isPaused: boolean,
   progressBar?: string,
 ): any[] {
-  const description = progressBar
-    ? `**[${track.title}](${track.url})**\n\n${progressBar}`
+  const trackLine = track.author
+    ? `**${track.author} — [${track.title}](${track.url})**`
     : `**[${track.title}](${track.url})**`;
+  const description = progressBar ? `${trackLine}\n\n${progressBar}` : trackLine;
 
   // Discord's Components V2 Thumbnail accessory never scales its source
   // image down to fit its box — confirmed by testing both a hotlinked
@@ -813,7 +814,9 @@ async function handlePlay(
 
       const components = buildV2Layout({
         title: "✅ Added to Queue",
-        description: `**[${track.title}](${track.url})**`,
+        description: track.author
+          ? `**${track.author} — [${track.title}](${track.url})**`
+          : `**[${track.title}](${track.url})**`,
         color: 0x57f287,
         mediaGallery: track.thumbnail ? [track.thumbnail] : undefined,
         fields: [
