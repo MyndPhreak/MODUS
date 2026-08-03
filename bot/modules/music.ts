@@ -409,14 +409,18 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
                   .join(" • ")
               : "None";
 
-          const embed = new EmbedBuilder()
-            .setColor(0x9333ea)
-            .setTitle("🎛️ Audio Effects Updated")
-            .setDescription("Effects were changed from the dashboard.")
-            .addFields({ name: "Active Effects", value: activeDisplay })
-            .setFooter({ text: "Updated via web dashboard" });
+          const components = buildV2Layout({
+            title: "🎛️ Audio Effects Updated",
+            description: "Effects were changed from the dashboard.",
+            color: 0x9333ea,
+            fields: [{ name: "Active Effects", value: activeDisplay }],
+            footer: "Updated via web dashboard",
+            useContainer: true,
+          });
 
-          channel.send({ embeds: [embed] }).catch(() => {});
+          channel
+            .send({ components, flags: MessageFlags.IsComponentsV2 })
+            .catch(() => {});
         }
       } catch (err) {
         moduleManager.logger.error("Error processing realtime filter sync", undefined, err, "music");
