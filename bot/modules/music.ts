@@ -1313,17 +1313,20 @@ async function handlePlayQueue(
       );
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(0x57f287)
-      .setTitle("📋 Dashboard Queue Loaded")
-      .setDescription(
-        `Loaded **${loaded}** track${loaded !== 1 ? "s" : ""}${
-          failed > 0 ? ` (${failed} failed)` : ""
-        } from the dashboard queue.`,
-      )
-      .setFooter({ text: "Queue has been cleared from the dashboard" });
+    const components = buildV2Layout({
+      title: "📋 Dashboard Queue Loaded",
+      description: `Loaded **${loaded}** track${loaded !== 1 ? "s" : ""}${
+        failed > 0 ? ` (${failed} failed)` : ""
+      } from the dashboard queue.`,
+      color: 0x57f287,
+      footer: "Queue has been cleared from the dashboard",
+      useContainer: true,
+    });
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
 
     // Auto-apply saved filters for new queues
     if (settings.activeFilters && settings.activeFilters.length > 0) {
