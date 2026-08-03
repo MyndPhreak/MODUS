@@ -299,8 +299,14 @@ export function buildV2Layout(options: V2CardOptions): any[] {
     elements.push(createV2Text("*(Empty message)*"));
   }
 
+  // `options.color` only renders when useContainer is true — Discord's
+  // accent-color bar is a Container-only property, so it has nowhere to
+  // attach when useContainer: false returns bare top-level elements.
   if (useContainer) {
     const container = new ContainerBuilder();
+    if (options.color !== undefined) {
+      container.setAccentColor(options.color);
+    }
     for (const el of elements) {
       if (el instanceof TextDisplayBuilder) {
         container.addTextDisplayComponents(el);
