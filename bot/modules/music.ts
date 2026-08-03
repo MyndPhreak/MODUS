@@ -3,7 +3,6 @@ import {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   ButtonInteraction,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -634,6 +633,65 @@ function buildFilterStatusCard(
   });
 }
 
+function buildQueueCard(queue: GuildQueue, page: number): any[] {
+  const pageSize = 10;
+  const tracks = queue.tracks.toArray();
+  const totalPages = Math.max(1, Math.ceil(tracks.length / pageSize));
+  const start = page * pageSize;
+  const pageTracks = tracks.slice(start, start + pageSize);
+
+  const current = queue.currentTrack;
+  const lines: string[] = [];
+
+  if (current) {
+    lines.push(
+      `**Now Playing:** [${current.title}](${current.url}) — \`${current.duration}\`\n`,
+    );
+  }
+
+  if (pageTracks.length > 0) {
+    pageTracks.forEach((track, i) => {
+      lines.push(
+        `**${start + i + 1}.** [${track.title}](${track.url}) — \`${track.duration}\``,
+      );
+    });
+  } else if (page > 0) {
+    lines.push("No tracks on this page.");
+  }
+
+  return buildV2Layout({
+    title: "📋 Queue",
+    description: lines.join("\n") || "Empty",
+    color: 0x5865f2,
+    footer: `Page ${page + 1}/${totalPages} • ${tracks.length} tracks in queue`,
+    useContainer: true,
+  });
+}
+
+function buildQueuePagerRow(
+  page: number,
+  totalPages: number,
+  disabled = false,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("music_queue_prev")
+      .setLabel("◀ Previous")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || page === 0),
+    new ButtonBuilder()
+      .setCustomId("music_queue_page_indicator")
+      .setLabel(`${page + 1} / ${totalPages}`)
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId("music_queue_next")
+      .setLabel("Next ▶")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || page === totalPages - 1),
+  );
+}
+
 function requireVoiceChannel(
   interaction: ChatInputCommandInteraction,
 ): GuildMember | null {
@@ -870,48 +928,72 @@ async function handleResume(interaction: ChatInputCommandInteraction) {
 
 async function handleQueue(interaction: ChatInputCommandInteraction) {
   const player = useMainPlayer();
-  const queue = player.queues.get(interaction.guildId!);
+  const pageSize = 10;
 
-  if (!queue || (!queue.isPlaying() && queue.tracks.size === 0)) {
+  const initialQueue = player.queues.get(interaction.guildId!);
+  if (!initialQueue || (!initialQueue.isPlaying() && initialQueue.tracks.size === 0)) {
     await interaction.editReply({ content: "📭 The queue is empty." });
     return;
   }
 
-  const pageSize = 10;
-  const page = (interaction.options.getInteger("page") || 1) - 1;
-  const tracks = queue.tracks.toArray();
-  const totalPages = Math.max(1, Math.ceil(tracks.length / pageSize));
-  const start = page * pageSize;
-  const pageTracks = tracks.slice(start, start + pageSize);
+  let page = Math.max((interaction.options.getInteger("page") || 1) - 1, 0);
 
-  const current = queue.currentTrack;
-  const lines: string[] = [];
+  // Re-fetches the live queue on every render, since tracks can be
+  // added/skipped/finished while the pager is open — a stale snapshot
+  // (the pattern /help uses for its static module list) would show a
+  // wrong queue within seconds.
+  const render = (disabled = false): any[] => {
+    const liveQueue = player.queues.get(interaction.guildId!);
+    if (!liveQueue) {
+      return buildV2Layout({
+        description: "📭 The queue is empty.",
+        useContainer: true,
+      });
+    }
+    const totalPages = Math.max(1, Math.ceil(liveQueue.tracks.size / pageSize));
+    page = Math.min(page, totalPages - 1);
+    return [
+      ...buildQueueCard(liveQueue, page),
+      buildQueuePagerRow(page, totalPages, disabled),
+    ];
+  };
 
-  if (current) {
-    lines.push(
-      `**Now Playing:** [${current.title}](${current.url}) — \`${current.duration}\`\n`,
-    );
-  }
+  const reply = await interaction.editReply({
+    components: render(),
+    flags: MessageFlags.IsComponentsV2,
+  });
 
-  if (pageTracks.length > 0) {
-    pageTracks.forEach((track, i) => {
-      lines.push(
-        `**${start + i + 1}.** [${track.title}](${track.url}) — \`${track.duration}\``,
-      );
+  const collector = reply.createMessageComponentCollector({
+    filter: (i) => i.user.id === interaction.user.id,
+    time: 3 * 60 * 1000,
+  });
+
+  collector.on("collect", async (componentInteraction) => {
+    const liveQueue = player.queues.get(interaction.guildId!);
+    const totalPages = liveQueue
+      ? Math.max(1, Math.ceil(liveQueue.tracks.size / pageSize))
+      : 1;
+
+    if (componentInteraction.customId === "music_queue_prev") {
+      page = Math.max(0, page - 1);
+    } else if (componentInteraction.customId === "music_queue_next") {
+      page = Math.min(totalPages - 1, page + 1);
+    }
+
+    await componentInteraction.update({
+      components: render(),
+      flags: MessageFlags.IsComponentsV2,
     });
-  } else if (page > 0) {
-    lines.push("No tracks on this page.");
-  }
+  });
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle("📋 Queue")
-    .setDescription(lines.join("\n") || "Empty")
-    .setFooter({
-      text: `Page ${page + 1}/${totalPages} • ${tracks.length} tracks in queue`,
-    });
-
-  await interaction.editReply({ embeds: [embed] });
+  collector.on("end", async () => {
+    try {
+      await interaction.editReply({
+        components: render(true),
+        flags: MessageFlags.IsComponentsV2,
+      });
+    } catch {}
+  });
 }
 
 async function handleNowPlaying(interaction: ChatInputCommandInteraction) {
