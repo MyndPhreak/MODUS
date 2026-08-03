@@ -617,6 +617,23 @@ function buildNowPlayingCard(
   });
 }
 
+function buildFilterStatusCard(
+  title: string,
+  description: string,
+  color: number,
+  activeEffectsDisplay: string,
+  saved: boolean,
+): any[] {
+  return buildV2Layout({
+    title,
+    description,
+    color,
+    fields: [{ name: "🎛️ Active Effects", value: activeEffectsDisplay }],
+    footer: saved ? "💾 Saved as server default" : undefined,
+    useContainer: true,
+  });
+}
+
 function requireVoiceChannel(
   interaction: ChatInputCommandInteraction,
 ): GuildMember | null {
@@ -1133,19 +1150,18 @@ async function handleFilter(
         }
       }
 
-      const embed = new EmbedBuilder()
-        .setColor(0xed4245)
-        .setTitle("🚫 All Effects Removed")
-        .setDescription(
-          `Cleared **${allActive.length}** effect${allActive.length === 1 ? "" : "s"}.`,
-        )
-        .addFields({ name: "🎛️ Active Effects", value: "None" });
+      const components = buildFilterStatusCard(
+        "🚫 All Effects Removed",
+        `Cleared **${allActive.length}** effect${allActive.length === 1 ? "" : "s"}.`,
+        0xed4245,
+        "None",
+        shouldSave,
+      );
 
-      if (shouldSave) {
-        embed.setFooter({ text: "💾 Saved as server default" });
-      }
-
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
     } catch (error: any) {
       moduleManager.logger.error("Clear filters error", interaction.guildId ?? undefined, error, "music");
       await interaction.editReply({
@@ -1167,7 +1183,6 @@ async function handleFilter(
     await queue.filters.ffmpeg.toggle([effect as any]);
 
     const isNowEnabled = queue.filters.ffmpeg.isEnabled(effect as any);
-    const statusEmoji = isNowEnabled ? "✅" : "❌";
     const statusText = isNowEnabled ? "enabled" : "disabled";
 
     // Build active filters list for the response
@@ -1197,20 +1212,18 @@ async function handleFilter(
       }
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(isNowEnabled ? 0x57f287 : 0xed4245)
-      .setTitle(`${filterInfo.emoji} ${filterInfo.label} — ${statusText}`)
-      .setDescription(filterInfo.description)
-      .addFields({
-        name: "🎛️ Active Effects",
-        value: activeDisplay,
-      });
+    const components = buildFilterStatusCard(
+      `${filterInfo.emoji} ${filterInfo.label} — ${statusText}`,
+      filterInfo.description,
+      isNowEnabled ? 0x57f287 : 0xed4245,
+      activeDisplay,
+      shouldSave,
+    );
 
-    if (shouldSave) {
-      embed.setFooter({ text: "💾 Saved as server default" });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
   } catch (error: any) {
     moduleManager.logger.error("Filter error", interaction.guildId ?? undefined, error, "music");
     await interaction.editReply({
