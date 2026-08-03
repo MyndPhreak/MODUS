@@ -286,11 +286,15 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
 
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setColor(0x99aab5)
-      .setDescription("✅ Queue finished — no more tracks to play.");
+    const components = buildV2Layout({
+      description: "✅ Queue finished — no more tracks to play.",
+      color: 0x99aab5,
+      useContainer: true,
+    });
 
-    channel.send({ embeds: [embed] }).catch(() => {});
+    channel
+      .send({ components, flags: MessageFlags.IsComponentsV2 })
+      .catch(() => {});
   });
 
   player.events.on("disconnect", async (queue: GuildQueue) => {
