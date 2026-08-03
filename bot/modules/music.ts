@@ -205,8 +205,6 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
       // safe to skip if unavailable
     }
 
-    const v2Components = buildNowPlayingCard(track, queue, false);
-
     // Update bot nickname to current track (if setting enabled)
     try {
       const settings = await getSettings(moduleManager, queue.guild.id);
@@ -217,7 +215,11 @@ async function registerPlayerEvents(moduleManager: ModuleManager) {
 
     if (!channel) return;
 
+    // Must resolve before building the card — it mutates track.thumbnail,
+    // and the card build below reads that value.
     await ensureSpotifyThumbnail(track);
+
+    const v2Components = buildNowPlayingCard(track, queue, false);
 
     const pendingInteraction = metadata?.pendingInteraction;
     if (pendingInteraction) {
@@ -596,11 +598,17 @@ function buildNowPlayingCard(
     ? `**[${track.title}](${track.url})**\n\n${progressBar}`
     : `**[${track.title}](${track.url})**`;
 
+  // Discord's Components V2 Thumbnail accessory never scales its source
+  // image down to fit its box — confirmed by testing both a hotlinked
+  // full-size image and a pre-cropped 256x256 square attachment, both of
+  // which still rendered with a scrollbar. MediaGallery (type 12) is the
+  // component actually meant for displaying an image at a real size, so
+  // the art goes there instead of as a Section accessory.
   return buildV2Layout({
     title: "🎵 Now Playing",
     description,
     color: 0x5865f2,
-    thumbnailUrl: track.thumbnail || undefined,
+    mediaGallery: track.thumbnail ? [track.thumbnail] : undefined,
     fields: [
       { name: "Duration", value: track.duration || "Live", inline: true },
       {
@@ -807,7 +815,7 @@ async function handlePlay(
         title: "✅ Added to Queue",
         description: `**[${track.title}](${track.url})**`,
         color: 0x57f287,
-        thumbnailUrl: track.thumbnail || undefined,
+        mediaGallery: track.thumbnail ? [track.thumbnail] : undefined,
         fields: [
           { name: "Duration", value: track.duration || "Live", inline: true },
           {
