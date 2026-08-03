@@ -1047,13 +1047,12 @@ async function handleSettings(
           .join(", ")
       : "None";
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle("⚙️ Music Settings")
-    .setDescription(
+  const components = buildV2Layout({
+    title: "⚙️ Music Settings",
+    description:
       "Per-server music configuration. Change these from the web dashboard.",
-    )
-    .addFields(
+    color: 0x5865f2,
+    fields: [
       {
         name: "Default Volume",
         value: `${settings.defaultVolume}%`,
@@ -1081,9 +1080,14 @@ async function handleSettings(
         value: activeFiltersList,
         inline: false,
       },
-    );
+    ],
+    useContainer: true,
+  });
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({
+    components,
+    flags: MessageFlags.IsComponentsV2,
+  });
 }
 
 async function handleFilter(
