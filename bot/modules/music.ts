@@ -931,20 +931,14 @@ async function handleNowPlaying(interaction: ChatInputCommandInteraction) {
 
   await ensureSpotifyThumbnail(track);
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle("🎵 Now Playing")
-    .setDescription(`**[${track.title}](${track.url})**\n\n${progress || ""}`)
-    .addFields(
-      { name: "Duration", value: track.duration || "Live", inline: true },
-      { name: "Volume", value: `${queue.node.volume}%`, inline: true },
-      { name: "Loop", value: loopModeToString(queue.repeatMode), inline: true },
-    )
-    .setThumbnail(track.thumbnail || null);
-
   await interaction.editReply({
-    embeds: [embed],
-    components: [buildNowPlayingButtons(queue.node.isPaused())],
+    components: buildNowPlayingCard(
+      track,
+      queue,
+      queue.node.isPaused(),
+      progress || undefined,
+    ),
+    flags: MessageFlags.IsComponentsV2,
   });
 }
 
