@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.16.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.15.0...modus-v1.16.0) (2026-08-03)
+
+
+### ✨ Features
+
+* add Discord Components V2 layout engine and web builder ([#40](https://github.com/MyndPhreak/MODUS/issues/40)) ([cd50cb5](https://github.com/MyndPhreak/MODUS/commit/cd50cb5e1272e4a121875af6e69bbbd6f69b4e63))
+* **ai:** append-model system prompt + AI dashboard reorganization ([#32](https://github.com/MyndPhreak/MODUS/issues/32)) ([5aa4f2d](https://github.com/MyndPhreak/MODUS/commit/5aa4f2d693bd77c28b691e968919441ad48441b6))
+* **bot:** AI tool registry, weather tool, and intent-aware web search ([#35](https://github.com/MyndPhreak/MODUS/issues/35)) ([45ecead](https://github.com/MyndPhreak/MODUS/commit/45ecead9bd79e38a7027d47280045bf111e6c613))
+* **bot:** convert /queue to Components V2 with prev/next pagination ([9e88cf0](https://github.com/MyndPhreak/MODUS/commit/9e88cf05290a417d0824cafd38c47dd08ee48c83))
+* **bot:** Reminders Module ([#37](https://github.com/MyndPhreak/MODUS/issues/37)) ([#42](https://github.com/MyndPhreak/MODUS/issues/42)) ([857e4d3](https://github.com/MyndPhreak/MODUS/commit/857e4d34009d4329e8b477d544d455adbaf97393))
+* **bot:** show artist name in now-playing and added-to-queue cards ([b27301e](https://github.com/MyndPhreak/MODUS/commit/b27301e9bec41d3b694695d87f82c795f82fbd8a))
+* **web:** add reminders and text-to-speech to landing page module list ([15b5bea](https://github.com/MyndPhreak/MODUS/commit/15b5bea08660bf40297aa0e46d81d6f6913c5210))
+
+
+### 🐛 Bug Fixes
+
+* **api:** close broken-access-control holes + bot HTTP hardening ([#43](https://github.com/MyndPhreak/MODUS/issues/43)) ([abc8eb6](https://github.com/MyndPhreak/MODUS/commit/abc8eb651cb720e65d2a086c7f6892a90b06c75e))
+* **bot:** apply the color option to V2 message containers ([2b1e771](https://github.com/MyndPhreak/MODUS/commit/2b1e77184308aceb97358f7f7e786917d360c898))
+* **bot:** keep the now-playing card populated through pause/skip/stop ([c7729bf](https://github.com/MyndPhreak/MODUS/commit/c7729bfee3fbbb9e99498b28141e50c2f0ca46f8))
+* **bot:** pair V2 thumbnails with their actual title/description text ([bdf5da5](https://github.com/MyndPhreak/MODUS/commit/bdf5da52c0a26ee7c557803b23d5947134354a8a))
+* **bot:** render now-playing album art via media gallery instead of thumbnail ([efe141f](https://github.com/MyndPhreak/MODUS/commit/efe141fb788d20b38bf24a335713ef6e4f425005))
+* **bot:** set IsComponentsV2 flag on V2 component replies ([ca71796](https://github.com/MyndPhreak/MODUS/commit/ca717965545080492fd03f84911d761fcca3453a))
+* **ci:** pin pnpm action-setup to version 10, not 9 ([09f58fb](https://github.com/MyndPhreak/MODUS/commit/09f58fb5d0e461e11b70add274ea6bed068d32bf))
+* enforce global module toggles across the bot fleet and dashboards ([#31](https://github.com/MyndPhreak/MODUS/issues/31)) ([48f1faf](https://github.com/MyndPhreak/MODUS/commit/48f1faf147fcc6cf8fccd7ffa50f251816dd8df7))
+* **triggers:** allow editing trigger channel and configuration ([#41](https://github.com/MyndPhreak/MODUS/issues/41)) ([54a76d9](https://github.com/MyndPhreak/MODUS/commit/54a76d970cbdb7dec52819bf07915746f84bc766))
+* **web:** scope auth mask to dashboard routes only ([ee239d9](https://github.com/MyndPhreak/MODUS/commit/ee239d9424231c26b338c9bde0491511064a6e2b))
+
+
+### ♻️ Refactors
+
+* **bot:** add loop field and optional progress bar to now-playing card ([f812548](https://github.com/MyndPhreak/MODUS/commit/f81254809c1eeabb0b7907d2ee565aea2866e378))
+* **bot:** convert /nowplaying to the shared now-playing V2 card ([bfec0a5](https://github.com/MyndPhreak/MODUS/commit/bfec0a55df165e399860c3b00c04c6bf30ba0d46))
+* **bot:** convert added-to-queue confirmation to Components V2 ([2b579eb](https://github.com/MyndPhreak/MODUS/commit/2b579ebb51e5947f6d9bcef3bf5458b7ca02b1d0))
+* **bot:** convert dashboard filter-sync notice to Components V2 ([1ea93ed](https://github.com/MyndPhreak/MODUS/commit/1ea93ed680f9bf517ccea993c6188461569f61d9))
+* **bot:** convert dashboard pre-queue-loaded confirmation to Components V2 ([f8a2d1e](https://github.com/MyndPhreak/MODUS/commit/f8a2d1e120830973391664d67124d9bfc7e547da))
+* **bot:** convert filter status replies to Components V2 ([8f43bc1](https://github.com/MyndPhreak/MODUS/commit/8f43bc1578b9687780867628767841756985e340))
+* **bot:** convert music settings summary to Components V2 ([a523160](https://github.com/MyndPhreak/MODUS/commit/a52316008e30df44c667e83ce601a5d64b46332c))
+* **bot:** convert queue-finished notice to Components V2 ([8916567](https://github.com/MyndPhreak/MODUS/commit/8916567e0cf826be749f180b15eb6f4e1c1bcea3))
+
 ## [1.15.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.14.0...modus-v1.15.0) (2026-07-26)
 
 
