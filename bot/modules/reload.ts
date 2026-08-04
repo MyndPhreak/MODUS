@@ -3,6 +3,7 @@ import { BotModule, ModuleManager } from '../ModuleManager';
 
 const reloadModule: BotModule = {
     name: 'reload',
+    hidden: true,
     description: 'Reloads all bot modules.',
     data: new SlashCommandBuilder()
         .setName('reload')
