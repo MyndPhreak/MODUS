@@ -203,7 +203,7 @@
   {
     "options": [],
     "name": "embed",
-    "description": "Create a rich embed message using a dialog",
+    "description": "Create a rich V2 component message using a dialog",
     "default_member_permissions": "8192",
     "type": 1
   },
@@ -215,21 +215,27 @@
           5
         ],
         "name": "channel",
-        "description": "Channel to send the embed to",
+        "description": "Channel to send the message to",
         "required": true,
         "type": 7
       },
       {
         "type": 3,
         "name": "title",
-        "description": "Embed title",
+        "description": "Message title",
         "required": true
       },
       {
         "type": 3,
         "name": "description",
-        "description": "Embed description (supports markdown)",
+        "description": "Message description (supports markdown)",
         "required": true
+      },
+      {
+        "name": "container",
+        "description": "Wrap layout in a V2 card container (default true)",
+        "required": false,
+        "type": 5
       },
       {
         "type": 3,
@@ -245,19 +251,25 @@
       },
       {
         "type": 3,
-        "name": "image",
-        "description": "Image URL for the embed",
+        "name": "thumbnail",
+        "description": "Thumbnail URL for the message",
         "required": false
       },
       {
         "type": 3,
-        "name": "thumbnail",
-        "description": "Thumbnail URL for the embed",
+        "name": "button_label",
+        "description": "Label for an interactive button accessory",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "button_url",
+        "description": "URL for the interactive button accessory",
         "required": false
       }
     ],
     "name": "embed-quick",
-    "description": "Quickly send a simple embed to a channel",
+    "description": "Quickly send a V2 component message to a channel",
     "default_member_permissions": "8192",
     "type": 1
   },
@@ -835,7 +847,7 @@
   {
     "options": [],
     "name": "ping",
-    "description": "Replies with Pong!",
+    "description": "Replies with Pong and latency metrics!",
     "type": 1
   },
   {
@@ -965,6 +977,61 @@
     "description": "Reloads all bot modules.",
     "default_member_permissions": "8",
     "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 3,
+        "name": "reminder",
+        "description": "What you want to be reminded about",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "when",
+        "description": "When to remind you (e.g. 'in 30 mins', 'tomorrow 3pm', '2 hours')",
+        "required": true
+      },
+      {
+        "type": 3,
+        "name": "message",
+        "description": "Optional message ID or message link to quote",
+        "required": false
+      }
+    ],
+    "name": "remindme",
+    "description": "Set a reminder for a future date/time",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "list",
+        "description": "List all your pending reminders",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "cancel",
+        "description": "Cancel a pending reminder",
+        "options": [
+          {
+            "type": 3,
+            "name": "id",
+            "description": "The ID of the reminder to cancel",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "name": "reminders",
+    "description": "View or manage your active reminders",
+    "type": 1
+  },
+  {
+    "name": "Remind Me",
+    "type": 3
   },
   {
     "options": [],
@@ -1154,6 +1221,51 @@
     "options": [
       {
         "type": 1,
+        "name": "config",
+        "description": "Set up the ticketing panel",
+        "options": [
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post the ticket panel",
+            "required": true,
+            "type": 7
+          },
+          {
+            "channel_types": [
+              4
+            ],
+            "name": "category",
+            "description": "Category where tickets will be created",
+            "required": true,
+            "type": 7
+          },
+          {
+            "name": "staff_role",
+            "description": "Role that can view and claim tickets",
+            "required": true,
+            "type": 8
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Disable the ticketing system",
+        "options": []
+      }
+    ],
+    "name": "tickets",
+    "description": "Configure the ticketing system",
+    "default_member_permissions": "8",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
         "name": "create",
         "description": "Create a new webhook trigger",
         "options": [
@@ -1240,13 +1352,14 @@
             "type": 3,
             "name": "new_name",
             "description": "New name for this trigger",
-            "required": false
+            "required": false,
+            "max_length": 128
           },
           {
-            "type": 5,
             "name": "enabled",
             "description": "Enable or disable this trigger",
-            "required": false
+            "required": false,
+            "type": 5
           },
           {
             "type": 3,
