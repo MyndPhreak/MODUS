@@ -17,7 +17,7 @@
         <NuxtLink
           to="/"
           class="flex items-center gap-3 group"
-          @click.prevent="scrollToTop"
+          @click="handleLogoClick"
         >
           <img
             src="/modus2-animated.svg"
@@ -38,7 +38,7 @@
             :key="link.href"
             :href="link.href"
             class="nav-link"
-            @click.prevent="scrollToSection(link.href)"
+            @click="handleNavLinkClick($event, link.href)"
           >
             {{ link.label }}
           </a>
@@ -46,6 +46,13 @@
 
         <!-- CTA -->
         <div class="flex items-center gap-3">
+          <NuxtLink
+            to="/docs"
+            class="nav-link hidden sm:inline-flex items-center gap-2"
+          >
+            <UIcon name="i-heroicons-book-open" class="w-4 h-4" />
+            Docs
+          </NuxtLink>
           <NuxtLink
             to="/login"
             class="nav-link hidden sm:inline-flex items-center gap-2"
@@ -96,6 +103,11 @@
 
           <div class="flex items-center gap-6">
             <NuxtLink
+              to="/docs"
+              class="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >Docs</NuxtLink
+            >
+            <NuxtLink
               to="/legal/terms"
               class="text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >Terms</NuxtLink
@@ -123,6 +135,7 @@
 
 <script setup lang="ts">
 const config = useRuntimeConfig();
+const route = useRoute();
 const isScrolled = ref(false);
 
 const botInviteUrl = computed(() => {
@@ -131,22 +144,39 @@ const botInviteUrl = computed(() => {
   return `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot+applications.commands&permissions=8`;
 });
 
+// These links only have a matching section on the homepage. Elsewhere
+// (e.g. /docs), let the browser navigate to "/#section" normally instead
+// of trying to scroll a section that isn't on the current page.
 const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "Modules", href: "#modules" },
-  { label: "Stats", href: "#stats" },
+  { label: "Features", href: "/#features" },
+  { label: "Modules", href: "/#modules" },
+  { label: "Stats", href: "/#stats" },
 ];
 
 const scrollToSection = (hash: string) => {
-  const id = hash.replace('#', '');
+  const id = hash.replace(/^\/?#/, '');
   const el = document.getElementById(id);
   if (el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 };
 
+const handleNavLinkClick = (event: MouseEvent, href: string) => {
+  if (route.path === '/') {
+    event.preventDefault();
+    scrollToSection(href);
+  }
+};
+
 const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const handleLogoClick = (event: MouseEvent) => {
+  if (route.path === '/') {
+    event.preventDefault();
+    scrollToTop();
+  }
 };
 
 onMounted(() => {
