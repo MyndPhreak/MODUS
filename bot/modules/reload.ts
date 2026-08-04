@@ -11,6 +11,15 @@ const reloadModule: BotModule = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .toJSON(),
     execute: async (interaction: ChatInputCommandInteraction, moduleManager: ModuleManager) => {
+        const adminIds = (process.env.BOT_ADMIN_IDS || '')
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean);
+        if (!adminIds.includes(interaction.user.id)) {
+            await interaction.editReply('❌ This command is restricted to bot admins.');
+            return;
+        }
+
         try {
             await interaction.editReply('Reloading modules...');
             await moduleManager.loadModules();
