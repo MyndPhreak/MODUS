@@ -12,6 +12,7 @@ import { DatabaseService } from "./DatabaseService";
 import { ServerStatusService } from "./ServerStatusService";
 import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { TranscriptRetentionWorker } from "./TranscriptRetentionWorker";
+import { LogRetentionWorker } from "./LogRetentionWorker";
 import { ReminderWorker } from "./ReminderWorker";
 import { Logger } from "./Logger";
 
@@ -268,6 +269,49 @@ client.once("ready", async () => {
     }).start();
   } else if (typeof shardId !== "number" || shardId === 0) {
     transcriptWorker.start();
+  }
+
+  // Log retention sweep — the `logs` table is written to continuously by
+  // every Logger call across all shards, so it needs its own cleanup
+  // independent of recordings/transcripts. Same leader-election pattern as
+  // recording retention: only one shard should run this at a time.
+  const logRetentionDays = parseInt(
+    process.env.LOG_RETENTION_DAYS || "0",
+    10,
+  );
+  if (logRetentionDays > 0) {
+    const logRetentionWorker = new LogRetentionWorker(
+      databaseService,
+      logger,
+      logRetentionDays,
+    );
+
+    if (redisClients) {
+      const ownerId = `${process.pid}:shard-${shardId}`;
+      new LeaderElection({
+        redis: redisClients.primary,
+        key: "modus:leader:log-retention",
+        ownerId,
+        onAcquired: () => {
+          logger.info(
+            `Log retention: leader election won (${ownerId})`,
+            undefined,
+            "retention",
+          );
+          logRetentionWorker.start();
+        },
+        onLost: () => {
+          logger.warn(
+            `Log retention: lost leader lease (${ownerId}) — stopping worker`,
+            undefined,
+            "retention",
+          );
+          logRetentionWorker.stop();
+        },
+      }).start();
+    } else if (typeof shardId !== "number" || shardId === 0) {
+      logRetentionWorker.start();
+    }
   }
 
   // Reminder delivery worker — polls due reminders every 15s.
