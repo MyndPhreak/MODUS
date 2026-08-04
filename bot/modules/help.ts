@@ -11,14 +11,7 @@ import {
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
 import { buildV2Layout } from "../lib/components-v2";
-
-// ─── Types ────────────────────────────────────────────────────────────────
-
-interface ModulePage {
-  name: string;
-  description: string;
-  commands: { name: string; description: string }[];
-}
+import { buildModuleCatalog, type DocsModule } from "../lib/moduleCatalog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -40,49 +33,14 @@ function getModuleIcon(name: string): string {
   return MODULE_ICONS[name.toLowerCase()] || "📦";
 }
 
-function buildPages(moduleManager: ModuleManager): ModulePage[] {
-  const registered = moduleManager.getRegisteredModules();
-  const pages: ModulePage[] = [];
-
-  for (const [, mod] of registered) {
-    const commands: { name: string; description: string }[] = [];
-
-    if (mod.commands && mod.commands.length > 0) {
-      for (const cmd of mod.commands) {
-        const desc = "description" in cmd && typeof cmd.description === "string" ? cmd.description : "No description.";
-        commands.push({
-          name: `/${cmd.name}`,
-          description: desc,
-        });
-      }
-    } else if (mod.data) {
-      const desc = "description" in mod.data && typeof mod.data.description === "string" ? mod.data.description : "No description.";
-      commands.push({
-        name: `/${mod.data.name}`,
-        description: desc,
-      });
-    }
-
-
-    pages.push({
-      name: mod.name,
-      description: mod.description || "No description provided.",
-      commands,
-    });
-  }
-
-  pages.sort((a, b) => a.name.localeCompare(b.name));
-  return pages;
-}
-
-function buildV2HelpPage(pages: ModulePage[], pageIndex: number): any[] {
+function buildV2HelpPage(pages: DocsModule[], pageIndex: number): any[] {
 
   const page = pages[pageIndex];
   const icon = getModuleIcon(page.name);
   const totalPages = pages.length;
 
   const fields = page.commands.map((cmd) => ({
-    name: cmd.name,
+    name: `/${cmd.name}`,
     value: cmd.description,
   }));
 
@@ -96,7 +54,7 @@ function buildV2HelpPage(pages: ModulePage[], pageIndex: number): any[] {
 }
 
 function buildInteractiveRows(
-  pages: ModulePage[],
+  pages: DocsModule[],
   pageIndex: number,
   disabled = false,
 ): ActionRowBuilder<any>[] {
@@ -159,7 +117,7 @@ const helpModule: BotModule = {
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
   ) => {
-    const pages = buildPages(moduleManager);
+    const pages = buildModuleCatalog(moduleManager, { includeHidden: true });
 
     if (pages.length === 0) {
       await interaction.editReply({

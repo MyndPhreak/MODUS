@@ -36,6 +36,7 @@ function memBar(used: number, total: number, length: number = 10): string {
 
 const shardInfoModule: BotModule = {
   name: "shard-info",
+  hidden: true,
   description: "Shows shard diagnostics and performance metrics",
   data: new SlashCommandBuilder()
     .setName("shard-info")

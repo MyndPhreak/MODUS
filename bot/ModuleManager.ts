@@ -85,6 +85,12 @@ export interface BotModule {
    * passes). See bot/lib/aiTools.ts.
    */
   aiTools?: AiTool[];
+  /**
+   * If true, excluded from the public docs catalog (GET /api/docs). Still
+   * shown in the private /help command. Use for bot-owner/operational
+   * commands that aren't a guild-facing feature (e.g. reload, shard-info).
+   */
+  hidden?: boolean;
 }
 
 export class ModuleManager {

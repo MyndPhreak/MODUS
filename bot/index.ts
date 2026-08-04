@@ -28,6 +28,7 @@ import {
 } from "./lib/ytdlp-stream";
 import { registerMusicAPI } from "./MusicAPI";
 import { registerWebhookRoutes } from "./WebhookRouter";
+import { registerDocsAPI } from "./DocsAPI";
 
 dotenv.config();
 
@@ -359,6 +360,7 @@ server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
   registerMusicAPI(server, client);
   registerWebhookRoutes(server, client, databaseService);
+  registerDocsAPI(server, moduleManager);
 });
 
 client.on("interactionCreate", async (interaction) => {
