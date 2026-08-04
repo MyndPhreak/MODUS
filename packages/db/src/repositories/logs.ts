@@ -4,7 +4,7 @@
  * Insert-heavy, read-rare. The (guild_id, timestamp DESC) index covers the
  * dashboard's paginated view; a bare timestamp index supports the admin log.
  */
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray, lt } from "drizzle-orm";
 import type { Database } from "../client";
 import { logs, type LogEntry } from "../schema";
 
@@ -68,6 +68,31 @@ export class LogRepository {
       .orderBy(desc(logs.timestamp))
       .limit(limit);
     return rows.map(toDoc);
+  }
+
+  /**
+   * Deletes up to `batchLimit` rows older than `cutoff` in a single
+   * statement (rows are selected via a LIMIT-capped subquery). Callers
+   * loop, calling this repeatedly, until it returns fewer than
+   * `batchLimit` — that bounds how many rows any one DELETE transaction
+   * touches, which matters here because `logs` is far higher-volume than
+   * the other retention-swept tables.
+   */
+  async deleteOlderThan(cutoff: Date, batchLimit: number): Promise<number> {
+    const deleted = await this.db
+      .delete(logs)
+      .where(
+        inArray(
+          logs.id,
+          this.db
+            .select({ id: logs.id })
+            .from(logs)
+            .where(lt(logs.timestamp, cutoff))
+            .limit(batchLimit),
+        ),
+      )
+      .returning({ id: logs.id });
+    return deleted.length;
   }
 
   async upsertMigrated(input: {
