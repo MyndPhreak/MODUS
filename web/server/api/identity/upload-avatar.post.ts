@@ -12,7 +12,7 @@
  */
 import { randomBytes } from "crypto";
 import { getR2, putR2Object } from "../../utils/r2";
-import { requireGuildManager } from "../../utils/session";
+import { requireAuthedUserId, requireGuildManager } from "../../utils/session";
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB
 const ALLOWED_MIME_PREFIXES = ["image/"];
@@ -25,10 +25,28 @@ function guildIdFromParts(parts: any[] | null): string | null {
 }
 
 export default defineEventHandler(async (event) => {
+  // Authenticate before touching the request body at all — an
+  // unauthenticated caller must not be able to force the server to buffer
+  // an arbitrarily large multipart body in memory. Guild-ownership
+  // (requireGuildManager) still has to wait until after the body is
+  // parsed, since guild_id is itself a multipart field.
+  await requireAuthedUserId(event);
+
   if (!getR2()) {
     throw createError({
       statusCode: 503,
       statusMessage: "Object storage unavailable (R2 not configured).",
+    });
+  }
+
+  // Reject oversized uploads before buffering the body, when the client
+  // told us how big it is. Some clients omit Content-Length — in that case
+  // we fall through to the authoritative post-parse size check below.
+  const contentLength = getHeader(event, "content-length");
+  if (contentLength && Number(contentLength) > MAX_FILE_SIZE * 1.1) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)} MB.`,
     });
   }
 
