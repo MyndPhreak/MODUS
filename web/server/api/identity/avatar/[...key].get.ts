@@ -6,10 +6,16 @@
  * Cache-Control lets browsers reuse the image — the key is random per
  * upload, so replacing the avatar always produces a new URL.
  */
-import { getR2Object, looksLikeR2Key } from "../../../utils/r2";
+import { getR2Object } from "../../../utils/r2";
 
 const IDENTITY_PREFIX = "identity/";
 const IMAGE_CACHE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
+// This route is public and unauthenticated (no guildId to compare against,
+// unlike the apply endpoint's IDENTITY_KEY_RE check), so validate the key
+// shape strictly rather than the previous loose "contains a slash" check —
+// it must look exactly like what upload-avatar.post.ts generates.
+const IDENTITY_KEY_RE = /^identity\/\d{10,}\/[a-f0-9]{16}\.[a-z0-9]+$/;
 
 export default defineEventHandler(async (event) => {
   const keyParam = getRouterParam(event, "key");
@@ -23,7 +29,7 @@ export default defineEventHandler(async (event) => {
     ? keyParam
     : `${IDENTITY_PREFIX}${keyParam}`;
 
-  if (!looksLikeR2Key(key)) {
+  if (!IDENTITY_KEY_RE.test(key)) {
     throw createError({ statusCode: 400, statusMessage: "Invalid key" });
   }
 

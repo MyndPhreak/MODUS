@@ -13,22 +13,30 @@
  *   - Only fields that differ from the currently stored value are sent to
  *     Discord, so a nickname-only edit never re-sends the avatar bytes.
  */
-import { getR2Object, looksLikeR2Key } from "../../utils/r2";
+import { getR2Object } from "../../utils/r2";
 import { getRepos } from "../../utils/db";
 import { requireGuildManager } from "../../utils/session";
 
 const AVATAR_URL_PREFIX = "/api/identity/avatar/";
 const MAX_NICKNAME_LENGTH = 32;
 
+// Matches the exact shape produced by upload-avatar.post.ts:
+// `identity/<guildId>/<16-hex-char rand>.<ext>`. Capturing the guildId
+// segment lets us confirm it matches the route's guild_id — the key isn't
+// confidential (the serve endpoint is public either way), but there's no
+// reason to accept a key minted for a different guild.
+const IDENTITY_KEY_RE = /^identity\/(\d{10,})\/[a-f0-9]{16}\.[a-z0-9]+$/;
+
 interface IdentityBody {
   nickname: string | null;
   avatarImage: string | null;
 }
 
-function extractAvatarKey(avatarImage: string): string | null {
+function extractAvatarKey(avatarImage: string, guildId: string): string | null {
   if (!avatarImage.startsWith(AVATAR_URL_PREFIX)) return null;
   const key = avatarImage.slice(AVATAR_URL_PREFIX.length);
-  return key.startsWith("identity/") && looksLikeR2Key(key) ? key : null;
+  const match = IDENTITY_KEY_RE.exec(key);
+  return match && match[1] === guildId ? key : null;
 }
 
 export default defineEventHandler(async (event) => {
@@ -84,7 +92,7 @@ export default defineEventHandler(async (event) => {
     if (body.avatarImage === null) {
       patch.avatar = null;
     } else {
-      const key = extractAvatarKey(body.avatarImage);
+      const key = extractAvatarKey(body.avatarImage, guildId);
       if (!key) {
         throw createError({
           statusCode: 400,
