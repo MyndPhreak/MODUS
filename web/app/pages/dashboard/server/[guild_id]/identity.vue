@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -99,10 +99,6 @@ const errorMessage = ref("");
 
 const savedNickname = ref<string | null>(null);
 const savedAvatarImage = ref<string | null>(null);
-
-const avatarSrc = computed(() =>
-  avatarImage.value ? avatarImage.value : null,
-);
 
 async function load() {
   try {
@@ -125,9 +121,15 @@ async function handleAvatarUpload(event: Event) {
   const file = input.files?.[0];
   if (!file) return;
 
+  // Guard flag to prevent late FileReader.onload from overwriting error rollback
+  let isCurrentUpload = true;
+
   const reader = new FileReader();
   reader.onload = (e) => {
-    avatarPreview.value = (e.target?.result as string) || null;
+    // Only update preview if this upload attempt is still active
+    if (isCurrentUpload) {
+      avatarPreview.value = (e.target?.result as string) || null;
+    }
   };
   reader.readAsDataURL(file);
 
@@ -153,6 +155,8 @@ async function handleAvatarUpload(event: Event) {
       color: "success",
     });
   } catch (err: any) {
+    // Mark upload as handled so late FileReader.onload won't overwrite rollback
+    isCurrentUpload = false;
     errorMessage.value = err?.message || "Could not upload image.";
     avatarPreview.value = avatarImage.value;
   } finally {
