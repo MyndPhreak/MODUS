@@ -6,7 +6,10 @@
  * and later sends to `PUT /api/identity/:guild_id` to apply to Discord.
  *
  * Accepts multipart/form-data:
- *   - file: image payload (required, ≤ 8 MB, MIME must start with image/)
+ *   - file: image payload (required, ≤ 8 MB, MIME must be one of
+ *     image/png, image/jpeg, image/gif, image/webp — SVG is deliberately
+ *     excluded since it's served back with the stored Content-Type and can
+ *     carry an inline <script>)
  *   - guild_id: Discord guild id (required, scopes the key namespace and
  *     the requireGuildManager check)
  */
@@ -15,7 +18,7 @@ import { getR2, putR2Object } from "../../utils/r2";
 import { requireAuthedUserId, requireGuildManager } from "../../utils/session";
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB
-const ALLOWED_MIME_PREFIXES = ["image/"];
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 function guildIdFromParts(parts: any[] | null): string | null {
   const field = parts?.find((p) => p.name === "guild_id");
@@ -84,7 +87,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const mimeType = filePart.type || "";
-  if (!ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))) {
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
     throw createError({
       statusCode: 400,
       statusMessage: `Invalid file type: ${mimeType}. Only image files are accepted.`,

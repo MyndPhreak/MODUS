@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: "Not Found" });
     }
     setResponseHeader(event, "Content-Type", object.contentType);
+    setResponseHeader(event, "X-Content-Type-Options", "nosniff");
     setResponseHeader(
       event,
       "Cache-Control",
