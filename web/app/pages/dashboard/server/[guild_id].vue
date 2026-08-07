@@ -65,6 +65,7 @@ const activeTab = computed(() => {
   // AI
   if (path.includes("/modules/ai")) return "ai";
   // Index + logs
+  if (path.includes("/identity")) return "identity";
   if (path.includes("/modules")) return "modules";
   if (path.includes("/logs")) return "logs";
   return "modules";
@@ -84,6 +85,12 @@ const sidebarTabs = computed(() => [
     label: "Modules",
     icon: "i-heroicons-squares-2x2",
     to: `${basePath}/modules`,
+  },
+  {
+    id: "identity",
+    label: "Bot Identity",
+    icon: "i-heroicons-face-smile",
+    to: `${basePath}/identity`,
   },
 
   // Moderation & Safety
