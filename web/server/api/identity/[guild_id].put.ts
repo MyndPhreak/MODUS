@@ -7,11 +7,17 @@
  * to Postgres after Discord confirms success — so `guild_configs` always
  * reflects what's actually live, never a value that failed to apply.
  *
- * Body: { nickname: string | null, avatarImage: string | null }
+ * Body: { nickname: string | null, avatarImage: string | null, force?: boolean }
  *   - avatarImage is the proxy path returned by POST /api/identity/upload-avatar
  *   - null clears that field back to the bot's default identity
  *   - Only fields that differ from the currently stored value are sent to
  *     Discord, so a nickname-only edit never re-sends the avatar bytes.
+ *   - force: true skips that diff entirely and always sends both nick and
+ *     avatar with the request body's values. This is the escape hatch for
+ *     when the stored guild_configs row has drifted from what's actually
+ *     live on Discord (e.g. a guild un-registers, wiping the identity row,
+ *     then re-registers) — without it, a diff against a stale/blank stored
+ *     row can make a real change look like a no-op forever.
  */
 import { getR2Object } from "../../utils/r2";
 import { getRepos } from "../../utils/db";
@@ -30,6 +36,7 @@ const IDENTITY_KEY_RE = /^identity\/(\d{10,})\/[a-f0-9]{16}\.[a-z0-9]+$/;
 interface IdentityBody {
   nickname: string | null;
   avatarImage: string | null;
+  force?: boolean;
 }
 
 function extractAvatarKey(avatarImage: string, guildId: string): string | null {
@@ -81,14 +88,15 @@ export default defineEventHandler(async (event) => {
   const current = await repos.guildConfigs.getModuleSettings(guildId, "identity");
   const currentNickname: string | null = current.nickname ?? null;
   const currentAvatarImage: string | null = current.avatarImage ?? null;
+  const isForced = body?.force === true;
 
   const patch: { nick?: string | null; avatar?: string | null } = {};
 
-  if (body.nickname !== currentNickname) {
+  if (isForced || body.nickname !== currentNickname) {
     patch.nick = body.nickname;
   }
 
-  if (body.avatarImage !== currentAvatarImage) {
+  if (isForced || body.avatarImage !== currentAvatarImage) {
     if (body.avatarImage === null) {
       patch.avatar = null;
     } else {

@@ -73,10 +73,24 @@
           <p class="mt-1 text-xs text-gray-500">{{ nickname.length }}/32</p>
         </UFormField>
 
-        <div class="flex justify-end">
-          <UButton color="primary" :loading="saving" @click="save">
-            Save
-          </UButton>
+        <div class="flex flex-col items-end gap-1">
+          <div class="flex justify-end gap-2">
+            <UButton
+              variant="ghost"
+              color="neutral"
+              :loading="forceSaving"
+              @click="forceReapply"
+            >
+              Force re-apply
+            </UButton>
+            <UButton color="primary" :loading="saving" @click="save">
+              Save
+            </UButton>
+          </div>
+          <p class="text-xs text-gray-500">
+            Use "Force re-apply" if the bot's identity in Discord doesn't
+            match what's shown here.
+          </p>
         </div>
       </div>
     </div>
@@ -95,6 +109,7 @@ const avatarImage = ref<string | null>(null);
 const avatarPreview = ref<string | null>(null);
 const uploading = ref(false);
 const saving = ref(false);
+const forceSaving = ref(false);
 const errorMessage = ref("");
 
 const savedNickname = ref<string | null>(null);
@@ -170,8 +185,17 @@ function clearAvatar() {
   avatarPreview.value = null;
 }
 
-async function save() {
-  saving.value = true;
+/**
+ * Shared save path for both the normal Save button and "Force re-apply".
+ *
+ * `force: true` tells the apply endpoint to skip its diff-against-stored
+ * comparison and always push the currently-displayed values to Discord —
+ * the escape hatch for when the stored guild_configs row has drifted from
+ * what's actually live (e.g. after a guild un-registers and re-registers,
+ * which wipes the identity row but never touches Discord itself).
+ */
+async function performSave(force: boolean, loadingFlag: { value: boolean }) {
+  loadingFlag.value = true;
   errorMessage.value = "";
   try {
     await $fetch(`/api/identity/${encodeURIComponent(guildId)}`, {
@@ -179,13 +203,16 @@ async function save() {
       body: {
         nickname: nickname.value.trim() || null,
         avatarImage: avatarImage.value,
+        ...(force ? { force: true } : {}),
       },
     });
     savedNickname.value = nickname.value.trim() || null;
     savedAvatarImage.value = avatarImage.value;
     toast.add({
       title: "Saved!",
-      description: "Bot identity updated for this server.",
+      description: force
+        ? "Bot identity re-applied to Discord for this server."
+        : "Bot identity updated for this server.",
       color: "success",
     });
   } catch (err: any) {
@@ -197,8 +224,16 @@ async function save() {
     avatarImage.value = savedAvatarImage.value;
     avatarPreview.value = savedAvatarImage.value;
   } finally {
-    saving.value = false;
+    loadingFlag.value = false;
   }
+}
+
+async function save() {
+  await performSave(false, saving);
+}
+
+async function forceReapply() {
+  await performSave(true, forceSaving);
 }
 
 onMounted(load);
