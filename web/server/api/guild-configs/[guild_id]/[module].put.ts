@@ -21,6 +21,17 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Identity settings must go through PUT /api/identity/:guild_id, which
+  // applies the change to Discord before persisting. Writing module_name =
+  // "identity" here would silently corrupt the diff baseline that endpoint
+  // relies on, without ever touching Discord.
+  if (moduleName.toLowerCase() === "identity") {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Use PUT /api/identity/:guild_id to change bot identity settings.",
+    });
+  }
+
   await requireGuildManager(event, guildId);
 
   const body = await readBody<{
