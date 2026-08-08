@@ -1,9 +1,10 @@
 /**
  * Fully delete a recording and every file referenced by it.
  *
- * Transactional: FK-cascades the tracks, then issues best-effort deletes
- * against object storage (R2 for slash-shaped keys, leaves Appwrite
- * Storage cleanup to the caller for legacy fileIds).
+ * Deletes R2 objects first, DB row second. If any R2 delete fails, the row
+ * is left in place (and a 502 returned) so the recording stays a candidate
+ * for retry instead of the DB losing track of files that are still sitting
+ * in R2, orphaned with no reference left anywhere.
  */
 import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
 import { getRecordingRepo } from "../../utils/db";
@@ -11,11 +12,7 @@ import { requireGuildManager } from "../../utils/session";
 
 async function removeFile(fileId: string) {
   if (getR2() && looksLikeR2Key(fileId)) {
-    try {
-      await deleteR2Object(fileId);
-    } catch {
-      // best-effort — already gone is fine
-    }
+    await deleteR2Object(fileId);
   }
   // Non-R2 file IDs are legacy Appwrite Storage references; the Appwrite
   // cleanup has been removed as part of the decommission. Operators with
@@ -60,16 +57,30 @@ export default defineEventHandler(async (event) => {
     // guild_id from the body alone for the permission decision.
     await requireGuildManager(event, existing.guild_id);
 
-    const { recording, tracks } = await repo.deleteWithTracks(recordingId);
+    const tracks = await repo.listTracks(recordingId);
 
-    for (const track of tracks) {
-      await removeFile(track.file_id);
-    }
-    if (recording?.mixed_file_id) {
-      await removeFile(recording.mixed_file_id);
+    try {
+      for (const track of tracks) {
+        await removeFile(track.file_id);
+      }
+      if (existing.mixed_file_id) {
+        await removeFile(existing.mixed_file_id);
+      }
+    } catch (error: any) {
+      console.error(
+        `[Recordings API] R2 delete failed for ${recordingId}, DB row kept for retry:`,
+        error?.message || error,
+      );
+      throw createError({
+        statusCode: 502,
+        statusMessage:
+          "Failed to delete recording files from storage. The recording was not removed — try again.",
+      });
     }
 
-    return { success: true, deletedTracks: tracks.length };
+    const { tracks: deletedTracks } = await repo.deleteWithTracks(recordingId);
+
+    return { success: true, deletedTracks: deletedTracks.length };
   } catch (error: any) {
     if (error.statusCode) throw error;
     console.error(
