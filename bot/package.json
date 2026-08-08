@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "start:sharded": "node dist/sharding.js",
     "export-commands": "node scripts/export-commands.js",
+    "sweep:orphans": "ts-node --files scripts/orphan-sweep.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
