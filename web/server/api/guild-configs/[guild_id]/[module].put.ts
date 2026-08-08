@@ -10,6 +10,7 @@
  */
 import { getRepos } from "../../../utils/db";
 import { requireGuildManager } from "../../../utils/session";
+import { deleteR2Object, extractWelcomeBgKey } from "../../../utils/r2";
 
 export default defineEventHandler(async (event) => {
   const guildId = getRouterParam(event, "guild_id");
@@ -47,6 +48,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const isWelcome = moduleName.toLowerCase() === "welcome";
+  let previousBackgroundImage: string | undefined;
+  if (isWelcome && body?.settings !== undefined) {
+    const current = await repos.guildConfigs.getModuleSettings(guildId, "welcome");
+    previousBackgroundImage = current?.backgroundImage;
+  }
+
   try {
     if (body?.settings !== undefined) {
       await repos.guildConfigs.setModuleSettings(
@@ -62,6 +70,28 @@ export default defineEventHandler(async (event) => {
         body.enabled,
       );
     }
+
+    // Best-effort housekeeping: settings replace the whole `welcome` blob,
+    // so if backgroundImage changed (or was dropped), the previous R2
+    // object is no longer referenced from anywhere. Delete it so re-uploads
+    // don't accumulate orphaned images.
+    if (isWelcome && previousBackgroundImage) {
+      const newBackgroundImage = body?.settings?.backgroundImage;
+      if (previousBackgroundImage !== newBackgroundImage) {
+        const oldKey = extractWelcomeBgKey(previousBackgroundImage, guildId);
+        if (oldKey) {
+          try {
+            await deleteR2Object(oldKey);
+          } catch (error: any) {
+            console.error(
+              `[GuildConfigs API] Failed to delete old welcome background ${oldKey}:`,
+              error?.message || error,
+            );
+          }
+        }
+      }
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error(
