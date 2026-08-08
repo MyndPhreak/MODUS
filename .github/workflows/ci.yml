@@ -32,10 +32,12 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # ── Check third-party license notice is up to date ────────────────────────
+  # ── Keep third-party license notice up to date ─────────────────────────────
   check-licenses:
     name: Check Third-Party Licenses
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -57,7 +59,23 @@ jobs:
       - name: Regenerate third-party licenses
         run: pnpm run licenses:generate
 
-      - name: Fail if THIRD_PARTY_LICENSES.md is out of date
+      # Only push-events get an auto-fix commit — this runs on ubuntu-latest,
+      # the same platform npm optional deps resolve for in Docker, so unlike
+      # a local regenerate on macOS/Windows it can't introduce a platform-drift
+      # diff. The commit only touches THIRD_PARTY_LICENSES.md, which isn't in
+      # this workflow's path filter, so it can't retrigger this job.
+      - name: Auto-commit regenerated licenses
+        if: github.event_name == 'push'
+        run: |
+          if ! git diff --quiet -- THIRD_PARTY_LICENSES.md; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add THIRD_PARTY_LICENSES.md
+            git commit -m "chore: auto-update THIRD_PARTY_LICENSES.md"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Fail if THIRD_PARTY_LICENSES.md is still out of date
         run: |
           if ! git diff --quiet -- THIRD_PARTY_LICENSES.md; then
             echo "::error file=THIRD_PARTY_LICENSES.md::THIRD_PARTY_LICENSES.md is out of date. Run 'pnpm run licenses:generate' and commit the result."
