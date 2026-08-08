@@ -61,6 +61,47 @@ export function guildIdFromRecordingKey(key: string): string | null {
   return guildId;
 }
 
+const IDENTITY_AVATAR_URL_PREFIX = "/api/identity/avatar/";
+// Matches the exact shape produced by identity/upload-avatar.post.ts:
+// `identity/<guildId>/<16-hex-char rand>.<ext>`.
+const IDENTITY_AVATAR_KEY_RE = /^identity\/(\d{10,})\/[a-f0-9]{16}\.[a-z0-9]+$/;
+
+/**
+ * Extract the R2 key from a stored `avatarImage` proxy path, scoped to the
+ * given guild. Returns null for anything that isn't exactly what
+ * upload-avatar.post.ts produces for that guild — a missing/wrong-guild/
+ * malformed value is treated as "nothing to clean up" rather than guessed at.
+ */
+export function extractIdentityAvatarKey(
+  avatarImage: string | null | undefined,
+  guildId: string,
+): string | null {
+  if (!avatarImage || !avatarImage.startsWith(IDENTITY_AVATAR_URL_PREFIX)) {
+    return null;
+  }
+  const key = avatarImage.slice(IDENTITY_AVATAR_URL_PREFIX.length);
+  const match = IDENTITY_AVATAR_KEY_RE.exec(key);
+  return match && match[1] === guildId ? key : null;
+}
+
+const WELCOME_BG_URL_PREFIX = "/api/welcome/bg/";
+// Matches the exact shape produced by welcome/upload-bg.post.ts:
+// `welcome/<guildId>/<16-hex-char rand>.<ext>`.
+const WELCOME_BG_KEY_RE = /^welcome\/(\d{10,})\/[a-f0-9]{16}\.[a-z0-9]+$/;
+
+/** Same idea as extractIdentityAvatarKey, for the welcome background field. */
+export function extractWelcomeBgKey(
+  backgroundImage: string | null | undefined,
+  guildId: string,
+): string | null {
+  if (!backgroundImage || !backgroundImage.startsWith(WELCOME_BG_URL_PREFIX)) {
+    return null;
+  }
+  const key = backgroundImage.slice(WELCOME_BG_URL_PREFIX.length);
+  const match = WELCOME_BG_KEY_RE.exec(key);
+  return match && match[1] === guildId ? key : null;
+}
+
 export async function presignGet(
   key: string,
   ttlSeconds?: number,
