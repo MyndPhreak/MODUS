@@ -281,6 +281,36 @@ export class RecordingRepository {
     return rows.map(toTrackDoc);
   }
 
+  /**
+   * Lean (id, guildId, mixedFileId) projection over every recording. Used by
+   * maintenance tooling (e.g. the orphan sweep script) that needs to check
+   * R2 object references across the whole table without paying for the
+   * full row shape.
+   */
+  async listAllRefs(): Promise<
+    Array<{ id: string; guildId: string; mixedFileId: string | null }>
+  > {
+    return this.db
+      .select({
+        id: recordings.id,
+        guildId: recordings.guildId,
+        mixedFileId: recordings.mixedFileId,
+      })
+      .from(recordings);
+  }
+
+  /** Lean (recordingId, fileId) projection over every track. See listAllRefs. */
+  async listAllTrackFileIds(): Promise<
+    Array<{ recordingId: string; fileId: string }>
+  > {
+    return this.db
+      .select({
+        recordingId: recordingTracks.recordingId,
+        fileId: recordingTracks.fileId,
+      })
+      .from(recordingTracks);
+  }
+
   /** Used by the Appwrite → Postgres migration script. */
   async upsertMigratedRecording(
     input: CreateRecordingInput & { id: string },

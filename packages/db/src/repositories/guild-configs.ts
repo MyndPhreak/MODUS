@@ -114,6 +114,19 @@ export class GuildConfigRepository {
       });
   }
 
+  /**
+   * Every guild_configs row for a given module, across all guilds. Used by
+   * maintenance tooling (e.g. the orphan sweep script) that needs to check
+   * a settings field (like a stored R2 key) against every guild at once.
+   */
+  async listByModule(moduleName: string): Promise<GuildConfigDoc[]> {
+    const rows = await this.db
+      .select()
+      .from(guildConfigs)
+      .where(eq(guildConfigs.moduleName, moduleName.toLowerCase()));
+    return rows.map(toDoc);
+  }
+
   async getGlobalAIConfig(): Promise<Record<string, any> | null> {
     const row = await this.findOne("__global__", "ai");
     return row ? ((row.settings as Record<string, any>) ?? null) : null;
