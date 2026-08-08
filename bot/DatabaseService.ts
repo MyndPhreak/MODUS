@@ -523,25 +523,51 @@ export class DatabaseService {
     return this.recordings.listOlderThan(cutoffIso, limit);
   }
 
+  /**
+   * Delete R2 objects first, DB row second. If any R2 delete fails, the DB
+   * row is left in place (and the error re-thrown) so the recording stays a
+   * candidate for the next retention sweep / manual retry instead of
+   * silently orphaning storage with nothing left pointing at it.
+   */
   async deleteRecording(recordingId: string): Promise<void> {
-    const { recording, tracks } =
-      await this.recordings.deleteWithTracks(recordingId);
+    const recording = await this.recordings.getById(recordingId);
+    if (!recording) return;
+    const tracks = await this.recordings.listTracks(recordingId);
 
+    const errors: string[] = [];
     for (const track of tracks) {
       try {
         await this.deleteRecordingFile(track.file_id);
-      } catch {}
+      } catch (err) {
+        errors.push(
+          `track ${track.file_id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
-    if (recording?.mixed_file_id) {
+    if (recording.mixed_file_id) {
       try {
         await this.deleteRecordingFile(recording.mixed_file_id);
-      } catch {}
+      } catch (err) {
+        errors.push(
+          `mixed ${recording.mixed_file_id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
-    if (recording?.guild_id) {
-      try {
-        await this.deleteRecordingPrefix(recording.guild_id, recordingId);
-      } catch {}
+    try {
+      await this.deleteRecordingPrefix(recording.guild_id, recordingId);
+    } catch (err) {
+      errors.push(
+        `prefix recordings/${recording.guild_id}/${recordingId}/: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
+
+    if (errors.length > 0) {
+      const message = `Failed to delete R2 object(s) for recording ${recordingId}, DB row kept for retry: ${errors.join("; ")}`;
+      console.error(`[DatabaseService] ${message}`);
+      throw new Error(message);
+    }
+
+    await this.recordings.deleteWithTracks(recordingId);
   }
 
   async createRecordingTrack(data: {
