@@ -1,153 +1,139 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
-    <div class="flex items-center justify-between mb-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
       <div>
         <h2
-          class="text-2xl font-bold mb-2 bg-gradient-to-r from-teal-400 to-emerald-500 bg-clip-text text-transparent"
+          class="text-2xl font-bold mb-1 bg-gradient-to-r from-teal-400 to-emerald-500 bg-clip-text text-transparent"
         >
           Server Logs
         </h2>
         <p class="text-sm text-gray-400">
-          View recent bot activity and moderation events for this server
+          Recent bot activity and moderation events for this server.
         </p>
       </div>
-      <UButton
-        icon="i-heroicons-arrow-path"
-        variant="soft"
-        color="neutral"
-        :loading="refreshing"
-        @click="fetchLogs"
-      >
-        Refresh
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-heroicons-trash"
+          variant="ghost"
+          color="neutral"
+          title="Clear View"
+          class="rounded-xl border border-white/8"
+          @click="logs = []"
+        />
+        <UButton
+          icon="i-heroicons-arrow-path"
+          variant="ghost"
+          color="neutral"
+          :loading="refreshing"
+          title="Refresh"
+          class="rounded-xl border border-white/8"
+          @click="fetchLogs"
+        />
+      </div>
     </div>
 
     <!-- Filters -->
-    <div
-      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl p-4"
-    >
-      <div
-        class="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent pointer-events-none"
-      />
-      <div class="relative flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-funnel" class="text-gray-400" />
-          <span class="text-sm font-medium text-gray-300">Filter:</span>
-        </div>
-        <USelectMenu
-          v-model="levelFilter"
-          :items="levelOptions"
-          value-key="value"
-          placeholder="All levels"
-          icon="i-heroicons-adjustments-horizontal"
-          size="sm"
-          class="w-40"
-          clear
-        />
-        <UInput
-          v-model="searchQuery"
-          placeholder="Search logs..."
-          icon="i-heroicons-magnifying-glass"
-          size="sm"
-          class="flex-1 min-w-48"
-        />
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Level Filter -->
+      <div class="flex items-center gap-1 bg-gray-800/50 rounded-lg p-1">
+        <UButton
+          v-for="lvl in logLevels"
+          :key="lvl.value"
+          size="xs"
+          :variant="levelFilter === lvl.value ? 'solid' : 'ghost'"
+          :color="lvl.color"
+          class="rounded-md text-xs font-bold uppercase tracking-wider"
+          @click="levelFilter = lvl.value"
+        >
+          {{ lvl.label }}
+          <UBadge
+            v-if="getLevelCount(lvl.value) > 0"
+            variant="soft"
+            :color="lvl.color"
+            size="xs"
+            class="ml-1"
+          >
+            {{ getLevelCount(lvl.value) }}
+          </UBadge>
+        </UButton>
       </div>
+
+      <UInput
+        v-model="searchQuery"
+        placeholder="Search logs..."
+        icon="i-heroicons-magnifying-glass"
+        size="sm"
+        class="w-56"
+      />
+
+      <!-- Log count -->
+      <span class="text-xs text-gray-500 font-mono ml-auto">
+        {{ filteredLogs.length }} / {{ logs.length }} entries
+      </span>
     </div>
 
-    <!-- Logs Table -->
+    <!-- Terminal -->
     <div
-      class="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-gray-900/90 to-gray-950/90 backdrop-blur-xl"
+      class="bg-gray-950 rounded-xl border border-gray-800/50 p-4 font-mono text-[11px] h-[65vh] flex flex-col"
     >
       <div
-        class="absolute inset-0 bg-gradient-to-br from-teal-500/3 to-transparent pointer-events-none"
-      />
-
-      <!-- Loading -->
-      <div
         v-if="loading"
-        class="relative flex items-center justify-center py-16 text-gray-400"
+        class="flex-1 flex items-center justify-center text-gray-500"
       >
         <UIcon
           name="i-heroicons-arrow-path"
-          class="animate-spin text-2xl text-teal-400 mr-3"
+          class="w-5 h-5 animate-spin mr-2"
         />
-        <span class="text-sm">Loading logs…</span>
+        Loading logs…
       </div>
-
-      <!-- Empty -->
       <div
-        v-else-if="filteredLogs.length === 0"
-        class="relative text-center py-16"
+        v-else-if="logs.length === 0"
+        class="flex-1 flex items-center justify-center text-gray-600 italic"
       >
-        <UIcon name="i-heroicons-inbox" class="text-5xl text-gray-600 mb-3" />
-        <p class="text-gray-400">
-          {{
-            logs.length === 0
-              ? "No logs recorded yet."
-              : "No logs matching your filters."
-          }}
-        </p>
-      </div>
-
-      <!-- Logs List -->
-      <div v-else class="relative divide-y divide-white/5">
-        <div
-          v-for="log in paginatedLogs"
-          :key="log.$id"
-          class="flex items-start gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
-        >
-          <div class="flex-shrink-0 mt-0.5">
-            <div class="w-2 h-2 rounded-full" :class="levelColor(log.level)" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-0.5">
-              <span class="text-sm font-medium text-white truncate">
-                {{ log.source || "Event" }}
-              </span>
-              <UBadge
-                :color="levelBadgeColor(log.level)"
-                variant="soft"
-                size="xs"
-              >
-                {{ log.level || "info" }}
-              </UBadge>
-            </div>
-            <p class="text-xs text-gray-500 line-clamp-2">
-              {{ log.message }}
-            </p>
-          </div>
-          <span class="text-[10px] text-gray-600 whitespace-nowrap mt-1">
-            {{ formatDate(log.timestamp) }}
-          </span>
+        <div class="text-center">
+          <UIcon
+            name="i-heroicons-inbox"
+            class="w-8 h-8 mx-auto mb-2 opacity-30"
+          />
+          <p>No logs recorded yet.</p>
         </div>
       </div>
-
-      <!-- Pagination -->
       <div
-        v-if="totalPages > 1"
-        class="relative flex items-center justify-between px-5 py-3 border-t border-white/5"
+        v-else-if="filteredLogs.length === 0"
+        class="flex-1 flex items-center justify-center text-gray-600 italic"
       >
-        <span class="text-xs text-gray-500">
-          Showing {{ (currentPage - 1) * perPage + 1 }}–{{
-            Math.min(currentPage * perPage, filteredLogs.length)
-          }}
-          of {{ filteredLogs.length }}
-        </span>
-        <div class="flex gap-1">
-          <UButton
-            icon="i-heroicons-chevron-left"
-            size="xs"
-            variant="ghost"
-            :disabled="currentPage <= 1"
-            @click="currentPage--"
-          />
-          <UButton
-            icon="i-heroicons-chevron-right"
-            size="xs"
-            variant="ghost"
-            :disabled="currentPage >= totalPages"
-            @click="currentPage++"
-          />
+        <p>No logs matching your filters.</p>
+      </div>
+      <div v-else class="flex-1 overflow-y-auto space-y-0.5">
+        <div
+          v-for="log in filteredLogs"
+          :key="log.$id"
+          class="flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors"
+        >
+          <span class="text-gray-600 whitespace-nowrap shrink-0">{{
+            formatTime(log.timestamp)
+          }}</span>
+          <span
+            :class="[
+              'font-black uppercase min-w-[45px] shrink-0',
+              log.level === 'error'
+                ? 'text-red-400'
+                : log.level === 'warn'
+                  ? 'text-amber-400'
+                  : 'text-blue-400',
+            ]"
+            >[{{ log.level }}]</span
+          >
+          <span
+            v-if="log.shardId !== undefined && log.shardId !== null"
+            class="text-cyan-500/60 shrink-0"
+            >S{{ log.shardId }}</span
+          >
+          <span v-if="log.source" class="text-emerald-400/60 shrink-0"
+            >[{{ log.source }}]</span
+          >
+          <span class="text-gray-300 break-words">{{ log.message }}</span>
         </div>
       </div>
     </div>
@@ -163,22 +149,20 @@ const guildId = route.params.guild_id as string;
 const loading = ref(true);
 const refreshing = ref(false);
 const logs = ref<any[]>([]);
-const currentPage = ref(1);
-const perPage = 25;
 
 const searchQuery = ref("");
-const levelFilter = ref<string | undefined>(undefined);
+const levelFilter = ref("all");
 
-const levelOptions = [
-  { label: "Info", value: "info" },
-  { label: "Warning", value: "warn" },
-  { label: "Error", value: "error" },
-  { label: "Debug", value: "debug" },
+const logLevels = [
+  { value: "all", label: "All", color: "neutral" as const },
+  { value: "info", label: "Info", color: "info" as const },
+  { value: "warn", label: "Warn", color: "warning" as const },
+  { value: "error", label: "Error", color: "error" as const },
 ];
 
 const filteredLogs = computed(() => {
   let result = logs.value;
-  if (levelFilter.value) {
+  if (levelFilter.value !== "all") {
     result = result.filter((l) => l.level === levelFilter.value);
   }
   if (searchQuery.value) {
@@ -192,15 +176,10 @@ const filteredLogs = computed(() => {
   return result;
 });
 
-const totalPages = computed(() =>
-  Math.ceil(filteredLogs.value.length / perPage),
-);
-const paginatedLogs = computed(() =>
-  filteredLogs.value.slice(
-    (currentPage.value - 1) * perPage,
-    currentPage.value * perPage,
-  ),
-);
+const getLevelCount = (level: string) => {
+  if (level === "all") return logs.value.length;
+  return logs.value.filter((l) => l.level === level).length;
+};
 
 const fetchLogs = async () => {
   refreshing.value = true;
@@ -208,7 +187,6 @@ const fetchLogs = async () => {
     logs.value = await $fetch<any[]>(
       `/api/logs?guild_id=${encodeURIComponent(guildId)}&limit=500`,
     );
-    currentPage.value = 1;
   } catch (error) {
     console.error("Error fetching logs:", error);
   } finally {
@@ -217,33 +195,16 @@ const fetchLogs = async () => {
   }
 };
 
-const levelColor = (level: string) => {
-  const map: Record<string, string> = {
-    info: "bg-blue-400",
-    warn: "bg-yellow-400",
-    error: "bg-red-400",
-    debug: "bg-gray-400",
-  };
-  return map[level] || "bg-gray-400";
-};
-
-const levelBadgeColor = (level: string): any => {
-  const map: Record<string, string> = {
-    info: "info",
-    warn: "warning",
-    error: "error",
-    debug: "neutral",
-  };
-  return map[level] || "neutral";
-};
-
-const formatDate = (dateStr: string) => {
-  const d = new Date(dateStr);
-  return d.toLocaleString(undefined, {
+const formatTime = (dateString: string) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   });
 };
 
