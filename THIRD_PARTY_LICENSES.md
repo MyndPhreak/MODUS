@@ -489,7 +489,7 @@ pnpm run licenses:generate
 - **ms** `2.1.3` ([source](https://github.com/vercel/ms#readme))
 - **muggle-string** `0.4.1` ([source](https://github.com/johnsoncodehk/muggle-string#readme))
 - **mz** `2.7.0` — Jonathan Ong ([source](https://github.com/normalize/mz#readme))
-- **nanoid** `3.3.16` — Andrey Sitnik ([source](https://github.com/ai/nanoid#readme))
+- **nanoid** `3.3.18` — Andrey Sitnik ([source](https://github.com/ai/nanoid#readme))
 - **nanotar** `0.3.0` ([source](https://github.com/unjs/nanotar#readme))
 - **nitropack** `2.13.4` ([source](https://github.com/nitrojs/nitro#readme))
 - **node-addon-api** `8.9.1` ([source](https://github.com/nodejs/node-addon-api))
