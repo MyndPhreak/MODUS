@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.17.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.16.0...modus-v1.17.0) (2026-08-08)
+
+
+### ✨ Features
+
+* **bot:** add LogRetentionWorker for log table cleanup ([159ce77](https://github.com/MyndPhreak/MODUS/commit/159ce773decba4c1066f7227699cd1f1ac421942))
+* **bot:** expose module/command catalog via GET /api/docs ([038c564](https://github.com/MyndPhreak/MODUS/commit/038c564d0cf53071c36bd209130d23a4e040be03))
+* **bot:** wire LogRetentionWorker into startup behind LOG_RETENTION_DAYS ([e85e680](https://github.com/MyndPhreak/MODUS/commit/e85e68070a6af0731afa507b9fab618b62a6b69c))
+* **db:** add batched deleteOlderThan to LogRepository ([fe7064d](https://github.com/MyndPhreak/MODUS/commit/fe7064de123af60952edee47fddc1f7aa03fb628))
+* **web:** add Bot Identity entry to guild dashboard sidebar ([02542ef](https://github.com/MyndPhreak/MODUS/commit/02542efc3c413ef2a5a1bda0cad740c2ac817e73))
+* **web:** add bot identity settings page to guild dashboard ([e0cad4b](https://github.com/MyndPhreak/MODUS/commit/e0cad4ba31873eb553b115c344e8fb022f28894f))
+* **web:** add docs nav link and fix section links off the homepage ([7fa5ad8](https://github.com/MyndPhreak/MODUS/commit/7fa5ad83443a75bd1511435f3944bcc584d4eafc))
+* **web:** add per-guild bot avatar upload endpoint ([2c18a05](https://github.com/MyndPhreak/MODUS/commit/2c18a0562b7260a465b091a5efb26f5ea4c3e691))
+* **web:** add public /docs module list page ([9c4504b](https://github.com/MyndPhreak/MODUS/commit/9c4504bb5c09ff564912d4217a95a4311358a786))
+* **web:** add public /docs/[module] command reference page ([d093c03](https://github.com/MyndPhreak/MODUS/commit/d093c03bfa24d6750914914f7db9c80e3d62268c))
+* **web:** add public proxy for the bot's module/command catalog ([3593889](https://github.com/MyndPhreak/MODUS/commit/3593889538a4f0ac36d67f8dfe9e4d563e78eb35))
+* **web:** add useDocs composable for the docs pages ([ae52fa4](https://github.com/MyndPhreak/MODUS/commit/ae52fa4bd37c00eb34d2205bb5a6a432fa81eb39))
+* **web:** apply per-guild bot nickname/avatar changes to Discord ([a300bd4](https://github.com/MyndPhreak/MODUS/commit/a300bd4af2a3aa09547234b3942d0023508dbfea))
+* **web:** serve per-guild bot avatar images from R2 ([06b0f6d](https://github.com/MyndPhreak/MODUS/commit/06b0f6dfd58eb04233a1122e781e6c928f82cc0b))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** restrict /reload to bot admins ([83e0098](https://github.com/MyndPhreak/MODUS/commit/83e00986b4fee0358c2545f23ab7c717aa0cd07b))
+* **web:** add force re-apply escape hatch for drifted bot identity state ([6fec43e](https://github.com/MyndPhreak/MODUS/commit/6fec43e3a9af3302ae6618d00e4d8aebfeb8da21))
+* **web:** authenticate identity avatar uploads before buffering the body ([83010e9](https://github.com/MyndPhreak/MODUS/commit/83010e99600d8f6241702c5889b0035655c5e775))
+* **web:** block writes to module_name=identity via the generic guild-configs PUT ([5ac4026](https://github.com/MyndPhreak/MODUS/commit/5ac402650d6c1edd9ef60b10bc1d3959ac944c3a))
+* **web:** give docs pages their own layout instead of inheriting landing padding ([5edc880](https://github.com/MyndPhreak/MODUS/commit/5edc8801e74627185e8f088415ffd1355606d14f))
+* **web:** guard FileReader.onload to prevent race condition in avatar upload ([58fbfa4](https://github.com/MyndPhreak/MODUS/commit/58fbfa43978db44f835c45e9368521ac9668cefc))
+* **web:** restrict identity avatar uploads to raster images, mark responses nosniff ([235ed60](https://github.com/MyndPhreak/MODUS/commit/235ed604ae2d15cc8840c12bbacec716fbd18cec))
+* **web:** strictly validate identity avatar R2 keys against guild id and shape ([de9705b](https://github.com/MyndPhreak/MODUS/commit/de9705bb58e0e1d15d93799b77d81887c766e719))
+
+
+### ♻️ Refactors
+
+* **bot:** extract shared module/command catalog helper ([e793a65](https://github.com/MyndPhreak/MODUS/commit/e793a658aa238805a7f7ee24f73fc10b9ab2560e))
+
 ## [1.16.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.15.0...modus-v1.16.0) (2026-08-03)
 
 
