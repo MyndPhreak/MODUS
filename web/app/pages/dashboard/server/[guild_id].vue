@@ -245,7 +245,7 @@ const activeTabLabel = computed(
 useHead(() => ({
   title:
     state.value.guild && activeTabLabel.value
-      ? `${activeTabLabel.value} — ${state.value.guild.name}`
+      ? `${activeTabLabel.value} | ${state.value.guild.name}`
       : "Dashboard",
 }));
 

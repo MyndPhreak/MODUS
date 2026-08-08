@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   ],
   app: {
     head: {
-      title: "MODUS — Modular Discord Utility System",
+      title: "MODUS | Modular Discord Utility System",
       // titleTemplate is set at runtime in app.vue via useHead — the static
       // config here only accepts a string template, but we need function
       // logic to avoid double-wrapping the default title (see app.vue).
@@ -18,7 +18,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "MODUS — A modular system for managing and configuring your Discord bot.",
+            "MODUS | A modular system for managing and configuring your Discord bot.",
         },
       ],
     },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const DEFAULT_TITLE = "MODUS — Modular Discord Utility System";
+const DEFAULT_TITLE = "MODUS | Modular Discord Utility System";
 
 // Pages set a short `title` (e.g. "Dashboard") via useHead, and this wraps
 // it as "Dashboard | MODUS". Pages that don't set one fall back to the full
