@@ -89,6 +89,14 @@ watch(
   { immediate: true },
 );
 
+const activeTabLabel = computed(
+  () => sidebarTabs.find((t) => t.id === activeTab.value)?.label ?? "Admin",
+);
+
+useHead(() => ({
+  title: `${activeTabLabel.value} — Admin`,
+}));
+
 onMounted(async () => {
   try {
     if (!userStore.isLoggedIn) {

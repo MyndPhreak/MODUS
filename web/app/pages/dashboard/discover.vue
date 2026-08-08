@@ -352,6 +352,8 @@ const toast = useToast();
 const router = useRouter();
 const config = useRuntimeConfig();
 
+useHead({ title: "Discover Servers" });
+
 const loading = ref(true);
 const error = ref<string | null>(null);
 const tokenExpired = ref(false);

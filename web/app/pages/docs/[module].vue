@@ -72,4 +72,10 @@ const currentModule = computed(() =>
     (m) => m.name.toLowerCase() === String(route.params.module).toLowerCase(),
   ),
 );
+
+useHead(() => ({
+  title: currentModule.value
+    ? `${currentModule.value.name.charAt(0).toUpperCase()}${currentModule.value.name.slice(1)} — Docs`
+    : "Documentation",
+}));
 </script>

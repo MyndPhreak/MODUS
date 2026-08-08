@@ -1,4 +1,17 @@
 <script setup lang="ts">
+const DEFAULT_TITLE = "MODUS — Modular Discord Utility System";
+
+// Pages set a short `title` (e.g. "Dashboard") via useHead, and this wraps
+// it as "Dashboard | MODUS". Pages that don't set one fall back to the full
+// descriptive default from nuxt.config.ts — guard against wrapping that one
+// too, or it'd read "MODUS — Modular Discord Utility System | MODUS".
+useHead({
+  titleTemplate: (titleChunk?: string) =>
+    !titleChunk || titleChunk === DEFAULT_TITLE
+      ? (titleChunk ?? "")
+      : `${titleChunk} | MODUS`,
+});
+
 const userStore = useUserStore();
 const route = useRoute();
 const isAuthReady = ref(false);

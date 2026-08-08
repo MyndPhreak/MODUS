@@ -321,7 +321,7 @@ definePageMeta({
 });
 
 useHead({
-  title: "Terms of Service — MODUS",
+  title: "Terms of Service",
   meta: [
     {
       name: "description",

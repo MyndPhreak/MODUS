@@ -466,7 +466,7 @@ definePageMeta({
 });
 
 useHead({
-  title: "Privacy Policy — MODUS",
+  title: "Privacy Policy",
   meta: [
     {
       name: "description",

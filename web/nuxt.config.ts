@@ -10,6 +10,9 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "MODUS — Modular Discord Utility System",
+      // titleTemplate is set at runtime in app.vue via useHead — the static
+      // config here only accepts a string template, but we need function
+      // logic to avoid double-wrapping the default title (see app.vue).
       link: [{ rel: "icon", type: "image/svg+xml", href: "/modus.svg" }],
       meta: [
         {

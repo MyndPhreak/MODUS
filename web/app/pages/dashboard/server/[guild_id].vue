@@ -238,6 +238,17 @@ watch(
   { immediate: true, deep: true },
 );
 
+const activeTabLabel = computed(
+  () => sidebarTabs.value.find((t) => t.id === activeTab.value)?.label,
+);
+
+useHead(() => ({
+  title:
+    state.value.guild && activeTabLabel.value
+      ? `${activeTabLabel.value} — ${state.value.guild.name}`
+      : "Dashboard",
+}));
+
 onMounted(async () => {
   await initialize();
 });

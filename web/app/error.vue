@@ -115,6 +115,8 @@ const errorConfig = computed<ErrorConfig>(() => {
   };
 });
 
+useHead(() => ({ title: errorConfig.value.title }));
+
 async function handleClearError(to?: string) {
   await clearError({ redirect: to ?? "/" });
 }

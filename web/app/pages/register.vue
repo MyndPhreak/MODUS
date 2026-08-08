@@ -16,6 +16,8 @@ definePageMeta({
   layout: "auth",
 });
 
+useHead({ title: "Redirecting…" });
+
 const router = useRouter();
 
 // Immediately redirect to login page since we only support Discord auth

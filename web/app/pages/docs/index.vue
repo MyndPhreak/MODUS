@@ -57,5 +57,7 @@ definePageMeta({
   layout: false,
 });
 
+useHead({ title: "Documentation" });
+
 const { modules, pending, error } = useDocs();
 </script>

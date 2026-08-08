@@ -425,6 +425,8 @@ import { ref, onMounted, computed } from "vue";
 
 const userStore = useUserStore();
 
+useHead({ title: "Dashboard" });
+
 const modules = ref([]);
 const servers = ref([]);
 const botStatus = ref(null);
