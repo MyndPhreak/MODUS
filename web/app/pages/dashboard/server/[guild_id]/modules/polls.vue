@@ -215,7 +215,7 @@
               <p class="text-sm font-medium text-white flex-1">{{ poll.question }}</p>
               <UBadge color="neutral" variant="soft" size="xs">{{ poll.source }}</UBadge>
             </div>
-            <div v-for="opt in poll.options" :key="opt.text" class="space-y-0.5">
+            <div v-for="(opt, idx) in poll.options" :key="idx" class="space-y-0.5">
               <div class="flex justify-between text-[11px] text-gray-400">
                 <span>{{ opt.text }}</span>
                 <span>{{ optionPct(opt, poll.totalVotes) }}% ({{ opt.votes }})</span>
@@ -270,22 +270,32 @@ const canSaveTemplate = computed(
 );
 
 const onCreateTemplate = async () => {
-  await createTemplate({
-    name: newTemplate.name.trim(),
-    question: newTemplate.question.trim(),
-    options: newTemplate.options.map((o) => o.trim()).filter(Boolean),
-    duration_hours: newTemplate.duration_hours,
-    allow_multiselect: newTemplate.allow_multiselect,
-  });
-  newTemplate.name = "";
-  newTemplate.question = "";
-  newTemplate.options = ["", ""];
-  newTemplate.duration_hours = 24;
-  newTemplate.allow_multiselect = false;
+  try {
+    await createTemplate({
+      name: newTemplate.name.trim(),
+      question: newTemplate.question.trim(),
+      options: newTemplate.options.map((o) => o.trim()).filter(Boolean),
+      duration_hours: newTemplate.duration_hours,
+      allow_multiselect: newTemplate.allow_multiselect,
+    });
+    newTemplate.name = "";
+    newTemplate.question = "";
+    newTemplate.options = ["", ""];
+    newTemplate.duration_hours = 24;
+    newTemplate.allow_multiselect = false;
+  } catch {
+    // createTemplate re-throws after populating `error` — the banner at
+    // the top of the page already surfaces it, this just prevents an
+    // unhandled promise rejection.
+  }
 };
 
 const onDeleteTemplate = async (id: string) => {
-  await deleteTemplate(id);
+  try {
+    await deleteTemplate(id);
+  } catch {
+    // deleteTemplate re-throws after populating `error` — see onCreateTemplate.
+  }
 };
 
 const templateOptions = computed(() =>
@@ -312,12 +322,16 @@ onMounted(fetchChannels);
 
 const sendForm = reactive({ template_id: "", channel_id: "" });
 const onSendPoll = async () => {
-  await sendPoll({
-    channel_id: sendForm.channel_id,
-    template_id: sendForm.template_id,
-  });
-  sendForm.template_id = "";
-  sendForm.channel_id = "";
+  try {
+    await sendPoll({
+      channel_id: sendForm.channel_id,
+      template_id: sendForm.template_id,
+    });
+    sendForm.template_id = "";
+    sendForm.channel_id = "";
+  } catch {
+    // sendPoll re-throws after populating `error` — see onCreateTemplate.
+  }
 };
 
 const optionPct = (opt: { votes: number }, total: number) =>
