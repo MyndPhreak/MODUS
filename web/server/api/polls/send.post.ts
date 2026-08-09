@@ -75,6 +75,22 @@ export default defineEventHandler(async (event) => {
       statusMessage: "options must have between 2 and 10 entries.",
     });
   }
+  // Discord caps poll question text at 300 chars and each answer's text at
+  // 55 chars — validate locally so a too-long field gets a clean, specific
+  // 400 instead of round-tripping to Discord for a generic rejection.
+  if (question.length > 300) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "question must be 300 characters or fewer.",
+    });
+  }
+  const overLongOption = options.find((text) => text.length > 55);
+  if (overLongOption) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Option "${overLongOption.slice(0, 55)}..." exceeds the 55 character limit.`,
+    });
+  }
   durationHours = durationHours ?? 24;
   if (!Number.isInteger(durationHours) || durationHours < 1 || durationHours > 168) {
     throw createError({
@@ -141,9 +157,25 @@ export default defineEventHandler(async (event) => {
       `[Poll Send API] Discord rejected poll for channel ${channelId}:`,
       JSON.stringify(discordError, null, 2),
     );
+
+    let message = "Failed to send poll to Discord.";
+    if (discordError?.message) {
+      message = discordError.message;
+      if (discordError.errors) {
+        try {
+          const fieldErrors = flattenDiscordErrors(discordError.errors);
+          if (fieldErrors.length > 0) {
+            message += ": " + fieldErrors.join(", ");
+          }
+        } catch {
+          // Ignore error flattening failures
+        }
+      }
+    }
+
     throw createError({
       statusCode: error?.status || error?.statusCode || 500,
-      statusMessage: discordError?.message || "Failed to send poll to Discord.",
+      statusMessage: message,
     });
   }
 
@@ -174,3 +206,31 @@ export default defineEventHandler(async (event) => {
 
   return { success: true, messageId: result.id };
 });
+
+/**
+ * Recursively flatten Discord's nested error structure into readable
+ * messages. Duplicated locally from ../discord/send-embed.post.ts — this
+ * codebase's convention is one-file-per-route with local helpers rather
+ * than a shared utils extraction.
+ */
+function flattenDiscordErrors(obj: any, path: string[] = []): string[] {
+  const messages: string[] = [];
+  if (!obj || typeof obj !== "object") return messages;
+
+  if (Array.isArray(obj._errors)) {
+    for (const err of obj._errors) {
+      if (err?.message) {
+        const fieldName = path.filter((p) => isNaN(Number(p))).join(".");
+        messages.push(fieldName ? `${fieldName}: ${err.message}` : err.message);
+      }
+    }
+  }
+
+  for (const key of Object.keys(obj)) {
+    if (key !== "_errors") {
+      messages.push(...flattenDiscordErrors(obj[key], [...path, key]));
+    }
+  }
+
+  return messages;
+}
