@@ -218,12 +218,12 @@
               <div class="flex items-start justify-between">
                 <div
                   class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  :class="getModuleMetadata(module.name).bgClass"
+                  :class="getModuleDisplay(module).bgClass"
                 >
                   <UIcon
-                    :name="getModuleMetadata(module.name).icon"
+                    :name="getModuleDisplay(module).icon"
                     class="w-5 h-5"
-                    :class="getModuleMetadata(module.name).iconClass"
+                    :class="getModuleDisplay(module).iconClass"
                   />
                 </div>
                 <USwitch
@@ -238,7 +238,7 @@
               <!-- Name + Status -->
               <div class="flex items-center gap-2">
                 <span class="font-semibold text-sm text-white">
-                  {{ getModuleMetadata(module.name).displayName }}
+                  {{ getModuleDisplay(module).displayName }}
                 </span>
                 <span
                   class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
@@ -258,7 +258,7 @@
               <!-- Tags list (clickable to search) -->
               <div class="flex flex-wrap gap-1.5 my-1">
                 <button
-                  v-for="tag in getModuleMetadata(module.name).tags.slice(0, 3)"
+                  v-for="tag in getModuleDisplay(module).tags.slice(0, 3)"
                   :key="tag"
                   type="button"
                   class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/[0.04] hover:bg-white/[0.1] text-gray-400 hover:text-white transition-colors"
@@ -473,7 +473,7 @@
 import { ref, onMounted, computed } from "vue";
 import {
   MODULE_CATEGORIES,
-  getModuleMetadata,
+  getModuleDisplay,
   type ModuleCategoryKey,
 } from "~/utils/module-metadata";
 
@@ -526,8 +526,9 @@ const categoryCounts = computed(() => {
     counts[cat.key] = { total: 0, enabled: 0 };
   }
   for (const mod of state.value.modules) {
-    const meta = getModuleMetadata(mod.name);
-    const catCount = counts[meta.category];
+    const display = getModuleDisplay(mod);
+    if (!display.category) continue;
+    const catCount = counts[display.category];
     if (catCount) {
       catCount.total += 1;
       if (isModuleEnabled(mod.name)) {
@@ -543,21 +544,23 @@ const groupedModules = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
 
   const filtered = state.value.modules.filter((mod) => {
-    const meta = getModuleMetadata(mod.name);
+    const display = getModuleDisplay(mod);
+    if (!display.category) return false; // no meta declared — not a dashboard feature (e.g. reload)
+
     const enabled = isModuleEnabled(mod.name);
 
     if (statusFilter.value === "enabled" && !enabled) return false;
     if (statusFilter.value === "disabled" && enabled) return false;
 
-    if (selectedCategory.value !== "all" && meta.category !== selectedCategory.value) {
+    if (selectedCategory.value !== "all" && display.category !== selectedCategory.value) {
       return false;
     }
 
     if (query) {
       const matchName = mod.name.toLowerCase().includes(query);
-      const matchDisplayName = meta.displayName.toLowerCase().includes(query);
+      const matchDisplayName = display.displayName.toLowerCase().includes(query);
       const matchDesc = (mod.description || "").toLowerCase().includes(query);
-      const matchTag = meta.tags.some((t) => t.toLowerCase().includes(query));
+      const matchTag = display.tags.some((t) => t.toLowerCase().includes(query));
       return matchName || matchDisplayName || matchDesc || matchTag;
     }
 
@@ -574,9 +577,11 @@ const groupedModules = computed(() => {
     if (selectedCategory.value !== "all" && selectedCategory.value !== cat.key) {
       continue;
     }
-    const catMods = filtered.filter(
-      (m) => getModuleMetadata(m.name).category === cat.key,
-    );
+    const catMods = filtered
+      .filter((m) => getModuleDisplay(m).category === cat.key)
+      .sort((a, b) =>
+        getModuleDisplay(a).displayName.localeCompare(getModuleDisplay(b).displayName),
+      );
     if (catMods.length > 0) {
       groups.push({
         category: cat,
