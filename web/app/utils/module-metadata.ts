@@ -1,4 +1,4 @@
-import type { ModuleDoc, ModuleCategoryKey } from "@modus/db";
+import type { ModuleDoc, ModuleCategoryKey, ModuleColorToken } from "@modus/db";
 
 export type { ModuleCategoryKey };
 
@@ -53,7 +53,7 @@ export const MODULE_CATEGORIES: ModuleCategoryInfo[] = [
  * built via string interpolation) so Tailwind's content scanner retains
  * them in the production build.
  */
-const COLOR_STYLES: Record<string, { bgClass: string; iconClass: string }> = {
+const COLOR_STYLES: Record<ModuleColorToken, { bgClass: string; iconClass: string }> = {
   violet: { bgClass: "bg-violet-500/10 border border-violet-500/20", iconClass: "text-violet-400" },
   blue: { bgClass: "bg-blue-500/10 border border-blue-500/20", iconClass: "text-blue-400" },
   orange: { bgClass: "bg-orange-500/10 border border-orange-500/20", iconClass: "text-orange-400" },
@@ -88,6 +88,9 @@ export interface ModuleDisplay {
   category: ModuleCategoryKey | null;
 }
 
+/** Valid category keys, derived from MODULE_CATEGORIES so this can't drift. */
+const VALID_CATEGORY_KEYS = new Set<string>(MODULE_CATEGORIES.map((c) => c.key));
+
 /**
  * Resolves a module's dashboard display identity from the DB-backed
  * `ModuleDoc` (populated by `BotModule.meta` on the bot side). Falls back to
@@ -96,13 +99,21 @@ export interface ModuleDisplay {
  * but keeps the grid from breaking if one slips through.
  */
 export function getModuleDisplay(mod: ModuleDoc): ModuleDisplay {
-  const style = (mod.color && COLOR_STYLES[mod.color]) || COLOR_STYLES.gray;
+  // mod.color comes from a free-text DB column, so it isn't guaranteed to be
+  // a valid ModuleColorToken (stale row, hand-edited data, version skew) —
+  // the `||` fallback below degrades safely to gray for any unknown value.
+  const style =
+    (mod.color && COLOR_STYLES[mod.color as ModuleColorToken]) || COLOR_STYLES.gray;
+  const category =
+    mod.category && VALID_CATEGORY_KEYS.has(mod.category)
+      ? (mod.category as ModuleCategoryKey)
+      : null;
   return {
     displayName: mod.displayName || titleCase(mod.name),
     icon: mod.icon || "i-lucide-box",
     bgClass: style.bgClass,
     iconClass: style.iconClass,
     tags: mod.tags && mod.tags.length > 0 ? mod.tags : [mod.name],
-    category: (mod.category as ModuleCategoryKey | null) ?? null,
+    category,
   };
 }

@@ -115,6 +115,29 @@ export type ModuleCategoryKey =
   | "ai"
   | "utility";
 
+/** Semantic color tokens a module's display card can declare via
+ * `BotModule.meta.color`. Keep in sync with `COLOR_STYLES` in
+ * `web/app/utils/module-metadata.ts`, which maps each token to Tailwind
+ * classes. */
+export type ModuleColorToken =
+  | "violet"
+  | "blue"
+  | "orange"
+  | "rose"
+  | "green"
+  | "cyan"
+  | "purple"
+  | "amber"
+  | "yellow"
+  | "emerald"
+  | "pink"
+  | "sky"
+  | "teal"
+  | "fuchsia"
+  | "red"
+  | "indigo"
+  | "gray";
+
 export const modules = pgTable(
   "modules",
   {

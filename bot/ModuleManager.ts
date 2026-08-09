@@ -19,7 +19,7 @@ import path from "path";
 import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
 import type { AiTool } from "./lib/aiTools";
-import type { ModuleCategoryKey } from "@modus/db";
+import type { ModuleCategoryKey, ModuleColorToken } from "@modus/db";
 
 /**
  * A slash-command definition: any command builder (SlashCommandBuilder and
@@ -40,7 +40,7 @@ export interface ModuleMeta {
   /** Lucide icon name, e.g. "i-lucide-disc-3". */
   icon: string;
   /** Semantic color token (e.g. "violet") — never a Tailwind class. The web dashboard maps this to classes. */
-  color: string;
+  color: ModuleColorToken;
   tags?: string[];
 }
 
