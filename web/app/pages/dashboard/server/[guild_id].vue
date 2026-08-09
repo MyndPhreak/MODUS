@@ -101,11 +101,14 @@ const sidebarTabs = computed(() => {
   return [...staticTabs, ...moduleTabs];
 });
 
-// Register sidebar when guild data becomes available
+// Register sidebar once guild + module data have both loaded — registering
+// as soon as `state.guild` is set (before `state.modules` arrives) made the
+// sidebar render once with only the static tabs, then again a moment later
+// once modules populate, producing a visible two-stage reflow.
 watch(
-  [() => state.value.guild, activeTab, sidebarTabs],
+  [() => state.value.guild, () => state.value.loading, activeTab, sidebarTabs],
   () => {
-    if (state.value.guild) {
+    if (state.value.guild && !state.value.loading) {
       registerSidebar({
         guild: state.value.guild,
         tabs: sidebarTabs.value,
