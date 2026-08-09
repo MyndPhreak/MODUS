@@ -74,7 +74,7 @@
             <div class="flex items-center gap-3 min-w-0 flex-1">
               <!-- Type Badge -->
               <div
-                class="p-2.5 rounded-lg flex-shrink-0"
+                class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                 :class="
                   tag.embed_data
                     ? 'bg-indigo-500/10 border border-indigo-500/20'
@@ -90,7 +90,7 @@
                   :class="
                     tag.embed_data ? 'text-indigo-400' : 'text-emerald-400'
                   "
-                  class="text-lg"
+                  class="w-5 h-5"
                 />
               </div>
 
@@ -435,9 +435,9 @@
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
             <div
-              class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20"
+              class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
             >
-              <UIcon name="i-heroicons-trash" class="text-red-400 text-xl" />
+              <UIcon name="i-heroicons-trash" class="w-6 h-6 text-red-400" />
             </div>
             <div>
               <h3 class="text-lg font-bold text-white">Delete Tag</h3>

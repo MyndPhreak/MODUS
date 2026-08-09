@@ -4,13 +4,15 @@
     <div class="flex items-center gap-4">
       <NuxtLink
         :to="`/dashboard/server/${guildId}/modules`"
-        class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+        class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center shrink-0"
       >
-        <UIcon name="i-heroicons-arrow-left" class="text-gray-400" />
+        <UIcon name="i-heroicons-arrow-left" class="w-5 h-5 text-gray-400" />
       </NuxtLink>
       <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
-          <UIcon name="i-heroicons-microphone" class="text-red-400 text-lg" />
+        <div
+          class="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
+        >
+          <UIcon name="i-heroicons-microphone" class="w-5 h-5 text-red-400" />
         </div>
         <div>
           <h2 class="text-xl font-bold text-white">Recording Settings</h2>
@@ -40,7 +42,7 @@
         <div class="relative space-y-4">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20"
+              class="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon name="i-heroicons-signal" class="text-red-400" />
             </div>
@@ -103,7 +105,7 @@
         <div class="relative space-y-5">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20"
+              class="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon name="i-heroicons-cog-6-tooth" class="text-orange-400" />
             </div>
@@ -341,7 +343,7 @@
       <div class="relative space-y-5">
         <div class="flex items-center gap-2 mb-1">
           <div
-            class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
+            class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon name="i-heroicons-shield-check" class="text-indigo-400" />
           </div>
@@ -478,8 +480,13 @@
         class="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 border-b border-white/5"
       >
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-            <UIcon name="i-heroicons-folder-open" class="text-red-400" />
+          <div
+            class="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
+          >
+            <UIcon
+              name="i-heroicons-folder-open"
+              class="w-5 h-5 text-red-400"
+            />
           </div>
           <div>
             <h3 class="font-semibold text-white">Recordings</h3>
@@ -649,7 +656,9 @@
       <template #content>
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+            <div
+              class="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0"
+            >
               <UIcon
                 name="i-heroicons-exclamation-triangle"
                 class="w-6 h-6 text-red-400"

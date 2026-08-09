@@ -4,15 +4,15 @@
     <div class="flex items-center gap-4">
       <NuxtLink
         :to="`/dashboard/server/${guildId}/modules`"
-        class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+        class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center shrink-0"
       >
-        <UIcon name="i-heroicons-arrow-left" class="text-gray-400" />
+        <UIcon name="i-heroicons-arrow-left" class="w-5 h-5 text-gray-400" />
       </NuxtLink>
       <div class="flex items-center gap-3">
         <div
-          class="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20"
+          class="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0"
         >
-          <UIcon name="i-heroicons-funnel" class="text-orange-400 text-lg" />
+          <UIcon name="i-heroicons-funnel" class="w-5 h-5 text-orange-400" />
         </div>
         <div>
           <h2 class="text-xl font-bold text-white">AutoMod Rules</h2>
@@ -68,9 +68,9 @@
         />
         <div class="relative space-y-3">
           <div
-            class="inline-flex p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20"
+            class="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mx-auto"
           >
-            <UIcon name="i-heroicons-funnel" class="text-orange-400 text-3xl" />
+            <UIcon name="i-heroicons-funnel" class="w-8 h-8 text-orange-400" />
           </div>
           <h4 class="text-lg font-semibold text-white">No rules yet</h4>
           <p class="text-sm text-gray-500 max-w-md mx-auto">
@@ -114,7 +114,7 @@
             <!-- Top row: name + controls -->
             <div class="flex items-start gap-3 mb-4">
               <div
-                class="p-2 rounded-lg mt-0.5 flex-shrink-0"
+                class="w-9 h-9 rounded-lg mt-0.5 flex items-center justify-center shrink-0"
                 :class="
                   rule.enabled
                     ? 'bg-orange-500/10 border border-orange-500/20'
@@ -123,6 +123,7 @@
               >
                 <UIcon
                   :name="triggerIcon(rule.trigger)"
+                  class="w-5 h-5"
                   :class="rule.enabled ? 'text-orange-400' : 'text-gray-500'"
                 />
               </div>
@@ -233,9 +234,9 @@
             class="flex items-center gap-3 px-6 py-4 border-b border-white/8 flex-shrink-0"
           >
             <div
-              class="p-2 rounded-lg bg-orange-500/10 border border-orange-500/20"
+              class="w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0"
             >
-              <UIcon name="i-heroicons-funnel" class="text-orange-400" />
+              <UIcon name="i-heroicons-funnel" class="w-5 h-5 text-orange-400" />
             </div>
             <div>
               <h3 class="text-base font-bold text-white">
@@ -721,7 +722,9 @@
       <template #content>
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+            <div
+              class="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0"
+            >
               <UIcon
                 name="i-heroicons-exclamation-triangle"
                 class="w-6 h-6 text-red-400"
