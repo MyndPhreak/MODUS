@@ -31,3 +31,4 @@ docs/*
 # ─── Agent tooling ────────────────────────────────────────────────────────────
 .claude/
 .superpowers/
+.worktrees/
