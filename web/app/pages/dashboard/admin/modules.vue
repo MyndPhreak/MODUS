@@ -14,7 +14,7 @@
     <!-- Loading -->
     <div v-if="modulesLoading" class="flex justify-center py-12">
       <UIcon
-        name="i-heroicons-arrow-path"
+        name="i-lucide-loader-circle"
         class="w-8 h-8 animate-spin text-violet-400"
       />
     </div>
@@ -25,14 +25,14 @@
       class="glass-panel text-center py-16 rounded-3xl border-2 border-dashed border-white/8"
     >
       <UIcon
-        name="i-heroicons-cube-transparent"
+        name="i-lucide-package-open"
         class="w-12 h-12 text-gray-600 mx-auto mb-3"
       />
       <p class="text-gray-500">
         No modules found. Make sure the bot has registered them.
       </p>
       <UButton
-        icon="i-heroicons-arrow-path"
+        icon="i-lucide-loader-circle"
         variant="ghost"
         class="mt-4"
         @click="fetchModules"
@@ -49,11 +49,13 @@
         class="glass-card rounded-2xl p-5 flex items-center gap-4 border border-white/8 hover:border-white/15 transition-all duration-200"
       >
         <div
-          class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/20 flex items-center justify-center shrink-0"
+          class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          :class="getModuleDisplay(module).bgClass"
         >
           <UIcon
-            name="i-lucide-layout-grid"
-            class="w-5 h-5 text-violet-400"
+            :name="getModuleDisplay(module).icon"
+            class="w-5 h-5"
+            :class="getModuleDisplay(module).iconClass"
           />
         </div>
         <div class="flex-1 min-w-0">
@@ -84,7 +86,7 @@
     >
       <div class="flex items-center gap-3 mb-2">
         <UIcon
-          name="i-heroicons-information-circle"
+          name="i-lucide-info"
           class="w-5 h-5 text-violet-400 flex-shrink-0"
         />
         <h2 class="text-sm font-bold text-white">Admin Access</h2>
@@ -103,17 +105,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import type { ModuleDoc } from "@modus/db";
+import { getModuleDisplay } from "~/utils/module-metadata";
 
 const toast = useToast();
 
 const modulesLoading = ref(false);
-const modules = ref<any[]>([]);
+const modules = ref<ModuleDoc[]>([]);
 const updating = ref<string | null>(null);
 
 const fetchModules = async () => {
   modulesLoading.value = true;
   try {
-    modules.value = await $fetch<any[]>("/api/modules");
+    modules.value = await $fetch<ModuleDoc[]>("/api/modules");
   } catch (error) {
     console.error("Error fetching modules:", error);
   } finally {
@@ -121,7 +125,7 @@ const fetchModules = async () => {
   }
 };
 
-const toggleModule = async (module: any) => {
+const toggleModule = async (module: ModuleDoc) => {
   updating.value = module.$id;
   try {
     await $fetch(`/api/modules/${encodeURIComponent(module.name)}`, {
