@@ -47,16 +47,30 @@
         <!-- New template form -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <UFormField label="Name">
-            <UInput v-model="newTemplate.name" placeholder="e.g. weekly-feedback" />
+            <UInput v-model="newTemplate.name" size="lg" placeholder="e.g. weekly-feedback" class="w-full" />
           </UFormField>
           <UFormField label="Question">
-            <UInput v-model="newTemplate.question" placeholder="What should we build next?" maxlength="300" />
+            <UTextarea
+              v-model="newTemplate.question"
+              size="lg"
+              placeholder="What should we build next?"
+              maxlength="300"
+              :rows="2"
+              autoresize
+              class="w-full"
+            />
           </UFormField>
         </div>
         <UFormField label="Options (2-10)">
           <div class="space-y-2">
             <div v-for="(_, i) in newTemplate.options" :key="i" class="flex gap-2">
-              <UInput v-model="newTemplate.options[i]" :placeholder="`Option ${i + 1}`" maxlength="55" class="flex-1" />
+              <UInput
+                v-model="newTemplate.options[i]"
+                size="lg"
+                :placeholder="`Option ${i + 1}`"
+                maxlength="55"
+                class="flex-1"
+              />
               <UButton
                 v-if="newTemplate.options.length > 2"
                 color="error"
@@ -80,7 +94,7 @@
         </UFormField>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <UFormField label="Duration (hours, 1-168)">
-            <UInput v-model.number="newTemplate.duration_hours" type="number" :min="1" :max="168" />
+            <UInput v-model.number="newTemplate.duration_hours" size="lg" type="number" :min="1" :max="168" class="w-full" />
           </UFormField>
           <UFormField label="Allow multiple choices">
             <USwitch v-model="newTemplate.allow_multiselect" />
@@ -138,16 +152,20 @@
           <UFormField label="Template">
             <USelect
               v-model="sendForm.template_id"
+              size="lg"
               :items="templateOptions"
               placeholder="Choose a saved template"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="Channel">
             <USelect
               v-if="channels.length > 0"
               v-model="sendForm.channel_id"
+              size="lg"
               :items="channelOptions"
               placeholder="Select channel"
+              class="w-full"
             />
             <div v-else class="text-xs text-gray-500 italic py-2">No channels available</div>
           </UFormField>
