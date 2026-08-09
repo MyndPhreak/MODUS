@@ -11,6 +11,15 @@ export type ModuleDoc = Module & {
   $id: string;
 };
 
+export interface ModuleRegistrationMeta {
+  description: string;
+  displayName?: string | null;
+  category?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  tags?: string[];
+}
+
 function toDoc(row: Module): ModuleDoc {
   return { ...row, $id: row.id };
 }
@@ -26,11 +35,41 @@ export class ModuleRepository {
     return rows.map((r) => r.name);
   }
 
-  async ensureRegistered(name: string, description: string): Promise<void> {
+  async ensureRegistered(
+    name: string,
+    meta: ModuleRegistrationMeta,
+  ): Promise<void> {
+    const displayName = meta.displayName ?? null;
+    const category = meta.category ?? null;
+    const icon = meta.icon ?? null;
+    const color = meta.color ?? null;
+    const tags = meta.tags ?? [];
+
     await this.db
       .insert(modules)
-      .values({ name, description, enabled: true })
-      .onConflictDoNothing({ target: modules.name });
+      .values({
+        name,
+        description: meta.description,
+        displayName,
+        category,
+        icon,
+        color,
+        tags,
+        enabled: true,
+      })
+      .onConflictDoUpdate({
+        target: modules.name,
+        // Deliberately excludes `enabled` — that's the admin-controlled
+        // runtime kill switch (see admin/modules.vue), not code-driven.
+        set: {
+          description: meta.description,
+          displayName,
+          category,
+          icon,
+          color,
+          tags,
+        },
+      });
   }
 
   /** Toggle a module's global enabled flag. Used by admin/modules.vue. */
