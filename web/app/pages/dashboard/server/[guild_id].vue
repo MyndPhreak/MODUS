@@ -29,199 +29,77 @@
 
 <script setup lang="ts">
 import { watch, onMounted, onUnmounted } from "vue";
+import { MODULE_CATEGORIES, getModuleDisplay } from "~/utils/module-metadata";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
 const { register: registerSidebar, unregister: unregisterSidebar } =
   useServerSidebar();
-const { state, initialize } = useServerSettings(guildId);
+const { state, initialize, hasModuleSettings } = useServerSettings(guildId);
 
 const basePath = `/dashboard/server/${guildId}`;
 
 const activeTab = computed(() => {
   const path = route.path;
-  // Moderation & Safety
-  if (path.includes("/modules/moderation")) return "moderation";
-  if (path.includes("/modules/automod")) return "automod";
-  if (path.includes("/modules/logging")) return "logging";
-  if (path.includes("/modules/antiraid")) return "antiraid";
-  if (path.includes("/modules/verification")) return "verification";
-  // Engagement
-  if (path.includes("/modules/welcome")) return "welcome";
-  if (path.includes("/modules/reaction-roles")) return "reaction-roles";
-  if (path.includes("/modules/milestones")) return "milestones";
-  if (path.includes("/modules/triggers")) return "triggers";
-  if (path.includes("/modules/alerts")) return "alerts";
-  // Community Tools
-  if (path.includes("/modules/tickets")) return "tickets";
-  if (path.includes("/modules/events")) return "events";
-  if (path.includes("/modules/polls")) return "polls";
-  if (path.includes("/modules/embeds")) return "embeds";
-  if (path.includes("/modules/tags")) return "tags";
-  // Voice & Media
-  if (path.includes("/modules/music")) return "music";
-  if (path.includes("/modules/recording")) return "recording";
-  if (path.includes("/modules/tempvoice")) return "tempvoice";
-  // AI
-  if (path.includes("/modules/ai")) return "ai";
-  // Index + logs
   if (path.includes("/identity")) return "identity";
-  if (path.includes("/modules")) return "modules";
   if (path.includes("/logs")) return "logs";
+  const moduleMatch = path.match(/\/modules\/([^/]+)/);
+  if (moduleMatch?.[1]) return moduleMatch[1];
   return "modules";
 });
 
 // Sidebar tab definitions — route-based, grouped by category
-const sidebarTabs = computed(() => [
-  // Top-level navigation (no category)
-  {
-    id: "logs",
-    label: "Server Logs",
-    icon: "i-lucide-file-text",
-    to: `${basePath}/logs`,
-  },
-  {
-    id: "modules",
-    label: "Modules",
-    icon: "i-lucide-layout-grid",
-    to: `${basePath}/modules`,
-  },
-  {
-    id: "identity",
-    label: "Bot Identity",
-    icon: "i-lucide-bot",
-    to: `${basePath}/identity`,
-  },
+const sidebarTabs = computed(() => {
+  const staticTabs = [
+    {
+      id: "logs",
+      label: "Server Logs",
+      icon: "i-lucide-file-text",
+      to: `${basePath}/logs`,
+    },
+    {
+      id: "modules",
+      label: "Modules",
+      icon: "i-lucide-layout-grid",
+      to: `${basePath}/modules`,
+    },
+    {
+      id: "identity",
+      label: "Bot Identity",
+      icon: "i-lucide-bot",
+      to: `${basePath}/identity`,
+    },
+  ];
 
-  // Moderation & Safety
-  {
-    id: "moderation",
-    label: "Moderation",
-    icon: "i-lucide-gavel",
-    to: `${basePath}/modules/moderation`,
-    groupLabel: "Moderation & Safety",
-  },
-  {
-    id: "automod",
-    label: "AutoMod",
-    icon: "i-lucide-shield-ban",
-    to: `${basePath}/modules/automod`,
-  },
-  {
-    id: "logging",
-    label: "Audit Logging",
-    icon: "i-lucide-scroll-text",
-    to: `${basePath}/modules/logging`,
-  },
-  {
-    id: "antiraid",
-    label: "Anti-Raid",
-    icon: "i-lucide-siren",
-    to: `${basePath}/modules/antiraid`,
-  },
-  {
-    id: "verification",
-    label: "Verification",
-    icon: "i-lucide-badge-check",
-    to: `${basePath}/modules/verification`,
-  },
+  const moduleTabs: Array<{
+    id: string;
+    label: string;
+    icon: string;
+    to: string;
+    groupLabel?: string;
+  }> = [];
 
-  // Engagement
-  {
-    id: "welcome",
-    label: "Welcome Image",
-    icon: "i-lucide-party-popper",
-    to: `${basePath}/modules/welcome`,
-    groupLabel: "Engagement",
-  },
-  {
-    id: "reaction-roles",
-    label: "Reaction Roles",
-    icon: "i-lucide-smile-plus",
-    to: `${basePath}/modules/reaction-roles`,
-  },
-  {
-    id: "milestones",
-    label: "Milestones",
-    icon: "i-lucide-trophy",
-    to: `${basePath}/modules/milestones`,
-  },
-  {
-    id: "triggers",
-    label: "Triggers",
-    icon: "i-lucide-zap",
-    to: `${basePath}/modules/triggers`,
-  },
-  {
-    id: "alerts",
-    label: "Social Alerts",
-    icon: "i-lucide-bell-ring",
-    to: `${basePath}/modules/alerts`,
-  },
+  for (const cat of MODULE_CATEGORIES) {
+    const catModules = state.value.modules
+      .filter((m) => hasModuleSettings(m.name) && getModuleDisplay(m).category === cat.key)
+      .sort((a, b) =>
+        getModuleDisplay(a).displayName.localeCompare(getModuleDisplay(b).displayName),
+      );
 
-  // Community Tools
-  {
-    id: "tickets",
-    label: "Tickets",
-    icon: "i-lucide-ticket",
-    to: `${basePath}/modules/tickets`,
-    groupLabel: "Community Tools",
-  },
-  {
-    id: "events",
-    label: "Events",
-    icon: "i-lucide-calendar-clock",
-    to: `${basePath}/modules/events`,
-  },
-  {
-    id: "polls",
-    label: "Polls",
-    icon: "i-lucide-bar-chart-3",
-    to: `${basePath}/modules/polls`,
-  },
-  {
-    id: "embeds",
-    label: "Embeds",
-    icon: "i-lucide-layout-template",
-    to: `${basePath}/modules/embeds`,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    icon: "i-lucide-tag",
-    to: `${basePath}/modules/tags`,
-  },
+    catModules.forEach((mod, index) => {
+      const display = getModuleDisplay(mod);
+      moduleTabs.push({
+        id: mod.name.toLowerCase(),
+        label: display.displayName,
+        icon: display.icon,
+        to: `${basePath}/modules/${mod.name.toLowerCase()}`,
+        ...(index === 0 ? { groupLabel: cat.label } : {}),
+      });
+    });
+  }
 
-  // Voice & Media
-  {
-    id: "music",
-    label: "Music",
-    icon: "i-lucide-disc-3",
-    to: `${basePath}/modules/music`,
-    groupLabel: "Voice & Media",
-  },
-  {
-    id: "recording",
-    label: "Recording",
-    icon: "i-lucide-audio-waveform",
-    to: `${basePath}/modules/recording`,
-  },
-  {
-    id: "tempvoice",
-    label: "Temp Voice",
-    icon: "i-lucide-mic-vocal",
-    to: `${basePath}/modules/tempvoice`,
-  },
-
-  // AI
-  {
-    id: "ai",
-    label: "AI Assistant",
-    icon: "i-lucide-bot",
-    to: `${basePath}/modules/ai`,
-    groupLabel: "AI",
-  },
-]);
+  return [...staticTabs, ...moduleTabs];
+});
 
 // Register sidebar when guild data becomes available
 watch(
