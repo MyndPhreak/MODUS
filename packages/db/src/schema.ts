@@ -101,7 +101,19 @@ export type RecordingTrack = typeof recordingTracks.$inferSelect;
 export type NewRecordingTrack = typeof recordingTracks.$inferInsert;
 
 // ── modules ───────────────────────────────────────────────────────────────
-// Static per-module registry. `ensureModuleRegistered` upserts on name.
+// Static per-module registry. `ensureModuleRegistered` upserts on name,
+// refreshing dashboard metadata from code every boot — but never `enabled`,
+// which is the admin-controlled runtime kill switch.
+
+/** Dashboard grouping for a module's display card. Keep in sync with the
+ * category list bot modules can declare via `BotModule.meta.category`. */
+export type ModuleCategoryKey =
+  | "moderation"
+  | "engagement"
+  | "community"
+  | "voice"
+  | "ai"
+  | "utility";
 
 export const modules = pgTable(
   "modules",
@@ -111,6 +123,11 @@ export const modules = pgTable(
       .default(sql`gen_random_uuid()::text`),
     name: text("name").notNull(),
     description: text("description"),
+    displayName: text("display_name"),
+    category: text("category"),
+    icon: text("icon"),
+    color: text("color"),
+    tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
