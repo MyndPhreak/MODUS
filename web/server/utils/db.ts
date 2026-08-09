@@ -20,6 +20,8 @@ import {
   TempVoiceChannelRepository,
   TriggerRepository,
   TranscriptRepository,
+  PollTemplateRepository,
+  PollRepository,
   type Database,
 } from "@modus/db";
 
@@ -38,6 +40,8 @@ export interface Repos {
   tempVoice: TempVoiceChannelRepository;
   triggers: TriggerRepository;
   transcripts: TranscriptRepository;
+  pollTemplates: PollTemplateRepository;
+  polls: PollRepository;
 }
 
 let cached: Repos | null = null;
@@ -66,6 +70,8 @@ export function getRepos(): Repos | null {
       tempVoice: new TempVoiceChannelRepository(db),
       triggers: new TriggerRepository(db),
       transcripts: new TranscriptRepository(db),
+      pollTemplates: new PollTemplateRepository(db),
+      polls: new PollRepository(db),
     };
     return cached;
   } catch (err) {
