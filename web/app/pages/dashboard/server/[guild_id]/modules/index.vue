@@ -295,24 +295,37 @@
         v-else
         class="text-center py-16 px-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.02]"
       >
-        <UIcon
-          name="i-lucide-search-x"
-          class="w-12 h-12 text-gray-500 mx-auto mb-3"
-        />
-        <h3 class="text-base font-bold text-white">No modules found</h3>
-        <p class="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-          No bot modules matched your query
-          <span v-if="searchQuery" class="font-semibold text-white">"{{ searchQuery }}"</span>.
-        </p>
-        <UButton
-          color="neutral"
-          variant="outline"
-          size="xs"
-          class="mt-4"
-          @click="resetFilters"
-        >
-          Reset Filters
-        </UButton>
+        <template v-if="hasUnmetadataedModules">
+          <UIcon
+            name="i-lucide-refresh-cw"
+            class="w-12 h-12 text-gray-500 mx-auto mb-3"
+          />
+          <h3 class="text-base font-bold text-white">Module metadata isn't available yet</h3>
+          <p class="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+            This usually means the bot needs to restart after a recent update. Try refreshing in
+            a moment.
+          </p>
+        </template>
+        <template v-else>
+          <UIcon
+            name="i-lucide-search-x"
+            class="w-12 h-12 text-gray-500 mx-auto mb-3"
+          />
+          <h3 class="text-base font-bold text-white">No modules found</h3>
+          <p class="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+            No bot modules matched your query
+            <span v-if="searchQuery" class="font-semibold text-white">"{{ searchQuery }}"</span>.
+          </p>
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="xs"
+            class="mt-4"
+            @click="resetFilters"
+          >
+            Reset Filters
+          </UButton>
+        </template>
       </div>
     </div>
 
@@ -592,6 +605,24 @@ const groupedModules = computed(() => {
   }
 
   return groups;
+});
+
+// Distinguishes "no modules matched your search/filter" from "the bot
+// hasn't populated dashboard metadata yet" (every fetched module has
+// category: null — e.g. right after this feature's DB migration, before
+// the bot has restarted with the code that upserts `meta`). Only applies
+// when no search/filter is active, since an active filter finding nothing
+// is a normal "no results" case.
+const hasUnmetadataedModules = computed(() => {
+  const noActiveFilter =
+    searchQuery.value.trim() === "" &&
+    selectedCategory.value === "all" &&
+    statusFilter.value === "all";
+  return (
+    noActiveFilter &&
+    state.value.modules.length > 0 &&
+    groupedModules.value.length === 0
+  );
 });
 
 const setTagSearch = (tag: string) => {
