@@ -69,9 +69,9 @@ export default defineEventHandler(async (event) => {
       const message = (await $fetch(
         `https://discord.com/api/v10/channels/${row.channelId}/messages/${row.messageId}`,
         { headers: { Authorization: `Bot ${botToken}` } },
-      )) as { poll?: { answer_counts?: DiscordPollAnswerCount[] } };
+      )) as { poll?: { results?: { answer_counts?: DiscordPollAnswerCount[] } } };
 
-      const counts = message.poll?.answer_counts ?? [];
+      const counts = message.poll?.results?.answer_counts ?? [];
       const byAnswerId = new Map(counts.map((c) => [c.id, c.count]));
       const options = row.options.map((text, i) => ({
         text,
