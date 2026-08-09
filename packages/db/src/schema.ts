@@ -634,3 +634,81 @@ export const reminders = pgTable(
 export type Reminder = typeof reminders.$inferSelect;
 export type NewReminder = typeof reminders.$inferInsert;
 
+// ── poll_templates ───────────────────────────────────────────────────────
+// Reusable, on-demand poll presets saved from the dashboard. Sending a
+// template does not mutate it — polls.question/options are snapshotted at
+// send time (see `polls` below) so editing a template later never changes
+// the record of a poll that was already sent.
+
+export const pollTemplates = pgTable(
+  "poll_templates",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    name: text("name").notNull(),
+    question: text("question").notNull(),
+    options: jsonb("options")
+      .notNull()
+      .default(sql`'[]'::jsonb`)
+      .$type<string[]>(),
+    durationHours: integer("duration_hours").notNull().default(24),
+    allowMultiselect: boolean("allow_multiselect").notNull().default(false),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuild: index("poll_templates_guild_id_idx").on(t.guildId),
+  }),
+);
+
+export type PollTemplate = typeof pollTemplates.$inferSelect;
+export type NewPollTemplate = typeof pollTemplates.$inferInsert;
+
+// ── polls ─────────────────────────────────────────────────────────────────
+// A poll that was actually sent to Discord — created via `/poll create` in
+// the bot (source: "slash") or the dashboard send flow (source: "dashboard").
+// Vote tallies are never persisted here; they're always read live from
+// Discord. This table only tracks a poll's existence/metadata so the
+// dashboard can list what's currently running.
+
+export const polls = pgTable(
+  "polls",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    messageId: text("message_id").notNull(),
+    templateId: text("template_id").references(() => pollTemplates.id, {
+      onDelete: "set null",
+    }),
+    question: text("question").notNull(),
+    options: jsonb("options")
+      .notNull()
+      .default(sql`'[]'::jsonb`)
+      .$type<string[]>(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    finalized: boolean("finalized").notNull().default(false),
+    createdBy: text("created_by"),
+    source: text("source").notNull().default("slash"), // "slash" | "dashboard"
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // Running-polls query: guild_id + not-yet-expired, skipping finalized rows.
+    byGuildActive: index("polls_guild_active_idx")
+      .on(t.guildId, t.expiresAt)
+      .where(sql`finalized = false`),
+    // /poll end and vote-finalization lookups go by message_id.
+    byMessageId: uniqueIndex("polls_message_id_idx").on(t.messageId),
+  }),
+);
+
+export type Poll = typeof polls.$inferSelect;
+export type NewPoll = typeof polls.$inferInsert;
