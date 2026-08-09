@@ -19,6 +19,7 @@ import {
   CHANNEL_GUILD_CONFIGS,
   CHANNEL_LOGS,
   CHANNEL_MODULES,
+  CHANNEL_POLL_VOTES,
   isRealtimeAvailable,
   subscribe,
 } from "../../utils/eventbus";
@@ -30,6 +31,7 @@ const ROUTES: Record<string, string> = {
   logs: CHANNEL_LOGS,
   modules: CHANNEL_MODULES,
   "guild-configs": CHANNEL_GUILD_CONFIGS,
+  "poll-votes": CHANNEL_POLL_VOTES,
 };
 
 // Channels whose payloads span all guilds — bot admins only.

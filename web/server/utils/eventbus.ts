@@ -20,6 +20,7 @@ import Redis, { type RedisOptions } from "ioredis";
 export const CHANNEL_LOGS = "modus:realtime:logs";
 export const CHANNEL_MODULES = "modus:realtime:modules";
 export const CHANNEL_GUILD_CONFIGS = "modus:realtime:guild-configs";
+export const CHANNEL_POLL_VOTES = "modus:realtime:poll-votes";
 
 export interface Envelope<T = unknown> {
   origin: string;
