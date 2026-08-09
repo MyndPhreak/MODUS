@@ -49,10 +49,10 @@
         class="glass-card rounded-2xl p-5 flex items-center gap-4 border border-white/8 hover:border-white/15 transition-all duration-200"
       >
         <div
-          class="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/20 flex-shrink-0"
+          class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/20 flex items-center justify-center shrink-0"
         >
           <UIcon
-            name="i-heroicons-squares-2x2"
+            name="i-lucide-layout-grid"
             class="w-5 h-5 text-violet-400"
           />
         </div>

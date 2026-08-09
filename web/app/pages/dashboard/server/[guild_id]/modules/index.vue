@@ -1,205 +1,449 @@
 <template>
   <div class="p-6 lg:p-8 space-y-8">
-    <!-- Header -->
-    <section>
-      <h2 class="text-xl font-semibold mb-1">Command Modules</h2>
-      <p class="text-sm text-gray-500">
-        Enable or disable specific bot modules for this server. Click
-        "Configure" to customise each module's settings.
-      </p>
-    </section>
+    <!-- Top Header & Primary Tabs -->
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl font-bold text-white tracking-tight">
+            Server Configuration
+          </h1>
+          <UBadge
+            color="primary"
+            variant="subtle"
+            class="font-semibold text-xs px-2.5 py-0.5"
+          >
+            {{ activeModuleCount }} / {{ totalModuleCount }} Active
+          </UBadge>
+        </div>
+        <p class="text-sm text-gray-400 mt-1">
+          Manage and configure bot features, permissions, and settings for this server.
+        </p>
+      </div>
 
-    <!-- Module Grid -->
-    <section>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div
-          v-for="module in state.modules"
-          :key="module.$id"
-          class="group relative rounded-xl border bg-white/[0.03] p-4 flex flex-col gap-3 transition-all duration-200 hover:bg-white/[0.06]"
+      <!-- Main Navigation Switcher (Modules vs Server Management) -->
+      <div
+        v-if="state.isServerOwnerOrAdmin"
+        class="flex items-center p-1 bg-white/[0.04] border border-white/[0.08] rounded-xl self-start sm:self-auto shrink-0"
+      >
+        <button
+          type="button"
+          class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
           :class="
-            isModuleEnabled(module.name)
-              ? 'border-white/15'
-              : 'border-white/[0.07] opacity-70'
+            activeMainTab === 'modules'
+              ? 'bg-primary-500/20 text-primary-300 border border-primary-500/30 shadow-sm'
+              : 'text-gray-400 hover:text-white'
           "
+          @click="activeMainTab = 'modules'"
         >
-          <!-- Top row: Icon + Toggle -->
-          <div class="flex items-start justify-between">
-            <div
-              class="p-2.5 rounded-xl"
-              :class="moduleStyle(module.name).bgClass"
-            >
-              <UIcon
-                :name="moduleStyle(module.name).icon"
-                class="w-5 h-5"
-                :class="moduleStyle(module.name).iconClass"
-              />
-            </div>
-            <USwitch
-              :model-value="isModuleEnabled(module.name)"
-              @update:model-value="
-                (val: boolean) => handleToggle(module.name, val)
-              "
-              :loading="updating === module.name"
+          <UIcon name="i-lucide-layout-grid" class="w-4 h-4" />
+          <span>Modules</span>
+          <span
+            class="text-[10px] px-1.5 py-0.2 rounded-full"
+            :class="
+              activeMainTab === 'modules'
+                ? 'bg-primary-500/30 text-white'
+                : 'bg-white/10 text-gray-400'
+            "
+          >
+            {{ totalModuleCount }}
+          </span>
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+          :class="
+            activeMainTab === 'settings'
+              ? 'bg-primary-500/20 text-primary-300 border border-primary-500/30 shadow-sm'
+              : 'text-gray-400 hover:text-white'
+          "
+          @click="activeMainTab = 'settings'"
+        >
+          <UIcon name="i-lucide-shield-check" class="w-4 h-4" />
+          <span>Server Access & Danger Zone</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ======================================================== -->
+    <!-- TAB 1: MODULES & FEATURES                                -->
+    <!-- ======================================================== -->
+    <div v-if="activeMainTab === 'modules'" class="space-y-8">
+      <!-- Search & Category Filters Toolbar -->
+      <section class="space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <!-- Search Input -->
+          <div class="relative flex-1 max-w-md">
+            <UInput
+              v-model="searchQuery"
+              icon="i-lucide-search"
+              placeholder="Search modules by name, keyword, or tag (e.g. spotify, spam, xp)..."
+              class="w-full"
             />
+            <button
+              v-if="searchQuery"
+              type="button"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
+              @click="searchQuery = ''"
+            >
+              <UIcon name="i-lucide-x" class="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <!-- Name + Status -->
+          <!-- Status Filter -->
           <div class="flex items-center gap-2">
-            <span class="font-semibold text-sm text-white">{{
-              module.name
-            }}</span>
-            <span
-              class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+            <span class="text-xs text-gray-500 hidden sm:inline">Status:</span>
+            <div class="flex items-center p-0.5 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+                :class="
+                  statusFilter === 'all'
+                    ? 'bg-white/10 text-white'
+                    : 'text-gray-400 hover:text-white'
+                "
+                @click="statusFilter = 'all'"
+              >
+                All
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+                :class="
+                  statusFilter === 'enabled'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white'
+                "
+                @click="statusFilter = 'enabled'"
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+                :class="
+                  statusFilter === 'disabled'
+                    ? 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
+                    : 'text-gray-400 hover:text-white'
+                "
+                @click="statusFilter = 'disabled'"
+              >
+                Disabled
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category Filter Pills -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border"
+            :class="
+              selectedCategory === 'all'
+                ? 'bg-white/15 text-white border-white/20 shadow-sm'
+                : 'bg-white/[0.03] text-gray-400 border-white/[0.06] hover:bg-white/[0.07] hover:text-gray-200'
+            "
+            @click="selectedCategory = 'all'"
+          >
+            <UIcon name="i-lucide-layout-grid" class="w-3.5 h-3.5" />
+            <span>All Categories</span>
+            <span class="text-[10px] opacity-70 ml-0.5">({{ totalModuleCount }})</span>
+          </button>
+
+          <button
+            v-for="cat in MODULE_CATEGORIES"
+            :key="cat.key"
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border"
+            :class="
+              selectedCategory === cat.key
+                ? 'bg-primary-500/20 text-primary-300 border-primary-500/30 shadow-sm'
+                : 'bg-white/[0.03] text-gray-400 border-white/[0.06] hover:bg-white/[0.07] hover:text-gray-200'
+            "
+            @click="selectedCategory = cat.key"
+          >
+            <UIcon :name="cat.icon" class="w-3.5 h-3.5" />
+            <span>{{ cat.label }}</span>
+            <span class="text-[10px] opacity-70 ml-0.5">
+              ({{ categoryCounts[cat.key]?.total || 0 }})
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Categorized Module Groups -->
+      <div v-if="groupedModules.length > 0" class="space-y-10">
+        <section
+          v-for="group in groupedModules"
+          :key="group.category.key"
+          class="space-y-4"
+        >
+          <!-- Category Section Header -->
+          <div class="flex items-center justify-between border-b border-white/[0.06] pb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/10 flex items-center justify-center text-primary-400">
+                <UIcon :name="group.category.icon" class="w-4 h-4" />
+              </div>
+              <div>
+                <h2 class="text-base font-bold text-white">
+                  {{ group.category.label }}
+                </h2>
+                <p class="text-xs text-gray-500">
+                  {{ group.category.description }}
+                </p>
+              </div>
+            </div>
+            <UBadge
+              variant="subtle"
+              color="neutral"
+              class="text-[11px] font-medium"
+            >
+              {{ group.enabledCount }} / {{ group.modules.length }} enabled
+            </UBadge>
+          </div>
+
+          <!-- Cards Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              v-for="module in group.modules"
+              :key="module.$id"
+              class="group relative rounded-xl border bg-white/[0.03] p-4 flex flex-col gap-3 transition-all duration-200 hover:bg-white/[0.06]"
               :class="
                 isModuleEnabled(module.name)
-                  ? 'bg-emerald-400'
-                  : 'bg-gray-600'
+                  ? 'border-white/15'
+                  : 'border-white/[0.07] opacity-70'
               "
-            />
-          </div>
-
-          <!-- Description -->
-          <p class="text-xs text-gray-500 leading-relaxed line-clamp-2 flex-1">
-            {{ module.description }}
-          </p>
-
-          <!-- Configure link (bottom) -->
-          <NuxtLink
-            v-if="hasModuleSettings(module.name)"
-            :to="`/dashboard/server/${guildId}/modules/${module.name.toLowerCase()}`"
-            class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-primary-400 transition-colors duration-150 mt-auto pt-2 border-t border-white/[0.06]"
-          >
-            <UIcon name="i-heroicons-cog-6-tooth" class="w-3.5 h-3.5" />
-            Configure
-          </NuxtLink>
-        </div>
-      </div>
-    </section>
-
-    <!-- Dashboard Access Roles (only visible to owner/admin) -->
-    <section v-if="state.isServerOwnerOrAdmin">
-      <h2 class="text-xl font-semibold mb-1">Dashboard Access</h2>
-      <p class="text-sm text-gray-500 mb-4">
-        Grant specific Discord roles access to this server's dashboard settings,
-        without requiring Administrator permission.
-      </p>
-      <UCard
-        :ui="{
-          root: 'border border-white/10',
-        }"
-      >
-        <div class="space-y-4">
-          <div class="flex items-center gap-2 mb-2">
-            <div
-              class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
             >
-              <UIcon name="i-heroicons-user-group" class="text-indigo-400" />
+              <!-- Top row: Icon + Toggle -->
+              <div class="flex items-start justify-between">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  :class="getModuleMetadata(module.name).bgClass"
+                >
+                  <UIcon
+                    :name="getModuleMetadata(module.name).icon"
+                    class="w-5 h-5"
+                    :class="getModuleMetadata(module.name).iconClass"
+                  />
+                </div>
+                <USwitch
+                  :model-value="isModuleEnabled(module.name)"
+                  @update:model-value="
+                    (val: boolean) => handleToggle(module.name, val)
+                  "
+                  :loading="updating === module.name"
+                />
+              </div>
+
+              <!-- Name + Status -->
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm text-white">
+                  {{ getModuleMetadata(module.name).displayName }}
+                </span>
+                <span
+                  class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                  :class="
+                    isModuleEnabled(module.name)
+                      ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                      : 'bg-gray-600'
+                  "
+                />
+              </div>
+
+              <!-- Description -->
+              <p class="text-xs text-gray-400 leading-relaxed line-clamp-2">
+                {{ module.description }}
+              </p>
+
+              <!-- Tags list (clickable to search) -->
+              <div class="flex flex-wrap gap-1.5 my-1">
+                <button
+                  v-for="tag in getModuleMetadata(module.name).tags.slice(0, 3)"
+                  :key="tag"
+                  type="button"
+                  class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/[0.04] hover:bg-white/[0.1] text-gray-400 hover:text-white transition-colors"
+                  @click="setTagSearch(tag)"
+                >
+                  #{{ tag }}
+                </button>
+              </div>
+
+              <!-- Configure link (bottom) -->
+              <div class="mt-auto pt-2 border-t border-white/[0.06]">
+                <NuxtLink
+                  v-if="hasModuleSettings(module.name)"
+                  :to="`/dashboard/server/${guildId}/modules/${module.name.toLowerCase()}`"
+                  class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-primary-400 transition-colors duration-150"
+                >
+                  <UIcon name="i-lucide-settings-2" class="w-3.5 h-3.5" />
+                  <span>Configure Settings</span>
+                </NuxtLink>
+                <span
+                  v-else
+                  class="text-[11px] text-gray-500 italic"
+                >
+                  No extra configuration required
+                </span>
+              </div>
             </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Zero Results State -->
+      <div
+        v-else
+        class="text-center py-16 px-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.02]"
+      >
+        <UIcon
+          name="i-lucide-search-x"
+          class="w-12 h-12 text-gray-500 mx-auto mb-3"
+        />
+        <h3 class="text-base font-bold text-white">No modules found</h3>
+        <p class="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+          No bot modules matched your query
+          <span v-if="searchQuery" class="font-semibold text-white">"{{ searchQuery }}"</span>.
+        </p>
+        <UButton
+          color="neutral"
+          variant="outline"
+          size="xs"
+          class="mt-4"
+          @click="resetFilters"
+        >
+          Reset Filters
+        </UButton>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- TAB 2: SERVER SETTINGS & ACCESS                           -->
+    <!-- ======================================================== -->
+    <div
+      v-else-if="activeMainTab === 'settings' && state.isServerOwnerOrAdmin"
+      class="space-y-8 max-w-4xl"
+    >
+      <!-- Dashboard Access Roles -->
+      <section>
+        <div class="mb-4">
+          <h2 class="text-lg font-bold text-white">Dashboard Access Roles</h2>
+          <p class="text-sm text-gray-400">
+            Grant specific Discord roles access to this server's dashboard settings without requiring Administrator permission.
+          </p>
+        </div>
+
+        <UCard :ui="{ root: 'border border-white/10 bg-white/[0.02]' }">
+          <div class="space-y-4">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                <UIcon name="i-lucide-users" class="w-5 h-5" />
+              </div>
+              <div>
+                <h3 class="font-semibold text-white">Delegated Dashboard Roles</h3>
+                <p class="text-xs text-gray-400">
+                  Members with any of these roles can view and adjust module settings for this server.
+                </p>
+              </div>
+            </div>
+
+            <div
+              v-if="state.rolesLoading"
+              class="flex items-center gap-2 py-3"
+            >
+              <UIcon
+                name="i-lucide-loader-circle"
+                class="w-4 h-4 animate-spin text-indigo-400"
+              />
+              <span class="text-sm text-gray-400">Loading server roles from Discord...</span>
+            </div>
+
+            <USelectMenu
+              v-else-if="dashboardRoleOptions.length > 0"
+              v-model="selectedDashboardRoles"
+              :items="dashboardRoleOptions"
+              value-key="value"
+              multiple
+              placeholder="Select roles..."
+              class="w-full"
+              @update:model-value="dashboardRolesDirty = true"
+            />
+            <p v-else class="text-sm text-gray-500 py-2">
+              No roles available. Make sure the bot is in this server.
+            </p>
+
+            <div class="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+              <p class="text-xs text-gray-500">
+                {{ selectedDashboardRoles.length }} role{{
+                  selectedDashboardRoles.length !== 1 ? "s" : ""
+                }} selected
+              </p>
+              <UButton
+                color="primary"
+                size="sm"
+                :loading="savingDashboardRoles"
+                :disabled="!dashboardRolesDirty"
+                @click="handleSaveDashboardRoles"
+              >
+                Save Roles
+              </UButton>
+            </div>
+          </div>
+        </UCard>
+      </section>
+
+      <!-- Danger Zone -->
+      <section>
+        <div class="mb-4">
+          <h2 class="text-lg font-bold text-red-400">Danger Zone</h2>
+          <p class="text-sm text-gray-400">
+            Irreversible actions for this server's configuration and records.
+          </p>
+        </div>
+
+        <UCard :ui="{ root: 'border border-red-500/20 bg-red-500/[0.02]' }">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 class="font-semibold text-white">Dashboard Roles</h3>
-              <p class="text-[10px] text-gray-500">
-                Users with these roles can view and manage this server in the
-                dashboard
+              <h3 class="font-semibold text-white">Remove Server from Dashboard</h3>
+              <p class="text-xs text-gray-400 mt-0.5">
+                Remove this server from your dashboard. This deletes all module configurations and audit records stored for this server.
               </p>
             </div>
-          </div>
-
-          <div
-            v-if="state.rolesLoading"
-            class="flex items-center gap-2 py-2"
-          >
-            <UIcon
-              name="i-heroicons-arrow-path"
-              class="animate-spin text-indigo-400"
-            />
-            <span class="text-sm text-gray-400">Loading roles...</span>
-          </div>
-          <USelectMenu
-            v-else-if="dashboardRoleOptions.length > 0"
-            v-model="selectedDashboardRoles"
-            :items="dashboardRoleOptions"
-            value-key="value"
-            multiple
-            placeholder="Select roles..."
-            class="w-full"
-            @update:model-value="dashboardRolesDirty = true"
-          />
-          <p v-else class="text-sm text-gray-500 py-2">
-            No roles available. Make sure the bot is in this server.
-          </p>
-
-          <div class="flex items-center justify-between">
-            <p class="text-xs text-gray-500">
-              {{ selectedDashboardRoles.length }} role{{
-                selectedDashboardRoles.length !== 1 ? "s" : ""
-              }}
-              selected
-            </p>
             <UButton
-              color="primary"
-              size="sm"
-              :loading="savingDashboardRoles"
-              :disabled="!dashboardRolesDirty"
-              @click="handleSaveDashboardRoles"
+              color="error"
+              variant="soft"
+              icon="i-lucide-trash-2"
+              class="shrink-0"
+              @click="showRemoveConfirm = true"
+              :loading="removing"
             >
-              Save Roles
+              Remove Server
             </UButton>
           </div>
-        </div>
-      </UCard>
-    </section>
-
-    <!-- Danger Zone -->
-    <section>
-      <h2 class="text-base font-semibold mb-3 text-red-400">Danger Zone</h2>
-      <UCard
-        :ui="{
-          root: 'border border-red-500/20',
-        }"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="font-semibold text-white">Remove Server</h3>
-            <p class="text-sm text-gray-400">
-              Remove this server from your dashboard. This will delete all
-              configurations and logs for this server.
-            </p>
-          </div>
-          <UButton
-            color="error"
-            variant="soft"
-            icon="i-heroicons-trash"
-            @click="showRemoveConfirm = true"
-            :loading="removing"
-          >
-            Remove
-          </UButton>
-        </div>
-      </UCard>
-    </section>
+        </UCard>
+      </section>
+    </div>
 
     <!-- Remove Confirmation Modal -->
     <UModal v-model:open="showRemoveConfirm">
       <template #content>
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+            <div class="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400">
               <UIcon
-                name="i-heroicons-exclamation-triangle"
-                class="w-6 h-6 text-red-400"
+                name="i-lucide-triangle-alert"
+                class="w-6 h-6"
               />
             </div>
             <div>
               <h3 class="text-lg font-bold text-white">Remove Server</h3>
-              <p class="text-sm text-gray-400">This action cannot be undone</p>
+              <p class="text-xs text-gray-400">This action cannot be undone</p>
             </div>
           </div>
 
-          <p class="text-gray-300">
+          <p class="text-sm text-gray-300">
             Are you sure you want to remove
-            <strong>{{ state.guild?.name }}</strong> from your dashboard? All
-            module configurations and logs for this server will be permanently
-            deleted.
+            <strong class="text-white">{{ state.guild?.name }}</strong> from your dashboard? All
+            module configurations and stored logs for this server will be permanently deleted.
           </p>
 
           <div class="flex justify-end gap-3 pt-2">
@@ -212,9 +456,9 @@
             </UButton>
             <UButton
               color="error"
-              @click="handleRemove"
+              icon="i-lucide-trash-2"
               :loading="removing"
-              icon="i-heroicons-trash"
+              @click="handleRemove"
             >
               Remove Server
             </UButton>
@@ -227,6 +471,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
+import {
+  MODULE_CATEGORIES,
+  getModuleMetadata,
+  type ModuleCategoryKey,
+} from "~/utils/module-metadata";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -239,6 +488,11 @@ const {
   loadRoles,
   saveDashboardRoles,
 } = useServerSettings(guildId);
+
+const activeMainTab = ref<"modules" | "settings">("modules");
+const searchQuery = ref("");
+const selectedCategory = ref<"all" | ModuleCategoryKey>("all");
+const statusFilter = ref<"all" | "enabled" | "disabled">("all");
 
 const updating = ref<string | null>(null);
 const showRemoveConfirm = ref(false);
@@ -258,6 +512,92 @@ const dashboardRoleOptions = computed(() =>
       value: r.id,
     })),
 );
+
+// Module counts
+const activeModuleCount = computed(() => {
+  return state.value.modules.filter((m) => isModuleEnabled(m.name)).length;
+});
+const totalModuleCount = computed(() => state.value.modules.length);
+
+// Category module counts
+const categoryCounts = computed(() => {
+  const counts: Record<string, { total: number; enabled: number }> = {};
+  for (const cat of MODULE_CATEGORIES) {
+    counts[cat.key] = { total: 0, enabled: 0 };
+  }
+  for (const mod of state.value.modules) {
+    const meta = getModuleMetadata(mod.name);
+    const catCount = counts[meta.category];
+    if (catCount) {
+      catCount.total += 1;
+      if (isModuleEnabled(mod.name)) {
+        catCount.enabled += 1;
+      }
+    }
+  }
+  return counts;
+});
+
+// Grouped & filtered modules
+const groupedModules = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+
+  const filtered = state.value.modules.filter((mod) => {
+    const meta = getModuleMetadata(mod.name);
+    const enabled = isModuleEnabled(mod.name);
+
+    if (statusFilter.value === "enabled" && !enabled) return false;
+    if (statusFilter.value === "disabled" && enabled) return false;
+
+    if (selectedCategory.value !== "all" && meta.category !== selectedCategory.value) {
+      return false;
+    }
+
+    if (query) {
+      const matchName = mod.name.toLowerCase().includes(query);
+      const matchDisplayName = meta.displayName.toLowerCase().includes(query);
+      const matchDesc = (mod.description || "").toLowerCase().includes(query);
+      const matchTag = meta.tags.some((t) => t.toLowerCase().includes(query));
+      return matchName || matchDisplayName || matchDesc || matchTag;
+    }
+
+    return true;
+  });
+
+  const groups: Array<{
+    category: (typeof MODULE_CATEGORIES)[number];
+    modules: typeof state.value.modules;
+    enabledCount: number;
+  }> = [];
+
+  for (const cat of MODULE_CATEGORIES) {
+    if (selectedCategory.value !== "all" && selectedCategory.value !== cat.key) {
+      continue;
+    }
+    const catMods = filtered.filter(
+      (m) => getModuleMetadata(m.name).category === cat.key,
+    );
+    if (catMods.length > 0) {
+      groups.push({
+        category: cat,
+        modules: catMods,
+        enabledCount: catMods.filter((m) => isModuleEnabled(m.name)).length,
+      });
+    }
+  }
+
+  return groups;
+});
+
+const setTagSearch = (tag: string) => {
+  searchQuery.value = tag;
+};
+
+const resetFilters = () => {
+  searchQuery.value = "";
+  selectedCategory.value = "all";
+  statusFilter.value = "all";
+};
 
 // Load roles and init selected values when section is visible
 onMounted(async () => {
@@ -286,111 +626,5 @@ const handleRemove = async () => {
   removing.value = true;
   await removeServer();
   removing.value = false;
-};
-
-// Module styling map
-const moduleStyle = (name: string) => {
-  const styles: Record<
-    string,
-    { icon: string; bgClass: string; iconClass: string }
-  > = {
-    music: {
-      icon: "i-heroicons-musical-note",
-      bgClass: "bg-violet-500/10 border border-violet-500/20",
-      iconClass: "text-violet-400",
-    },
-    moderation: {
-      icon: "i-heroicons-shield-exclamation",
-      bgClass: "bg-blue-500/10 border border-blue-500/20",
-      iconClass: "text-blue-400",
-    },
-    fun: {
-      icon: "i-heroicons-face-smile",
-      bgClass: "bg-amber-500/10 border border-amber-500/20",
-      iconClass: "text-amber-400",
-    },
-    utility: {
-      icon: "i-heroicons-wrench-screwdriver",
-      bgClass: "bg-emerald-500/10 border border-emerald-500/20",
-      iconClass: "text-emerald-400",
-    },
-    recording: {
-      icon: "i-heroicons-microphone",
-      bgClass: "bg-red-500/10 border border-red-500/20",
-      iconClass: "text-red-400",
-    },
-    milestones: {
-      icon: "i-heroicons-trophy",
-      bgClass: "bg-amber-500/10 border border-amber-500/20",
-      iconClass: "text-amber-400",
-    },
-    automod: {
-      icon: "i-heroicons-funnel",
-      bgClass: "bg-orange-500/10 border border-orange-500/20",
-      iconClass: "text-orange-400",
-    },
-    ai: {
-      icon: "i-heroicons-cpu-chip",
-      bgClass: "bg-violet-500/10 border border-violet-500/20",
-      iconClass: "text-violet-400",
-    },
-    logging: {
-      icon: "i-heroicons-clipboard-document-list",
-      bgClass: "bg-cyan-500/10 border border-cyan-500/20",
-      iconClass: "text-cyan-400",
-    },
-    triggers: {
-      icon: "i-heroicons-bolt",
-      bgClass: "bg-emerald-500/10 border border-emerald-500/20",
-      iconClass: "text-emerald-400",
-    },
-    antiraid: {
-      icon: "i-heroicons-shield-check",
-      bgClass: "bg-rose-500/10 border border-rose-500/20",
-      iconClass: "text-rose-400",
-    },
-    verification: {
-      icon: "i-heroicons-check-badge",
-      bgClass: "bg-green-500/10 border border-green-500/20",
-      iconClass: "text-green-400",
-    },
-    tickets: {
-      icon: "i-heroicons-ticket",
-      bgClass: "bg-sky-500/10 border border-sky-500/20",
-      iconClass: "text-sky-400",
-    },
-    alerts: {
-      icon: "i-heroicons-bell-alert",
-      bgClass: "bg-pink-500/10 border border-pink-500/20",
-      iconClass: "text-pink-400",
-    },
-    tempvoice: {
-      icon: "i-heroicons-speaker-wave",
-      bgClass: "bg-indigo-500/10 border border-indigo-500/20",
-      iconClass: "text-indigo-400",
-    },
-    "reaction-roles": {
-      icon: "i-heroicons-face-smile",
-      bgClass: "bg-yellow-500/10 border border-yellow-500/20",
-      iconClass: "text-yellow-400",
-    },
-    events: {
-      icon: "i-heroicons-calendar-days",
-      bgClass: "bg-teal-500/10 border border-teal-500/20",
-      iconClass: "text-teal-400",
-    },
-    polls: {
-      icon: "i-heroicons-chart-bar",
-      bgClass: "bg-fuchsia-500/10 border border-fuchsia-500/20",
-      iconClass: "text-fuchsia-400",
-    },
-  };
-  return (
-    styles[name.toLowerCase()] || {
-      icon: "i-heroicons-cube",
-      bgClass: "bg-gray-500/10 border border-gray-500/20",
-      iconClass: "text-gray-400",
-    }
-  );
 };
 </script>

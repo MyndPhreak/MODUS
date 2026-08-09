@@ -23,6 +23,9 @@ export default defineNuxtConfig({
       ],
     },
   },
+  icon: {
+    serverBundle: "auto",
+  },
   css: ["~/assets/css/main.css"],
   runtimeConfig: {
     discordBotToken: "", // Set via NUXT_DISCORD_BOT_TOKEN
