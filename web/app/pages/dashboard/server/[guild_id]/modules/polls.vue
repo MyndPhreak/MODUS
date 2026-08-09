@@ -232,6 +232,17 @@
             <div class="flex items-center gap-2">
               <p class="text-sm font-medium text-white flex-1">{{ poll.question }}</p>
               <UBadge color="neutral" variant="soft" size="xs">{{ poll.source }}</UBadge>
+              <UButton
+                v-if="state.isServerOwnerOrAdmin"
+                color="error"
+                variant="ghost"
+                size="xs"
+                icon="i-heroicons-stop-circle"
+                :loading="actionLoading"
+                @click="onEndPoll(poll)"
+              >
+                End
+              </UButton>
             </div>
             <div v-for="(opt, idx) in poll.options" :key="idx" class="space-y-0.5">
               <div class="flex justify-between text-[11px] text-gray-400">
@@ -258,7 +269,7 @@
 <script setup lang="ts">
 const route = useRoute();
 const guildId = route.params.guild_id as string;
-const { isModuleEnabled } = useServerSettings(guildId);
+const { state, isModuleEnabled } = useServerSettings(guildId);
 const {
   templates,
   runningPolls,
@@ -270,6 +281,7 @@ const {
   deleteTemplate,
   fetchRunningPolls,
   sendPoll,
+  endPoll,
 } = usePolls(guildId);
 
 const newTemplate = reactive({
@@ -354,4 +366,13 @@ const onSendPoll = async () => {
 
 const optionPct = (opt: { votes: number }, total: number) =>
   total > 0 ? Math.round((opt.votes / total) * 100) : 0;
+
+const onEndPoll = async (poll: { channelId: string; messageId: string; question: string }) => {
+  if (!confirm(`End the poll "${poll.question}" now? This can't be undone.`)) return;
+  try {
+    await endPoll(poll.channelId, poll.messageId);
+  } catch {
+    // endPoll re-throws after populating `error` — see onCreateTemplate.
+  }
+};
 </script>

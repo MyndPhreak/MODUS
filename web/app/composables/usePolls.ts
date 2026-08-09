@@ -160,6 +160,23 @@ export function usePolls(guildId: string) {
     }
   };
 
+  const endPoll = async (channelId: string, messageId: string) => {
+    actionLoading.value = true;
+    error.value = null;
+    try {
+      await $fetch("/api/polls/end", {
+        method: "POST",
+        body: { guild_id: guildId, channel_id: channelId, message_id: messageId },
+      });
+      await fetchRunningPolls();
+    } catch (err: any) {
+      error.value = err?.data?.statusMessage || err?.message || "Failed to end poll";
+      throw err;
+    } finally {
+      actionLoading.value = false;
+    }
+  };
+
   // Patch a running poll's tally in place from a pushed vote event, instead
   // of refetching the whole list on every vote.
   const applyVoteEvent = (evt: PollVoteEvent) => {
@@ -228,5 +245,6 @@ export function usePolls(guildId: string) {
     deleteTemplate,
     fetchRunningPolls,
     sendPoll,
+    endPoll,
   };
 }
