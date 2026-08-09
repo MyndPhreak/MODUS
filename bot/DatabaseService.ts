@@ -276,10 +276,17 @@ export class DatabaseService {
 
   async ensureModuleRegistered(
     moduleName: string,
-    description: string,
+    meta: {
+      description: string;
+      displayName?: string;
+      category?: string;
+      icon?: string;
+      color?: string;
+      tags?: string[];
+    },
   ): Promise<void> {
     try {
-      await this.modules.ensureRegistered(moduleName, description);
+      await this.modules.ensureRegistered(moduleName, meta);
       this.publishModulesChange();
     } catch (error) {
       console.error(

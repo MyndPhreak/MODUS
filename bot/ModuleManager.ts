@@ -19,6 +19,7 @@ import path from "path";
 import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
 import type { AiTool } from "./lib/aiTools";
+import type { ModuleCategoryKey } from "@modus/db";
 
 /**
  * A slash-command definition: any command builder (SlashCommandBuilder and
@@ -31,6 +32,17 @@ export type SlashCommandData =
       description?: string;
       toJSON(): RESTPostAPIApplicationCommandsJSONBody;
     };
+
+export interface ModuleMeta {
+  /** Falls back to a title-cased module name if omitted. */
+  displayName?: string;
+  category: ModuleCategoryKey;
+  /** Lucide icon name, e.g. "i-lucide-disc-3". */
+  icon: string;
+  /** Semantic color token (e.g. "violet") — never a Tailwind class. The web dashboard maps this to classes. */
+  color: string;
+  tags?: string[];
+}
 
 export interface BotModule {
   name: string;
@@ -91,6 +103,12 @@ export interface BotModule {
    * commands that aren't a guild-facing feature (e.g. reload, shard-info).
    */
   hidden?: boolean;
+  /**
+   * Dashboard display identity. Modules without this are not shown on the
+   * per-server dashboard grid or sidebar (e.g. `reload`, a bot-dev-only
+   * debug command) — they still register and run normally as commands.
+   */
+  meta?: ModuleMeta;
 }
 
 export class ModuleManager {
@@ -192,11 +210,17 @@ export class ModuleManager {
             this.logger.info(`Loaded module: ${module.name} (command: /${cmdName})`);
           }
 
-          // Register module in the modules table if not exists
-          await this.databaseService.ensureModuleRegistered(
-            module.name,
-            module.description || "No description",
-          );
+          // Register module in the modules table, refreshing dashboard
+          // metadata from code on every boot. `enabled` is never touched
+          // here — it's the admin-controlled runtime kill switch.
+          await this.databaseService.ensureModuleRegistered(module.name, {
+            description: module.description || "No description",
+            displayName: module.meta?.displayName,
+            category: module.meta?.category,
+            icon: module.meta?.icon,
+            color: module.meta?.color,
+            tags: module.meta?.tags,
+          });
         } else {
           console.warn(
             `[ModuleManager] Skipping module ${modulePath}: Missing name or execute function.`,
