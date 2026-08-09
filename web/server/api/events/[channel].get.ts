@@ -6,10 +6,15 @@
  * websocket that the dashboard used to maintain directly.
  *
  * Route: GET /api/events/:channel
- *   channel ∈ { logs, modules, guild-configs }
+ *   channel ∈ { logs, modules, guild-configs, poll-votes }
  *
  * Auth: requires any valid session. The `logs` channel carries log entries
  * across every guild, so it is additionally restricted to bot admins.
+ * The `poll-votes` channel carries per-guild data (including which Discord
+ * user voted) across every guild the bot serves, so it requires a
+ * `guild_id` query param and guild-manager access, and every published
+ * payload is filtered server-side to that guild before being written to
+ * the stream — it is never a fleet-wide firehose to the client.
  *
  * Heartbeat comments every 25s keep the connection alive through proxy
  * idle timeouts. The client (EventSource) reconnects automatically if
@@ -23,7 +28,11 @@ import {
   isRealtimeAvailable,
   subscribe,
 } from "../../utils/eventbus";
-import { requireAuthedUserId, requireBotAdmin } from "../../utils/session";
+import {
+  requireAuthedUserId,
+  requireBotAdmin,
+  requireGuildManager,
+} from "../../utils/session";
 
 const HEARTBEAT_MS = 25_000;
 
@@ -37,6 +46,11 @@ const ROUTES: Record<string, string> = {
 // Channels whose payloads span all guilds — bot admins only.
 const ADMIN_ONLY_CHANNELS = new Set(["logs"]);
 
+// Channels whose payloads span all guilds but are meant to be visible to
+// guild managers of the specific guild the payload belongs to — requires
+// a guild_id query param and per-payload filtering (see below).
+const GUILD_SCOPED_CHANNELS = new Set(["poll-votes"]);
+
 export default defineEventHandler(async (event) => {
   const channelName = getRouterParam(event, "channel");
   if (!channelName || !ROUTES[channelName]) {
@@ -46,8 +60,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  let scopedGuildId: string | null = null;
   if (ADMIN_ONLY_CHANNELS.has(channelName)) {
     await requireBotAdmin(event);
+  } else if (GUILD_SCOPED_CHANNELS.has(channelName)) {
+    const guildId = getQuery(event).guild_id as string | undefined;
+    if (!guildId) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Missing guild_id query parameter.",
+      });
+    }
+    await requireGuildManager(event, guildId);
+    scopedGuildId = guildId;
   } else {
     await requireAuthedUserId(event);
   }
@@ -74,6 +99,12 @@ export default defineEventHandler(async (event) => {
   res.write(`: connected\n\n`);
 
   const unsubscribe = await subscribe(redisChannel, (payload) => {
+    if (
+      scopedGuildId &&
+      (payload as { guildId?: string } | null)?.guildId !== scopedGuildId
+    ) {
+      return;
+    }
     try {
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch {

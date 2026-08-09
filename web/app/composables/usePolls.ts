@@ -175,7 +175,9 @@ export function usePolls(guildId: string) {
 
   const connectRealtime = () => {
     if (eventSource) return;
-    eventSource = new EventSource("/api/events/poll-votes");
+    eventSource = new EventSource(
+      `/api/events/poll-votes?guild_id=${encodeURIComponent(guildId)}`,
+    );
     eventSource.onmessage = (msg) => {
       try {
         applyVoteEvent(JSON.parse(msg.data) as PollVoteEvent);
@@ -185,11 +187,18 @@ export function usePolls(guildId: string) {
       }
     };
     eventSource.onerror = () => {
-      // No REDIS_URL configured server-side, or the connection dropped hard.
-      // Stop retrying — the panel falls back to a manual-refresh prompt.
-      realtimeAvailable.value = false;
-      eventSource?.close();
-      eventSource = null;
+      // EventSource auto-reconnects on transient drops (proxy idle
+      // timeouts, brief Redis hiccups, laptop sleep) — readyState stays
+      // CONNECTING while it retries, so leave realtimeAvailable alone and
+      // don't tear down the reference. Only treat it as fatal once the
+      // browser itself has given up (readyState CLOSED), which happens on
+      // e.g. the initial 503/401 the server throws when realtime isn't
+      // configured or the caller lacks access.
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        realtimeAvailable.value = false;
+        eventSource?.close();
+        eventSource = null;
+      }
     };
   };
 
