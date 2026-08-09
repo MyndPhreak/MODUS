@@ -11,6 +11,9 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   ModalSubmitInteraction,
+  Events,
+  PollAnswer,
+  PartialPollAnswer,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
 import { buildV2Layout } from "../lib/components-v2";
@@ -91,7 +94,7 @@ const pollsModule: BotModule = {
 
   execute: async (
     interaction: ChatInputCommandInteraction,
-    _moduleManager: ModuleManager,
+    moduleManager: ModuleManager,
   ) => {
     const subcommand = interaction.options.getSubcommand();
 
@@ -178,6 +181,13 @@ const pollsModule: BotModule = {
 
       try {
         await message.poll.end();
+        try {
+          await moduleManager.databaseService.polls.finalizeByMessageId(
+            messageId,
+          );
+        } catch (err) {
+          console.error("[polls] Failed to finalize poll row:", err);
+        }
         await interaction.editReply("✅ Poll ended. Results are now finalized.");
       } catch {
         await interaction.editReply(
@@ -264,7 +274,7 @@ const pollsModule: BotModule = {
 
   handleModal: async (
     interaction: ModalSubmitInteraction,
-    _moduleManager: ModuleManager,
+    moduleManager: ModuleManager,
   ) => {
     if (interaction.customId !== "polls:create") return;
 
@@ -290,11 +300,55 @@ const pollsModule: BotModule = {
 
     // Native poll MUST be the initial reply — not an editReply.
     await interaction.reply({ poll } as any);
+
+    // Persist a row so the dashboard's running-polls view can see it. Best
+    // effort — a persistence failure shouldn't be shown to the user, the
+    // poll itself already sent successfully.
+    try {
+      const message = await interaction.fetchReply();
+      const expiresAt = new Date(Date.now() + poll.duration * 60 * 60 * 1000);
+      await moduleManager.databaseService.polls.create({
+        guildId: interaction.guildId!,
+        channelId: interaction.channelId!,
+        messageId: message.id,
+        templateId: null,
+        question,
+        options: answers,
+        expiresAt,
+        createdBy: interaction.user.id,
+        source: "slash",
+      });
+    } catch (err) {
+      console.error("[polls] Failed to persist poll row:", err);
+    }
   },
 };
 
-export function registerPollsEvents(_moduleManager: ModuleManager) {
-  // No passive event listeners required for this module.
+function handlePollVote(
+  moduleManager: ModuleManager,
+  pollAnswer: PollAnswer | PartialPollAnswer,
+  voterId: string,
+  added: boolean,
+) {
+  const message = pollAnswer.poll.message;
+  if (!message.guildId) return; // DM polls aren't tracked
+  moduleManager.databaseService.publishPollVote({
+    guildId: message.guildId,
+    channelId: message.channelId,
+    messageId: message.id,
+    answerId: pollAnswer.id,
+    voterId,
+    added,
+  });
+}
+
+export function registerPollsEvents(moduleManager: ModuleManager) {
+  moduleManager.client.on(Events.MessagePollVoteAdd, (pollAnswer, userId) =>
+    handlePollVote(moduleManager, pollAnswer, userId, true),
+  );
+  moduleManager.client.on(Events.MessagePollVoteRemove, (pollAnswer, userId) =>
+    handlePollVote(moduleManager, pollAnswer, userId, false),
+  );
 }
 
 export default pollsModule;
