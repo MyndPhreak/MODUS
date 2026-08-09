@@ -38,6 +38,13 @@ const shardInfoModule: BotModule = {
   name: "shard-info",
   hidden: true,
   description: "Shows shard diagnostics and performance metrics",
+  meta: {
+    displayName: "Shard Info",
+    category: "utility",
+    icon: "i-lucide-server-cog",
+    color: "indigo",
+    tags: ["shards", "diagnostics", "status", "health"],
+  },
   data: new SlashCommandBuilder()
     .setName("shard-info")
     .setDescription("Shows shard diagnostics and performance metrics")

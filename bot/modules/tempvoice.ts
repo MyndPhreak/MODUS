@@ -71,6 +71,13 @@ const tempvoiceModule: BotModule = {
   name: "tempvoice",
   registerEvents: registerTempVoiceEvents,
   description: "Temporary voice channels — join a lobby to create your own VC",
+  meta: {
+    displayName: "Temp Voice",
+    category: "voice",
+    icon: "i-lucide-mic-vocal",
+    color: "indigo",
+    tags: ["temporary-channels", "dynamic-vc", "voice-hub", "generator"],
+  },
   data: new SlashCommandBuilder()
     .setName("tempvoice")
     .setDescription("Manage temporary voice channels")

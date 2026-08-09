@@ -583,6 +583,13 @@ const aiModule: BotModule = {
   aiTools: aiCoreTools,
   registerEvents: registerAIEvents,
   description: "AI conversational assistant — @mention the bot to chat",
+  meta: {
+    displayName: "AI Assistant",
+    category: "ai",
+    icon: "i-lucide-bot",
+    color: "violet",
+    tags: ["gpt", "claude", "chat", "assistant", "smart", "vision", "bot"],
+  },
   data: new SlashCommandBuilder()
     .setName("ai")
     .setDescription("Configure the AI assistant module")

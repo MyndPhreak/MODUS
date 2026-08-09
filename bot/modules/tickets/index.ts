@@ -139,6 +139,13 @@ const ticketsModule: BotModule = {
   name: "tickets",
   registerEvents: registerTicketsEvents,
   description: "Private thread-based support ticketing system",
+  meta: {
+    displayName: "Tickets",
+    category: "community",
+    icon: "i-lucide-ticket",
+    color: "sky",
+    tags: ["support", "helpdesk", "transcripts", "modmail", "assistance"],
+  },
   commands: [ticketsCommand, ticketCommand],
   deferReply: false, // handlers manage their own deferral
 

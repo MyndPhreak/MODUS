@@ -108,6 +108,13 @@ const helpModule: BotModule = {
   name: "help",
   description:
     "Browse all available modules and commands in a private paginated view.",
+  meta: {
+    displayName: "Help",
+    category: "utility",
+    icon: "i-lucide-circle-question-mark",
+    color: "gray",
+    tags: ["commands", "docs", "help", "list"],
+  },
   data: new SlashCommandBuilder()
     .setName("help")
     .setDescription("Browse all available modules and commands.")

@@ -43,6 +43,13 @@ const pollsModule: BotModule = {
   name: "polls",
   registerEvents: registerPollsEvents,
   description: "Create and manage native Discord polls",
+  meta: {
+    displayName: "Polls",
+    category: "community",
+    icon: "i-lucide-bar-chart-3",
+    color: "fuchsia",
+    tags: ["voting", "surveys", "multiple-choice", "results", "questions"],
+  },
 
   // We call interaction.reply() ourselves — the poll must be the initial reply.
   skipDefer: true,

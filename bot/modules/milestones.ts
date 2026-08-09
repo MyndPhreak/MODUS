@@ -434,6 +434,13 @@ const milestonesModule: BotModule = {
   registerEvents: registerMilestoneEvents,
   description:
     "Track character milestones, earn achievements, and climb the leaderboard!",
+  meta: {
+    displayName: "Milestones",
+    category: "engagement",
+    icon: "i-lucide-trophy",
+    color: "amber",
+    tags: ["xp", "levels", "rewards", "leaderboard", "rank", "activity"],
+  },
   deferReply: true,
 
   data: new SlashCommandBuilder()

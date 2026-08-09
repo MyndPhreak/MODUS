@@ -440,6 +440,13 @@ async function handleEmbedQuick(
 const embedsModule: BotModule = {
   name: "embeds",
   description: "Create and send rich V2 Component messages to any channel.",
+  meta: {
+    displayName: "Custom Embeds",
+    category: "community",
+    icon: "i-lucide-layout-template",
+    color: "violet",
+    tags: ["visual-builder", "rich-embeds", "webhooks", "builder", "json"],
+  },
   deferReply: false,
 
   commands: [embedCommand.toJSON(), embedQuickCommand.toJSON()],

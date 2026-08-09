@@ -392,6 +392,13 @@ async function handleAutocomplete(
 const tagsModule: BotModule = {
   name: "tags",
   description: "Create and use custom tags/snippets with embeds or text.",
+  meta: {
+    displayName: "Tags",
+    category: "community",
+    icon: "i-lucide-tag",
+    color: "teal",
+    tags: ["snippets", "shortcuts", "canned-responses", "faq", "quick-reply"],
+  },
   // Handlers own their defer: /tag posts publicly, admin subcommands are ephemeral.
   deferReply: false,
 

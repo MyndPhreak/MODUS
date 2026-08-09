@@ -22,6 +22,13 @@ const sayModule: BotModule | null = isTTSAvailable()
   ? {
       name: "say",
       description: "Make the bot speak text in your voice channel",
+      meta: {
+        displayName: "Text-to-Speech",
+        category: "utility",
+        icon: "i-lucide-volume-2",
+        color: "fuchsia",
+        tags: ["tts", "voice", "speech", "announce"],
+      },
       data: new SlashCommandBuilder()
         .setName("say")
         .setDescription("Make the bot speak text in your current voice channel")

@@ -546,6 +546,13 @@ const moderationModule: BotModule = {
   name: "moderation",
   description:
     "Comprehensive moderation toolkit: kick, ban, timeout, warn, purge, slowmode, lock/unlock",
+  meta: {
+    displayName: "Moderation",
+    category: "moderation",
+    icon: "i-lucide-gavel",
+    color: "blue",
+    tags: ["ban", "kick", "timeout", "warn", "mod-logs", "security"],
+  },
   commands: [
     kickCommand,
     banCommand,

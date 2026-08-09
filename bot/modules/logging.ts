@@ -80,6 +80,13 @@ const loggingModule: BotModule = {
   name: "logging",
   registerEvents: registerLoggingEvents,
   description: "Comprehensive audit logging for server forensics and events",
+  meta: {
+    displayName: "Audit Logging",
+    category: "moderation",
+    icon: "i-lucide-scroll-text",
+    color: "cyan",
+    tags: ["audit", "history", "tracking", "mod-logs", "events"],
+  },
   data: new SlashCommandBuilder()
     .setName("logging")
     .setDescription("View logging module status")

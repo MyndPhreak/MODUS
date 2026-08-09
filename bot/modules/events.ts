@@ -155,6 +155,13 @@ const eventsModule: BotModule = {
   name: "events",
   registerEvents: registerEventsEvents,
   description: "Schedule server events natively",
+  meta: {
+    displayName: "Events",
+    category: "community",
+    icon: "i-lucide-calendar-clock",
+    color: "teal",
+    tags: ["scheduler", "calendar", "reminders", "timezones", "community"],
+  },
   skipDefer: true, // We need to showModal before any defer
   data: new SlashCommandBuilder()
     .setName("event")

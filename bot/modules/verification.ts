@@ -123,6 +123,13 @@ const verificationModule: BotModule = {
   name: "verification",
   registerEvents: registerVerificationEvents,
   description: "Protects the server with a customisable verification panel",
+  meta: {
+    displayName: "Verification",
+    category: "moderation",
+    icon: "i-lucide-badge-check",
+    color: "green",
+    tags: ["captcha", "gate", "member-verification", "onboarding", "rules"],
+  },
   data: new SlashCommandBuilder()
     .setName("verification")
     .setDescription("Set up or manage the verification panel")

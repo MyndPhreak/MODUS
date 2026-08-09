@@ -1576,6 +1576,13 @@ const musicModule: BotModule = {
   name: "music",
   description:
     "Play music from YouTube, Spotify, and more with queue management.",
+  meta: {
+    displayName: "Music",
+    category: "voice",
+    icon: "i-lucide-disc-3",
+    color: "violet",
+    tags: ["audio", "playback", "queue", "spotify", "dj", "filters"],
+  },
   deferReply: false, // We handle our own defer for public replies
   aiTools: musicAiTools,
 

@@ -40,6 +40,13 @@ const antiraidModule: BotModule = {
   name: "antiraid",
   registerEvents: registerAntiRaidEvents,
   description: "Protects the server from sudden bot raids and join floods",
+  meta: {
+    displayName: "Anti-Raid",
+    category: "moderation",
+    icon: "i-lucide-siren",
+    color: "rose",
+    tags: ["lockdown", "join-flood", "mass-kick", "protection", "security"],
+  },
   data: new SlashCommandBuilder()
     .setName("antiraid")
     .setDescription("Configure Anti-Raid protection")

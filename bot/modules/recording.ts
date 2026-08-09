@@ -1356,6 +1356,13 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
 const recordingModule: BotModule = {
   name: "recording",
   description: "Record voice channel audio with per-user multi-track support",
+  meta: {
+    displayName: "Recording",
+    category: "voice",
+    icon: "i-lucide-audio-waveform",
+    color: "red",
+    tags: ["voice", "multitrack", "audio", "podcasts", "recording", "wav"],
+  },
   commands: [recordCommand],
   deferReply: true,
 

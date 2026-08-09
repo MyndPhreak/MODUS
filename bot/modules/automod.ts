@@ -721,6 +721,13 @@ const automodModule: BotModule = {
   registerEvents: registerAutoModEvents,
   description:
     "Programmable auto-moderation engine with IF/THEN rules, regex, and conditional logic",
+  meta: {
+    displayName: "AutoMod",
+    category: "moderation",
+    icon: "i-lucide-shield-ban",
+    color: "orange",
+    tags: ["spam", "filters", "bad-words", "anti-invite", "automated", "links"],
+  },
   commands: [automodCommand],
 
   execute: async (

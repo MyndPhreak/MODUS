@@ -244,6 +244,13 @@ const remindersAiTools: AiTool[] = [
 const remindersModule: BotModule = {
   name: "reminders",
   description: "Set, list, and manage reminders with natural language time parsing.",
+  meta: {
+    displayName: "Reminders",
+    category: "utility",
+    icon: "i-lucide-clock",
+    color: "sky",
+    tags: ["timers", "natural-language", "personal", "scheduling"],
+  },
   // skipDefer: context menu "Remind Me" must call showModal() as the FIRST
   // response — the module handles its own defer/reply for slash commands.
   skipDefer: true,

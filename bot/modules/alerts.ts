@@ -20,6 +20,13 @@ const alertsModule: BotModule = {
   name: "alerts",
   registerEvents: registerAlertsEvents,
   description: "Configure automated social media & external alerts",
+  meta: {
+    displayName: "Social Alerts",
+    category: "engagement",
+    icon: "i-lucide-bell-ring",
+    color: "pink",
+    tags: ["twitch", "youtube", "social", "stream", "notifications"],
+  },
   data: new SlashCommandBuilder()
     .setName("alerts")
     .setDescription("Configure social media alerts")

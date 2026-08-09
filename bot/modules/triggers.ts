@@ -67,6 +67,13 @@ function buildWebhookUrl(secret: string): string {
 const triggersModule: BotModule = {
   name: "triggers",
   description: "Custom webhook triggers — post embeds on external events",
+  meta: {
+    displayName: "Triggers",
+    category: "engagement",
+    icon: "i-lucide-zap",
+    color: "emerald",
+    tags: ["auto-response", "custom-commands", "keywords", "automation"],
+  },
   data: new SlashCommandBuilder()
     .setName("triggers")
     .setDescription("Manage custom webhook triggers")

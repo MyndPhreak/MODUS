@@ -184,6 +184,13 @@ const welcomeModule: BotModule = {
   name: "welcome",
   registerEvents: registerWelcomeEvents,
   description: "Send beautiful welcome images when new members join",
+  meta: {
+    displayName: "Welcome Image",
+    category: "engagement",
+    icon: "i-lucide-party-popper",
+    color: "purple",
+    tags: ["canvas", "welcome-card", "join", "greeting", "banner"],
+  },
   data: new SlashCommandBuilder()
     .setName("welcome")
     .setDescription("Configure the welcome image module")

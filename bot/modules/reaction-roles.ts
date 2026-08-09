@@ -162,6 +162,13 @@ const buttonRolesModule: BotModule = {
   name: "reaction-roles", // legacy module key preserved for backward compat
   registerEvents: registerReactionRolesEvents,
   description: "Create button or dropdown panels that toggle roles",
+  meta: {
+    displayName: "Reaction Roles",
+    category: "engagement",
+    icon: "i-lucide-smile-plus",
+    color: "yellow",
+    tags: ["roles", "self-assign", "reactions", "buttons", "emotes"],
+  },
   data: new SlashCommandBuilder()
     .setName("buttonroles")
     .setDescription("Manage button/dropdown role panels")

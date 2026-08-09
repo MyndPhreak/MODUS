@@ -5,6 +5,13 @@ import { buildV2Layout } from '../lib/components-v2';
 const pingModule: BotModule = {
     name: 'ping',
     description: 'Replies with Pong and latency metrics!',
+    meta: {
+        displayName: 'Ping',
+        category: 'utility',
+        icon: 'i-lucide-activity',
+        color: 'cyan',
+        tags: ['latency', 'status', 'health', 'ping'],
+    },
     data: new SlashCommandBuilder()
         .setName('ping')
         .setDescription('Replies with Pong and latency metrics!')
