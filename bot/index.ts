@@ -56,7 +56,14 @@ const client = new Client({
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildMessagePolls,
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.Reaction],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.GuildMember,
+    Partials.Reaction,
+    Partials.Poll,
+    Partials.PollAnswer,
+  ],
 });
 
 // Initialize discord-player
