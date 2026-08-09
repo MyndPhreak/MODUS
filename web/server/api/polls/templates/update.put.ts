@@ -22,10 +22,34 @@ export default defineEventHandler(async (event) => {
         statusMessage: "options must have between 2 and 10 entries.",
       });
     }
+    // Discord caps each answer's text at 55 chars — validate at save time
+    // too (matching send.post.ts) so a template can't be saved with
+    // content that will always fail to send.
+    const invalidOption = body.data.options.find(
+      (opt: unknown) =>
+        typeof opt !== "string" || opt.trim().length === 0 || opt.length > 55,
+    );
+    if (invalidOption !== undefined) {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          "Each option must be a non-empty string of 55 characters or fewer.",
+      });
+    }
   }
+  if (body.data.question !== undefined) {
+    // Discord caps poll question text at 300 chars.
+    if (typeof body.data.question !== "string" || body.data.question.length > 300) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "question must be a string of 300 characters or fewer.",
+      });
+    }
+  }
+  let durationHours: number | undefined;
   if (body.data.duration_hours !== undefined) {
-    const d = Number(body.data.duration_hours);
-    if (!Number.isInteger(d) || d < 1 || d > 168) {
+    durationHours = Number(body.data.duration_hours);
+    if (!Number.isInteger(durationHours) || durationHours < 1 || durationHours > 168) {
       throw createError({
         statusCode: 400,
         statusMessage: "duration_hours must be an integer between 1 and 168.",
@@ -52,7 +76,7 @@ export default defineEventHandler(async (event) => {
       name: body.data.name,
       question: body.data.question,
       options: body.data.options,
-      durationHours: body.data.duration_hours,
+      durationHours,
       allowMultiselect: body.data.allow_multiselect,
     });
     return { template };
