@@ -10,8 +10,14 @@ import {
   ActionRowBuilder,
   ModalSubmitInteraction,
   MessageFlags,
+  EmbedBuilder,
+  TextChannel,
+  Guild,
+  GuildScheduledEvent,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
+import { EventsSettingsSchema, type EventsSettingsType } from "../lib/schemas";
+import { parseSettings } from "../lib/validateSettings";
 
 // ─── Timezone Abbreviation Map ───────────────────────────────────────────────
 // Maps common timezone abbreviations to UTC offset in minutes.
@@ -147,6 +153,51 @@ function parseTimezone(input: string): number | null {
   }
 
   return null;
+}
+
+/**
+ * Post the creation announcement to the configured channel and persist which
+ * message to keep in sync going forward. Intentionally NOT shared with the
+ * dashboard's equivalent logic in
+ * web/server/api/discord/scheduled-events.post.ts — see that file's header
+ * comment for why.
+ */
+async function postEventAnnouncement(
+  moduleManager: ModuleManager,
+  guild: Guild,
+  scheduledEvent: GuildScheduledEvent,
+  settings: EventsSettingsType,
+) {
+  if (!settings.announcementChannelId) return;
+  const channel = guild.channels.cache.get(settings.announcementChannelId);
+  if (!channel || !channel.isTextBased()) return;
+
+  const roleMentions = settings.notifyRoleIds.map((id) => `<@&${id}>`).join(" ");
+  const startUnix = Math.floor(
+    (scheduledEvent.scheduledStartAt ?? new Date()).getTime() / 1000,
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📅 ${scheduledEvent.name}`)
+    .setColor(0x14b8a6)
+    .addFields(
+      { name: "Starts", value: `<t:${startUnix}:F> (<t:${startUnix}:R>)` },
+      { name: "Location", value: scheduledEvent.entityMetadata?.location || "TBD" },
+      { name: "Interested", value: "0", inline: true },
+    );
+  if (scheduledEvent.description) embed.setDescription(scheduledEvent.description);
+
+  const message = await (channel as TextChannel).send({
+    content: roleMentions || undefined,
+    embeds: [embed],
+  });
+
+  await moduleManager.databaseService.createEventAnnouncement({
+    guild_id: guild.id,
+    event_id: scheduledEvent.id,
+    channel_id: channel.id,
+    message_id: message.id,
+  });
 }
 
 // ─── Command Definition ──────────────────────────────────────────────────────
@@ -348,6 +399,27 @@ const eventsModule: BotModule = {
         description,
         reason: `Created via MODUS events module by ${interaction.user.tag}`,
       });
+
+      // Best-effort announcement — event creation already succeeded, so a
+      // failure here is logged, not surfaced to the user.
+      try {
+        const settings = parseSettings(
+          EventsSettingsSchema,
+          await moduleManager.databaseService.getModuleSettings(guild.id, "events"),
+          "events",
+          guild.id,
+        );
+        if (settings) {
+          await postEventAnnouncement(moduleManager, guild, event, settings);
+        }
+      } catch (err) {
+        moduleManager.logger.error(
+          "Failed to post event announcement",
+          guild.id,
+          err,
+          "events",
+        );
+      }
 
       const unixTs = Math.floor(utcDate.getTime() / 1000);
       await interaction.editReply(
