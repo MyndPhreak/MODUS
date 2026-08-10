@@ -49,7 +49,7 @@
           <div class="relative">
             <div class="flex items-center gap-2 mb-3">
               <div
-                class="p-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20"
+                class="w-7 h-7 rounded-lg bg-primary-500/10 border border-primary-500/20 flex items-center justify-center shrink-0"
               >
                 <UIcon
                   name="i-heroicons-hashtag"
@@ -141,7 +141,7 @@
           <div class="relative">
             <div class="flex items-center gap-2 mb-3">
               <div
-                class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
+                class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0"
               >
                 <UIcon name="i-heroicons-eye" class="text-indigo-400 text-sm" />
               </div>
@@ -345,9 +345,9 @@
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
             <div
-              class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20"
+              class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
             >
-              <UIcon name="i-heroicons-trash" class="text-red-400 text-xl" />
+              <UIcon name="i-heroicons-trash" class="w-6 h-6 text-red-400" />
             </div>
             <div>
               <h3 class="text-lg font-bold text-white">Delete Preset</h3>

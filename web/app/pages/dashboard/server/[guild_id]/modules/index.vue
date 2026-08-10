@@ -348,7 +348,7 @@
         <UCard :ui="{ root: 'border border-white/10 bg-white/[0.02]' }">
           <div class="space-y-4">
             <div class="flex items-center gap-3 mb-2">
-              <div class="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+              <div class="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                 <UIcon name="i-lucide-users" class="w-5 h-5" />
               </div>
               <div>
@@ -441,11 +441,10 @@
       <template #content>
         <div class="p-6 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400">
-              <UIcon
-                name="i-lucide-triangle-alert"
-                class="w-6 h-6"
-              />
+            <div
+              class="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 flex items-center justify-center shrink-0"
+            >
+              <UIcon name="i-lucide-triangle-alert" class="w-6 h-6" />
             </div>
             <div>
               <h3 class="text-lg font-bold text-white">Remove Server</h3>

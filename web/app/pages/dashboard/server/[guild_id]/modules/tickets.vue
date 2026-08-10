@@ -4,13 +4,15 @@
     <div class="flex items-center gap-4">
       <NuxtLink
         :to="`/dashboard/server/${guildId}/modules`"
-        class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+        class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center shrink-0"
       >
-        <UIcon name="i-heroicons-arrow-left" class="text-gray-400" />
+        <UIcon name="i-heroicons-arrow-left" class="w-5 h-5 text-gray-400" />
       </NuxtLink>
       <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20">
-          <UIcon name="i-heroicons-ticket" class="text-sky-400 text-lg" />
+        <div
+          class="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0"
+        >
+          <UIcon name="i-heroicons-ticket" class="w-5 h-5 text-sky-400" />
         </div>
         <div>
           <h2 class="text-xl font-bold text-white">Ticket System</h2>
@@ -37,7 +39,7 @@
       />
       <div class="relative space-y-5">
         <div class="flex items-center gap-2 mb-1">
-          <div class="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+          <div class="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
             <UIcon name="i-heroicons-megaphone" class="text-sky-400" />
           </div>
           <div>
@@ -146,7 +148,7 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <div
-              class="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20"
+              class="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon name="i-heroicons-squares-2x2" class="text-violet-400" />
             </div>
@@ -289,7 +291,7 @@
         <div class="relative space-y-4">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20"
+              class="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon name="i-heroicons-user-group" class="text-blue-400" />
             </div>
@@ -374,7 +376,7 @@
         <div class="relative space-y-5">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+              class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon
                 name="i-heroicons-document-text"
@@ -429,7 +431,7 @@
       <div class="relative space-y-5">
         <div class="flex items-center gap-2 mb-1">
           <div
-            class="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20"
+            class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon name="i-heroicons-cog-6-tooth" class="text-amber-400" />
           </div>
@@ -476,7 +478,7 @@
       <div class="relative space-y-5">
         <div class="flex items-center gap-2 mb-1">
           <div
-            class="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20"
+            class="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon name="i-heroicons-globe-alt" class="text-teal-400" />
           </div>
@@ -546,7 +548,7 @@
       <div class="relative space-y-4">
         <div class="flex items-center gap-2 mb-1">
           <div
-            class="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20"
+            class="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon name="i-heroicons-clock" class="text-teal-400" />
           </div>
@@ -597,7 +599,7 @@
       <div class="relative space-y-3">
         <div class="flex items-center gap-2">
           <div
-            class="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20"
+            class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon
               name="i-heroicons-information-circle"

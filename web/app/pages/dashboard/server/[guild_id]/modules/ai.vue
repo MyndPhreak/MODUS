@@ -5,14 +5,14 @@
       <div class="flex items-center gap-4">
         <NuxtLink
           :to="`/dashboard/server/${guildId}/modules`"
-          class="p-2 rounded-lg hover:bg-white/5 transition-colors"
+          class="w-9 h-9 rounded-lg hover:bg-white/5 transition-colors flex items-center justify-center shrink-0"
         >
           <UIcon name="i-heroicons-arrow-left" class="w-5 h-5" />
         </NuxtLink>
         <div>
           <div class="flex items-center gap-3">
             <div
-              class="p-2 rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20"
+              class="w-10 h-10 rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon
                 name="i-heroicons-cpu-chip"

@@ -4,15 +4,17 @@
     <div class="flex items-center gap-4">
       <NuxtLink
         :to="`/dashboard/server/${guildId}/modules`"
-        class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+        class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center shrink-0"
       >
-        <UIcon name="i-heroicons-arrow-left" class="text-gray-400" />
+        <UIcon name="i-heroicons-arrow-left" class="w-5 h-5 text-gray-400" />
       </NuxtLink>
       <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+        <div
+          class="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0"
+        >
           <UIcon
             name="i-heroicons-shield-exclamation"
-            class="text-blue-400 text-lg"
+            class="w-5 h-5 text-blue-400"
           />
         </div>
         <div>
@@ -45,7 +47,7 @@
         <div class="relative space-y-5">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20"
+              class="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon name="i-heroicons-cog-6-tooth" class="text-blue-400" />
             </div>
@@ -165,7 +167,7 @@
         <div class="relative space-y-5">
           <div class="flex items-center gap-2 mb-1">
             <div
-              class="p-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20"
+              class="w-7 h-7 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0"
             >
               <UIcon
                 name="i-heroicons-exclamation-triangle"
@@ -243,7 +245,7 @@
       <div class="relative">
         <div class="flex items-center gap-2 mb-4">
           <div
-            class="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20"
+            class="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0"
           >
             <UIcon name="i-heroicons-key" class="text-orange-400" />
           </div>
