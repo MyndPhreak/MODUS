@@ -9,6 +9,7 @@ export interface CalendarEvent {
   scheduledStartTime: string;
   scheduledEndTime: string | null;
   status: number;
+  entityType: number;
   location: string | null;
   userCount: number;
 }

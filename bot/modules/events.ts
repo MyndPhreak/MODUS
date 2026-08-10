@@ -210,6 +210,8 @@ async function updateInterestCount(
   moduleManager: ModuleManager,
   scheduledEvent: GuildScheduledEvent,
 ) {
+  if (!(await moduleManager.databaseService.isModuleEnabled(scheduledEvent.guildId, "events"))) return;
+
   const tracked = await moduleManager.databaseService.getEventAnnouncement(
     scheduledEvent.guildId,
     scheduledEvent.id,
@@ -254,7 +256,14 @@ function scheduleInterestUpdate(
     key,
     setTimeout(() => {
       interestDebounce.delete(key);
-      updateInterestCount(moduleManager, scheduledEvent);
+      void updateInterestCount(moduleManager, scheduledEvent).catch((err) =>
+        moduleManager.logger.error(
+          "Unhandled error updating event interest count",
+          scheduledEvent.guildId,
+          err,
+          "events",
+        ),
+      );
     }, INTEREST_DEBOUNCE_MS),
   );
 }
@@ -266,6 +275,8 @@ async function markAnnouncementLive(
   eventId: string,
   eventName: string,
 ) {
+  if (!(await moduleManager.databaseService.isModuleEnabled(guildId, "events"))) return;
+
   const tracked = await moduleManager.databaseService.getEventAnnouncement(guildId, eventId);
   if (!tracked) return;
 
@@ -532,7 +543,15 @@ export function registerEventsEvents(moduleManager: ModuleManager) {
   client.on("guildScheduledEventUpdate", (oldEvent, newEvent) => {
     const wasActive = oldEvent?.status === 2; // GuildScheduledEventStatus.Active
     if (!wasActive && newEvent.status === 2) {
-      markAnnouncementLive(moduleManager, newEvent.guildId, newEvent.id, newEvent.name);
+      void markAnnouncementLive(moduleManager, newEvent.guildId, newEvent.id, newEvent.name).catch(
+        (err) =>
+          moduleManager.logger.error(
+            "Unhandled error marking event announcement live",
+            newEvent.guildId,
+            err,
+            "events",
+          ),
+      );
     }
   });
 

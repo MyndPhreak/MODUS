@@ -97,47 +97,73 @@ export default defineEventHandler(async (event) => {
       const settings = await repos.guildConfigs.getModuleSettings(guildId, "events");
       const announcementChannelId = settings?.announcementChannelId as string | undefined;
       if (announcementChannelId) {
-        const roleMentions = ((settings?.notifyRoleIds as string[]) || [])
-          .map((id) => `<@&${id}>`)
-          .join(" ");
-        const startUnix = Math.floor(new Date(scheduledStartTime).getTime() / 1000);
+        // Confirm the configured channel actually belongs to this guild.
+        // `announcementChannelId` comes from unvalidated module settings, so
+        // without this check a manager of guildId could point it at a
+        // channel in a different guild the bot is in and have this route
+        // post an attacker-controlled embed there. Same defense as
+        // send-embed.post.ts's channel-ownership check.
+        let channelGuildId: string | undefined;
+        try {
+          const channel = (await $fetch(
+            `https://discord.com/api/v10/channels/${announcementChannelId}`,
+            { headers: { Authorization: `Bot ${botToken}` } },
+          )) as { guild_id?: string };
+          channelGuildId = channel.guild_id;
+        } catch (error: any) {
+          console.error(
+            `[Scheduled Events API] Event ${created.id} created but announcement channel ${announcementChannelId} could not be verified:`,
+            error?.message || error,
+          );
+        }
 
-        const message: any = await $fetch(
-          `https://discord.com/api/v10/channels/${announcementChannelId}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bot ${botToken}`,
-              "Content-Type": "application/json",
+        if (channelGuildId !== guildId) {
+          console.error(
+            `[Scheduled Events API] Event ${created.id} created but announcement skipped: configured channel ${announcementChannelId} does not belong to guild ${guildId}.`,
+          );
+        } else {
+          const roleMentions = ((settings?.notifyRoleIds as string[]) || [])
+            .map((id) => `<@&${id}>`)
+            .join(" ");
+          const startUnix = Math.floor(new Date(scheduledStartTime).getTime() / 1000);
+
+          const message: any = await $fetch(
+            `https://discord.com/api/v10/channels/${announcementChannelId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bot ${botToken}`,
+                "Content-Type": "application/json",
+              },
+              body: {
+                content: roleMentions || undefined,
+                embeds: [
+                  {
+                    title: `📅 ${name}`,
+                    description: description || undefined,
+                    color: 0x14b8a6,
+                    fields: [
+                      {
+                        name: "Starts",
+                        value: `<t:${startUnix}:F> (<t:${startUnix}:R>)`,
+                        inline: false,
+                      },
+                      { name: "Location", value: location, inline: false },
+                      { name: "Interested", value: "0", inline: true },
+                    ],
+                  },
+                ],
+              },
             },
-            body: {
-              content: roleMentions || undefined,
-              embeds: [
-                {
-                  title: `📅 ${name}`,
-                  description: description || undefined,
-                  color: 0x14b8a6,
-                  fields: [
-                    {
-                      name: "Starts",
-                      value: `<t:${startUnix}:F> (<t:${startUnix}:R>)`,
-                      inline: false,
-                    },
-                    { name: "Location", value: location, inline: false },
-                    { name: "Interested", value: "0", inline: true },
-                  ],
-                },
-              ],
-            },
-          },
-        );
-        await repos.eventAnnouncements.create({
-          guildId,
-          eventId: created.id,
-          channelId: announcementChannelId,
-          messageId: message.id,
-        });
-        announcementPosted = true;
+          );
+          await repos.eventAnnouncements.create({
+            guildId,
+            eventId: created.id,
+            channelId: announcementChannelId,
+            messageId: message.id,
+          });
+          announcementPosted = true;
+        }
       }
     }
   } catch (error: any) {

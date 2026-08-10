@@ -225,11 +225,21 @@
               </div>
               <div class="flex items-center gap-1 shrink-0">
                 <UButton
+                  v-if="ev.entityType === 3"
                   icon="i-heroicons-pencil"
                   color="neutral"
                   variant="ghost"
                   size="xs"
                   @click="startEdit(ev)"
+                />
+                <UButton
+                  v-else
+                  icon="i-heroicons-pencil"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  disabled
+                  title="This event isn't managed by this calendar."
                 />
                 <UButton
                   icon="i-heroicons-trash"
@@ -306,7 +316,7 @@ const savingSettings = ref(false);
 const saveSettings = async () => {
   savingSettings.value = true;
   await saveModuleSettings("events", {
-    announcementChannelId: settings.value.announcementChannelId || null,
+    announcementChannelId: settings.value.announcementChannelId || undefined,
     notifyRoleIds: settings.value.notifyRoleIds,
   });
   savingSettings.value = false;
@@ -437,6 +447,25 @@ function cancelEdit() {
   if (selectedDate.value) resetForm(selectedDate.value);
 }
 
+/**
+ * Compute the end time for the submitted start time. When editing an
+ * existing event, preserve its original duration instead of forcing a flat
+ * 1-hour window (which would silently truncate multi-hour events). New
+ * events default to 1 hour.
+ */
+function computeEndDate(startDate: Date): Date {
+  if (editingEventId.value) {
+    const original = events.value.find((e) => e.id === editingEventId.value);
+    if (original?.scheduledEndTime) {
+      const originalStart = new Date(original.scheduledStartTime).getTime();
+      const originalEnd = new Date(original.scheduledEndTime).getTime();
+      const duration = originalEnd - originalStart;
+      if (duration > 0) return new Date(startDate.getTime() + duration);
+    }
+  }
+  return new Date(startDate.getTime() + 60 * 60 * 1000);
+}
+
 async function submitForm() {
   if (!form.value.name.trim() || !form.value.datetime || !form.value.location.trim()) {
     toast.add({
@@ -448,7 +477,7 @@ async function submitForm() {
   }
 
   const startDate = new Date(form.value.datetime);
-  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  const endDate = computeEndDate(startDate);
 
   try {
     if (editingEventId.value) {
