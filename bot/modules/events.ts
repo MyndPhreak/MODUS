@@ -200,6 +200,96 @@ async function postEventAnnouncement(
   });
 }
 
+// ─── Live-status & interest-count sync ──────────────────────────────────
+
+const interestDebounce = new Map<string, NodeJS.Timeout>();
+const INTEREST_DEBOUNCE_MS = 5_000;
+
+/** Re-fetch the current subscriber count and edit the tracked announcement's "Interested" field. */
+async function updateInterestCount(
+  moduleManager: ModuleManager,
+  scheduledEvent: GuildScheduledEvent,
+) {
+  const tracked = await moduleManager.databaseService.getEventAnnouncement(
+    scheduledEvent.guildId,
+    scheduledEvent.id,
+  );
+  if (!tracked) return;
+
+  try {
+    const channel = await scheduledEvent.guild?.channels.fetch(tracked.channelId);
+    if (!channel || !channel.isTextBased()) return;
+    const message = await (channel as TextChannel).messages.fetch(tracked.messageId);
+    const fresh = await scheduledEvent.guild!.scheduledEvents.fetch({
+      guildScheduledEvent: scheduledEvent.id,
+      withUserCount: true,
+    });
+
+    const sourceEmbed = message.embeds[0];
+    if (!sourceEmbed) return;
+    const fields = sourceEmbed.fields.map((f) =>
+      f.name === "Interested" ? { ...f, value: String(fresh.userCount ?? 0) } : f,
+    );
+    const embed = EmbedBuilder.from(sourceEmbed).setFields(fields);
+    await message.edit({ embeds: [embed] });
+  } catch (err) {
+    moduleManager.logger.error(
+      "Failed to update event interest count",
+      scheduledEvent.guildId,
+      err,
+      "events",
+    );
+  }
+}
+
+/** Debounce interest-count edits so a burst of RSVP clicks doesn't spam Discord's edit endpoint. */
+function scheduleInterestUpdate(
+  moduleManager: ModuleManager,
+  scheduledEvent: GuildScheduledEvent,
+) {
+  const key = `${scheduledEvent.guildId}:${scheduledEvent.id}`;
+  const existing = interestDebounce.get(key);
+  if (existing) clearTimeout(existing);
+  interestDebounce.set(
+    key,
+    setTimeout(() => {
+      interestDebounce.delete(key);
+      updateInterestCount(moduleManager, scheduledEvent);
+    }, INTEREST_DEBOUNCE_MS),
+  );
+}
+
+/** Edit the tracked announcement in place to show the event is live now. */
+async function markAnnouncementLive(
+  moduleManager: ModuleManager,
+  guildId: string,
+  eventId: string,
+  eventName: string,
+) {
+  const tracked = await moduleManager.databaseService.getEventAnnouncement(guildId, eventId);
+  if (!tracked) return;
+
+  try {
+    const guild = moduleManager.client.guilds.cache.get(guildId);
+    const channel = await guild?.channels.fetch(tracked.channelId);
+    if (!channel || !channel.isTextBased()) return;
+    const message = await (channel as TextChannel).messages.fetch(tracked.messageId);
+    const sourceEmbed = message.embeds[0];
+    if (!sourceEmbed) return;
+    const embed = EmbedBuilder.from(sourceEmbed)
+      .setTitle(`🔴 LIVE NOW: ${eventName}`)
+      .setColor(0xed4245);
+    await message.edit({ embeds: [embed] });
+  } catch (err) {
+    moduleManager.logger.error(
+      "Failed to mark event announcement live",
+      guildId,
+      err,
+      "events",
+    );
+  }
+}
+
 // ─── Command Definition ──────────────────────────────────────────────────────
 
 const eventsModule: BotModule = {
@@ -437,7 +527,27 @@ const eventsModule: BotModule = {
 };
 
 export function registerEventsEvents(moduleManager: ModuleManager) {
-  // Stub: no passive event listeners needed at the moment
+  const client = moduleManager.client;
+
+  client.on("guildScheduledEventUpdate", (oldEvent, newEvent) => {
+    const wasActive = oldEvent?.status === 2; // GuildScheduledEventStatus.Active
+    if (!wasActive && newEvent.status === 2) {
+      markAnnouncementLive(moduleManager, newEvent.guildId, newEvent.id, newEvent.name);
+    }
+  });
+
+  client.on("guildScheduledEventUserAdd", (scheduledEvent) => {
+    scheduleInterestUpdate(moduleManager, scheduledEvent as GuildScheduledEvent);
+  });
+  client.on("guildScheduledEventUserRemove", (scheduledEvent) => {
+    scheduleInterestUpdate(moduleManager, scheduledEvent as GuildScheduledEvent);
+  });
+
+  moduleManager.logger.info(
+    "guildScheduledEvent listeners registered.",
+    undefined,
+    "events",
+  );
 }
 
 export default eventsModule;
