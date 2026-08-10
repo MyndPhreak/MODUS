@@ -14,4 +14,4 @@ export * from "./repositories/temp-voice";
 export * from "./repositories/triggers";
 export * from "./repositories/ticket-transcripts";
 export * from "./repositories/reminders";
-
+export * from "./repositories/event-announcements";
