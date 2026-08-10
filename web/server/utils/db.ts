@@ -19,6 +19,7 @@ import {
   TagRepository,
   TempVoiceChannelRepository,
   TriggerRepository,
+  EventAnnouncementRepository,
   TranscriptRepository,
   type Database,
 } from "@modus/db";
@@ -37,6 +38,7 @@ export interface Repos {
   tags: TagRepository;
   tempVoice: TempVoiceChannelRepository;
   triggers: TriggerRepository;
+  eventAnnouncements: EventAnnouncementRepository;
   transcripts: TranscriptRepository;
 }
 
@@ -65,6 +67,7 @@ export function getRepos(): Repos | null {
       tags: new TagRepository(db),
       tempVoice: new TempVoiceChannelRepository(db),
       triggers: new TriggerRepository(db),
+      eventAnnouncements: new EventAnnouncementRepository(db),
       transcripts: new TranscriptRepository(db),
     };
     return cached;
