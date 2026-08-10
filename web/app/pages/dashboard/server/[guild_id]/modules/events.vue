@@ -202,6 +202,79 @@
         </div>
       </div>
     </div>
+
+    <!-- Day detail / create / edit modal -->
+    <UModal v-model:open="showDayModal" :title="selectedDateLabel">
+      <template #body>
+        <div class="space-y-4 p-1">
+          <div v-if="selectedDayEvents.length > 0" class="space-y-2">
+            <div class="text-[10px] text-gray-500 uppercase tracking-wider">
+              Events on this day
+            </div>
+            <div
+              v-for="ev in selectedDayEvents"
+              :key="ev.id"
+              class="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5"
+            >
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-white truncate">{{ ev.name }}</div>
+                <div class="text-[10px] text-gray-500">
+                  {{ new Date(ev.scheduledStartTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) }}
+                  · {{ ev.userCount }} interested
+                </div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <UButton
+                  icon="i-heroicons-pencil"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  @click="startEdit(ev)"
+                />
+                <UButton
+                  icon="i-heroicons-trash"
+                  color="error"
+                  variant="ghost"
+                  size="xs"
+                  @click="removeEvent(ev)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider">
+            {{ editingEventId ? "Edit event" : "Add an event" }}
+          </div>
+          <UFormField label="Name">
+            <UInput v-model="form.name" placeholder="e.g. Community Game Night" class="w-full" />
+          </UFormField>
+          <UFormField label="Date & Time" hint="In your local timezone.">
+            <UInput v-model="form.datetime" type="datetime-local" class="w-full" />
+          </UFormField>
+          <UFormField label="Location">
+            <UInput v-model="form.location" placeholder="Voice channel, URL, or text" class="w-full" />
+          </UFormField>
+          <UFormField label="Description (optional)">
+            <UTextarea v-model="form.description" :rows="2" class="w-full" />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex gap-2 justify-end w-full">
+          <UButton v-if="editingEventId" variant="ghost" color="neutral" @click="cancelEdit">
+            Cancel Edit
+          </UButton>
+          <UButton
+            color="primary"
+            :icon="editingEventId ? 'i-heroicons-check' : 'i-heroicons-plus'"
+            :loading="actionLoading"
+            @click="submitForm"
+          >
+            {{ editingEventId ? "Save Changes" : "Add Event" }}
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -220,7 +293,8 @@ const {
   channelOptions,
   roleOptions,
 } = useServerSettings(guildId);
-const { events, eventsByDay, loading, fetchEvents } = useEvents(guildId);
+const { events, eventsByDay, loading, actionLoading, fetchEvents, createEvent, updateEvent, deleteEvent } =
+  useEvents(guildId);
 
 // ── Settings ──
 const settings = ref({
@@ -298,9 +372,119 @@ function goToday() {
   viewDate.value = new Date();
 }
 
-// Placeholder — replaced with a real day-detail/create modal in the next task.
+// ── Day modal ──
+const showDayModal = ref(false);
+const selectedDate = ref<Date | null>(null);
+const editingEventId = ref<string | null>(null);
+const toast = useToast();
+
+const selectedDateLabel = computed(() =>
+  selectedDate.value
+    ? selectedDate.value.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
+    : "",
+);
+
+const selectedDayEvents = computed(() =>
+  selectedDate.value ? eventsByDay.value.get(selectedDate.value.toDateString()) || [] : [],
+);
+
+const form = ref({
+  name: "",
+  datetime: "",
+  location: "",
+  description: "",
+});
+
+/** Format an ISO timestamp as a `datetime-local` input value, in the browser's local time. */
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function resetForm(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  form.value = {
+    name: "",
+    datetime: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T19:00`,
+    location: "",
+    description: "",
+  };
+  editingEventId.value = null;
+}
+
 function openDayModal(date: Date) {
-  console.log("day clicked", date);
+  selectedDate.value = date;
+  resetForm(date);
+  showDayModal.value = true;
+}
+
+function startEdit(ev: import("~/composables/useEvents").CalendarEvent) {
+  editingEventId.value = ev.id;
+  form.value = {
+    name: ev.name,
+    datetime: toDatetimeLocalValue(ev.scheduledStartTime),
+    location: ev.location || "",
+    description: ev.description || "",
+  };
+}
+
+function cancelEdit() {
+  if (selectedDate.value) resetForm(selectedDate.value);
+}
+
+async function submitForm() {
+  if (!form.value.name.trim() || !form.value.datetime || !form.value.location.trim()) {
+    toast.add({
+      title: "Missing fields",
+      description: "Name, date/time, and location are required.",
+      color: "error",
+    });
+    return;
+  }
+
+  const startDate = new Date(form.value.datetime);
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+
+  try {
+    if (editingEventId.value) {
+      await updateEvent(editingEventId.value, {
+        name: form.value.name,
+        description: form.value.description || undefined,
+        scheduled_start_time: startDate.toISOString(),
+        scheduled_end_time: endDate.toISOString(),
+        location: form.value.location,
+      });
+      toast.add({ title: "Event updated", color: "success" });
+    } else {
+      await createEvent({
+        name: form.value.name,
+        description: form.value.description || undefined,
+        scheduled_start_time: startDate.toISOString(),
+        scheduled_end_time: endDate.toISOString(),
+        location: form.value.location,
+      });
+      toast.add({ title: "Event created", color: "success" });
+    }
+    if (selectedDate.value) resetForm(selectedDate.value);
+  } catch {
+    // Error toast already shown by useEvents.
+  }
+}
+
+async function removeEvent(ev: import("~/composables/useEvents").CalendarEvent) {
+  if (!confirm(`Delete "${ev.name}"? This cannot be undone.`)) return;
+  try {
+    await deleteEvent(ev.id);
+    toast.add({ title: "Event deleted", color: "success" });
+    if (editingEventId.value === ev.id && selectedDate.value) resetForm(selectedDate.value);
+  } catch {
+    // Error toast already shown by useEvents.
+  }
 }
 
 onMounted(() => {
