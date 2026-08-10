@@ -634,3 +634,34 @@ export const reminders = pgTable(
 export type Reminder = typeof reminders.$inferSelect;
 export type NewReminder = typeof reminders.$inferInsert;
 
+// ── event_announcements ─────────────────────────────────────────────────────
+// Tracks which channel message announces a given Discord scheduled event, so
+// the bot can keep it in sync (interested-count edits, "now live" status)
+// without duplicating event data itself. Discord remains the source of
+// truth for the event; this table only tracks the announcement message.
+
+export const eventAnnouncements = pgTable(
+  "event_announcements",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    eventId: text("event_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    messageId: text("message_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildEvent: uniqueIndex("event_announcements_guild_event_idx").on(
+      t.guildId,
+      t.eventId,
+    ),
+  }),
+);
+
+export type EventAnnouncement = typeof eventAnnouncements.$inferSelect;
+export type NewEventAnnouncement = typeof eventAnnouncements.$inferInsert;
+
