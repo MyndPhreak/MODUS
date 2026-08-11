@@ -21,20 +21,20 @@
 
       <div class="we-toolbar-group">
         <span class="we-label">W</span>
-        <input
-          v-model.number="template.canvasWidth"
-          type="number"
-          class="we-num-input w-16"
-          min="200"
-          max="1920"
+        <UInputNumber
+          v-model="template.canvasWidth"
+          :min="200"
+          :max="1920"
+          size="xs"
+          class="w-20"
         />
         <span class="we-label">H</span>
-        <input
-          v-model.number="template.canvasHeight"
-          type="number"
-          class="we-num-input w-16"
-          min="100"
-          max="1080"
+        <UInputNumber
+          v-model="template.canvasHeight"
+          :min="100"
+          :max="1080"
+          size="xs"
+          class="w-20"
         />
       </div>
 
