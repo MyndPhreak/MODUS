@@ -67,20 +67,15 @@
 
       <!-- Background Image -->
       <div class="we-toolbar-group">
-        <button
-          class="we-tool-btn"
-          :class="{ 'text-violet-400': !!template.backgroundImage }"
-          title="Upload background image"
-          @click="($refs.bgImageInput as HTMLInputElement).click()"
-        >
-          <UIcon name="i-heroicons-photo" />
-        </button>
-        <input
-          ref="bgImageInput"
-          type="file"
+        <UFileUpload
+          v-model="bgImageFile"
           accept="image/*"
-          class="sr-only"
-          @change="handleBgImageUpload"
+          variant="button"
+          :preview="false"
+          icon="i-heroicons-photo"
+          color="neutral"
+          size="xs"
+          :class="{ 'text-violet-400': !!template.backgroundImage }"
         />
         <button
           v-if="template.backgroundImage"
@@ -921,6 +916,7 @@ const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
 const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
+const bgImageFile = ref<File | null>(null);
 
 // ── Background Image ──
 
@@ -946,11 +942,7 @@ watch(
   { immediate: true },
 );
 
-async function handleBgImageUpload(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-
+async function uploadBgImage(file: File) {
   // Immediately preview via data URL
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -988,9 +980,13 @@ async function handleBgImageUpload(event: Event) {
     });
   } finally {
     bgUploading.value = false;
-    input.value = "";
+    bgImageFile.value = null;
   }
 }
+
+watch(bgImageFile, (file) => {
+  if (file) uploadBgImage(file);
+});
 
 function removeBgImage() {
   template.value.backgroundImage = undefined;
