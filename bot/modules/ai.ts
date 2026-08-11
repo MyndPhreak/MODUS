@@ -287,7 +287,7 @@ async function callLLM(
     if (tools.length && response.stop_reason === "tool_use") {
       const toolBlocks = response.content.filter((b) => b.type === "tool_use") as Anthropic.ToolUseBlock[];
       const textBlock = response.content.find((b) => b.type === "text") as Anthropic.TextBlock | undefined;
-      
+
       if (toolBlocks.length > 0) {
         return {
           content: textBlock?.text ?? "",
@@ -553,7 +553,14 @@ const aiCoreTools: AiTool[] = [
       const recency = args.recency;
       const timeRange =
         recency === "day" || recency === "week" || recency === "month" ? recency : undefined;
-      const results = await performWebSearch(query, category, timeRange);
+      let results = await performWebSearch(query, category, timeRange);
+      // The "news" category depends on a handful of dedicated news engines that
+      // can go unhealthy (rate-limited, CAPTCHA'd) independently of the instance
+      // as a whole. Fall back to "general" — which draws from a wider engine
+      // pool — rather than surfacing an empty result to the model.
+      if (category === "news" && results === "No results found.") {
+        results = await performWebSearch(query, "general", timeRange);
+      }
       return results.slice(0, 3200);
     },
   },
@@ -567,7 +574,7 @@ const aiCoreTools: AiTool[] = [
         location: {
           type: "string",
           description:
-            "City, with state/country if ambiguous, e.g. 'North Augusta SC' or 'Tokyo'.",
+            "City, with state/country if ambiguous, e.g. 'North Augusta, SC' or 'Tokyo'.",
         },
       },
       required: ["location"],
@@ -886,7 +893,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
 
         if (result.tool_calls && result.tool_calls.length > 0) {
           action = "tool_use";
-          
+
           // Append the assistant's tool calls to the message history
           llmMessages.push({
             role: "assistant",
@@ -901,7 +908,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
               guildId,
               "ai",
             );
-            
+
             try {
               if ("sendTyping" in message.channel) {
                 await message.channel.sendTyping().catch(() => {});
@@ -928,10 +935,10 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           });
 
           const toolResults = await Promise.all(toolPromises);
-          
+
           // Append tool results to message history and loop again
           llmMessages.push(...toolResults);
-          
+
         } else {
           // No tool calls, we have our final text reply
           reply = result.content.slice(0, 1990) || "🤔 I got nothing on that one.";
