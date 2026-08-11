@@ -61,87 +61,59 @@ export function useGoogleFonts() {
   const fontGroups = buildFontGroups();
 
   /**
-   * Load a Google Font's CSS into the page <head>.
-   * No-op for system fonts or already-loaded fonts.
+   * Load a Google Font and resolve once the browser confirms it is
+   * actually usable — not just that the stylesheet request completed.
+   * No-op for system fonts or already-loaded fonts. Never rejects.
    */
-  function loadFont(family: string): void {
+  async function loadFont(family: string): Promise<void> {
     if (isSystemFont(family)) return;
     if (loadedFonts.has(family)) return;
-    if (loadingFonts.value.has(family)) return;
 
-    // Find font definition to get weights
     const fontDef = GOOGLE_FONTS.find((f) => f.family === family);
     const weights = fontDef?.weights ?? [400, 700];
 
-    loadingFonts.value.add(family);
+    if (!loadingFonts.value.has(family)) {
+      loadingFonts.value.add(family);
 
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = googleFontsCssUrl(family, weights);
-    link.dataset.googleFont = family;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = googleFontsCssUrl(family, weights);
+      link.dataset.googleFont = family;
+      document.head.appendChild(link);
+    }
 
-    link.onload = () => {
+    try {
+      await Promise.all(
+        weights.map((weight) =>
+          document.fonts.load(`${weight} 16px "${family}"`),
+        ),
+      );
       loadedFonts.add(family);
+    } catch (err) {
+      console.warn(`[GoogleFonts] Failed to load font: ${family}`, err);
+    } finally {
       loadingFonts.value.delete(family);
-    };
-
-    link.onerror = () => {
-      loadingFonts.value.delete(family);
-      console.warn(`[GoogleFonts] Failed to load font: ${family}`);
-    };
-
-    document.head.appendChild(link);
+    }
   }
 
   /**
-   * Load all fonts referenced in a template's elements.
+   * Load all fonts referenced in a template's elements, resolving once
+   * every one of them is actually ready to draw.
    */
-  function loadTemplateFonts(elements: { fontFamily?: string }[]): void {
+  async function loadTemplateFonts(
+    elements: { fontFamily?: string }[],
+  ): Promise<void> {
     const families = new Set<string>();
     for (const el of elements) {
       if (el.fontFamily) families.add(el.fontFamily);
     }
-    families.forEach(loadFont);
-  }
-
-  /**
-   * Build flat list of font options for USelectMenu.
-   * Groups are represented as separator items.
-   */
-  function buildFontItems(searchQuery?: string) {
-    const items: { label: string; value: string; disabled?: boolean; separator?: boolean }[] = [];
-    const query = searchQuery?.toLowerCase().trim();
-
-    for (const group of fontGroups) {
-      const filtered = query
-        ? group.fonts.filter((f) =>
-            f.family.toLowerCase().includes(query),
-          )
-        : group.fonts;
-
-      if (filtered.length === 0) continue;
-
-      // Group separator
-      items.push({
-        label: group.label,
-        value: `__group_${group.label}`,
-        disabled: true,
-        separator: true,
-      });
-
-      for (const font of filtered) {
-        items.push({ label: font.family, value: font.family });
-      }
-    }
-
-    return items;
+    await Promise.all(Array.from(families, loadFont));
   }
 
   return {
     fontGroups,
     loadFont,
     loadTemplateFonts,
-    buildFontItems,
     loadingFonts,
     loadedFonts,
   };
