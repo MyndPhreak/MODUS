@@ -42,18 +42,25 @@
 
       <div class="we-toolbar-group">
         <span class="we-label">BG</span>
-        <div
-          class="we-color-chip"
-          :style="{ background: template.backgroundColor }"
-          @click="($refs.bgColor as HTMLInputElement).click()"
-        />
-        <input
-          ref="bgColor"
-          type="color"
-          v-model="template.backgroundColor"
-          class="sr-only"
-        />
-        <input v-model="template.backgroundColor" class="we-hex-input w-20" />
+        <UPopover>
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="xs"
+            :style="{ backgroundColor: template.backgroundColor }"
+            class="w-6 h-6 p-0 rounded-md"
+          />
+          <template #content>
+            <div class="p-3 space-y-2">
+              <UColorPicker v-model="template.backgroundColor" size="sm" />
+              <UInput
+                v-model="template.backgroundColor"
+                size="xs"
+                class="font-mono"
+              />
+            </div>
+          </template>
+        </UPopover>
       </div>
 
       <div class="we-toolbar-sep" />
@@ -1604,17 +1611,6 @@ onMounted(() => {
 }
 
 /* ── Color Chips ── */
-.we-color-chip {
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  border: 1px solid #555;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.we-color-chip:hover {
-  transform: scale(1.1);
-}
 .we-color-chip-lg {
   width: 28px;
   height: 28px;
