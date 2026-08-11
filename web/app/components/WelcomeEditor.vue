@@ -1,7 +1,7 @@
 <template>
   <div class="we font-sans flex flex-col h-full select-none">
     <!-- TOP TOOLBAR -->
-    <div class="we-toolbar">
+    <div class="we-toolbar we-glass-panel rounded-2xl">
       <div class="we-toolbar-group">
         <USelectMenu
           v-if="!channelsLoading"
@@ -113,7 +113,7 @@
     <div class="flex-1 flex min-h-0 gap-px bg-zinc-950">
       <!-- LEFT PANEL: Tools + Layers -->
       <div
-        class="w-[240px] shrink-0 flex flex-col bg-[#1e1e1e] border-r border-zinc-800"
+        class="w-[240px] shrink-0 flex flex-col we-glass-panel rounded-2xl"
       >
         <!-- Preset Templates -->
         <div class="p-2 border-b border-zinc-800">
@@ -400,7 +400,7 @@
 
       <!-- RIGHT PANEL: Properties -->
       <div
-        class="w-[260px] shrink-0 bg-[#1e1e1e] border-l border-zinc-800 overflow-y-auto"
+        class="w-[260px] shrink-0 we-glass-panel rounded-2xl overflow-y-auto"
       >
         <div v-if="selectedElement" class="flex flex-col">
           <!-- Header -->
@@ -1444,15 +1444,23 @@ onMounted(() => {
   color: #d4d4d8;
 }
 
+/* ── Glass surface (matches app/assets/css/main.css .glass-card, minus `overflow`
+   so it composes safely with panels that need overflow-y-auto) ── */
+.we-glass-panel {
+  background: rgba(20, 20, 26, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
 /* ── Toolbar ── */
 .we-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: #252525;
-  border-bottom: 1px solid #333;
-  height: 36px;
+  padding: 6px 10px;
+  height: 44px;
 }
 .we-toolbar-group {
   display: flex;
@@ -1468,15 +1476,15 @@ onMounted(() => {
 
 /* ── Labels ── */
 .we-label {
-  font-size: 10px;
-  color: #71717a;
+  font-size: 11px;
+  color: #a1a1aa;
   font-weight: 600;
   letter-spacing: 0.02em;
-  min-width: 12px;
+  min-width: 14px;
   text-align: right;
 }
 .we-panel-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #71717a;
   text-transform: uppercase;
@@ -1487,10 +1495,10 @@ onMounted(() => {
 .we-num-input {
   background: #1a1a1a;
   border: 1px solid #333;
-  border-radius: 3px;
+  border-radius: 6px;
   color: #d4d4d8;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 13px;
+  padding: 4px 6px;
   font-variant-numeric: tabular-nums;
   outline: none;
   transition: border-color 0.15s;
@@ -1501,10 +1509,10 @@ onMounted(() => {
 .we-hex-input {
   background: #1a1a1a;
   border: 1px solid #333;
-  border-radius: 3px;
+  border-radius: 6px;
   color: #d4d4d8;
-  font-size: 10px;
-  padding: 2px 6px;
+  font-size: 12px;
+  padding: 4px 6px;
   font-family: "JetBrains Mono", monospace;
   outline: none;
   transition: border-color 0.15s;
@@ -1515,10 +1523,10 @@ onMounted(() => {
 .we-textarea {
   background: #1a1a1a;
   border: 1px solid #333;
-  border-radius: 3px;
+  border-radius: 6px;
   color: #d4d4d8;
-  font-size: 11px;
-  padding: 4px 6px;
+  font-size: 13px;
+  padding: 6px 8px;
   width: 100%;
   resize: vertical;
   outline: none;
@@ -1530,10 +1538,10 @@ onMounted(() => {
 .we-select {
   background: #1a1a1a;
   border: 1px solid #333;
-  border-radius: 3px;
+  border-radius: 6px;
   color: #d4d4d8;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 13px;
+  padding: 4px 6px;
   outline: none;
 }
 
@@ -1542,9 +1550,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 3px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   color: #a1a1aa;
   background: transparent;
   border: none;
@@ -1552,7 +1560,7 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .we-tool-btn:hover {
-  background: #333;
+  background: rgba(255, 255, 255, 0.08);
   color: #e4e4e7;
 }
 .we-tool-btn-sm {
@@ -1561,7 +1569,7 @@ onMounted(() => {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 3px;
+  border-radius: 6px;
   color: #71717a;
   background: transparent;
   border: none;
@@ -1569,7 +1577,7 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .we-tool-btn-sm:hover {
-  background: #333;
+  background: rgba(255, 255, 255, 0.08);
   color: #e4e4e7;
 }
 .we-tool-square {
@@ -1578,15 +1586,15 @@ onMounted(() => {
   justify-content: center;
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 4px;
-  background: #262626;
-  border: 1px solid #333;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
   transition: all 0.15s;
 }
 .we-tool-square:hover {
-  background: #333;
-  border-color: #52525b;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 .we-btn-primary {
   display: flex;
@@ -1641,9 +1649,9 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 5px 8px;
-  border-radius: 3px;
-  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
   color: #a1a1aa;
   background: transparent;
   border: 1px solid transparent;
@@ -1651,12 +1659,12 @@ onMounted(() => {
   transition: all 0.1s;
 }
 .we-layer:hover {
-  background: #2a2a2a;
+  background: rgba(255, 255, 255, 0.06);
   color: #d4d4d8;
 }
 .we-layer-active {
-  background: #7c6ef620;
-  border-color: #7c6ef650;
+  background: rgba(124, 110, 246, 0.15);
+  border-color: rgba(124, 110, 246, 0.4);
   color: #e4e4e7;
 }
 
@@ -1666,7 +1674,7 @@ onMounted(() => {
   border-bottom: 1px solid #2a2a2a;
 }
 .we-prop-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #71717a;
   text-transform: uppercase;
@@ -1679,10 +1687,10 @@ onMounted(() => {
   gap: 4px;
 }
 .we-prop-label {
-  font-size: 10px;
-  color: #52525b;
+  font-size: 11px;
+  color: #a1a1aa;
   font-weight: 600;
-  min-width: 14px;
+  min-width: 16px;
 }
 
 /* ── Range Slider ── */
@@ -1737,22 +1745,22 @@ onMounted(() => {
   align-items: center;
   gap: 3px;
   padding: 4px;
-  border-radius: 4px;
-  background: #262626;
-  border: 1px solid #333;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
   transition: all 0.15s;
   color: #a1a1aa;
 }
 .we-preset-btn:hover {
-  background: #333;
-  border-color: #52525b;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
   color: #e4e4e7;
 }
 .we-preset-swatch {
   width: 100%;
   height: 28px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 </style>
