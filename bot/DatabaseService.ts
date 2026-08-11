@@ -27,6 +27,7 @@ import {
   TagRepository,
   TempVoiceChannelRepository,
   TriggerRepository,
+  EventAnnouncementRepository,
   TranscriptRepository,
   RemindersRepository,
   PollTemplateRepository,
@@ -62,6 +63,7 @@ export class DatabaseService {
   public readonly tags: TagRepository;
   public readonly tempVoice: TempVoiceChannelRepository;
   public readonly triggers: TriggerRepository;
+  public readonly eventAnnouncements: EventAnnouncementRepository;
   public readonly transcripts: TranscriptRepository;
   public readonly reminders: RemindersRepository;
   public readonly pollTemplates: PollTemplateRepository;
@@ -116,6 +118,7 @@ export class DatabaseService {
     this.tags = new TagRepository(db);
     this.tempVoice = new TempVoiceChannelRepository(db);
     this.triggers = new TriggerRepository(db);
+    this.eventAnnouncements = new EventAnnouncementRepository(db);
     this.transcripts = new TranscriptRepository(db);
     this.reminders = new RemindersRepository(db);
     this.pollTemplates = new PollTemplateRepository(db);
@@ -888,6 +891,46 @@ export class DatabaseService {
         `[DatabaseService] updateTempChannelOwner(${channelId}) failed:`,
         error,
       );
+    }
+  }
+
+  // ── Events ────────────────────────────────────────────────────────────
+
+  async createEventAnnouncement(data: {
+    guild_id: string;
+    event_id: string;
+    channel_id: string;
+    message_id: string;
+  }): Promise<void> {
+    try {
+      await this.eventAnnouncements.create({
+        guildId: data.guild_id,
+        eventId: data.event_id,
+        channelId: data.channel_id,
+        messageId: data.message_id,
+      });
+    } catch (error) {
+      console.error(
+        `[DatabaseService] createEventAnnouncement failed for ${data.guild_id}/${data.event_id}:`,
+        error,
+      );
+    }
+  }
+
+  async getEventAnnouncement(
+    guildId: string,
+    eventId: string,
+  ): Promise<{ channelId: string; messageId: string } | null> {
+    try {
+      const row = await this.eventAnnouncements.getByEvent(guildId, eventId);
+      if (!row) return null;
+      return { channelId: row.channelId, messageId: row.messageId };
+    } catch (error) {
+      console.error(
+        `[DatabaseService] getEventAnnouncement failed for ${guildId}/${eventId}:`,
+        error,
+      );
+      return null;
     }
   }
 

@@ -16,3 +16,4 @@ export * from "./repositories/ticket-transcripts";
 export * from "./repositories/reminders";
 export * from "./repositories/poll-templates";
 export * from "./repositories/polls";
+export * from "./repositories/event-announcements";

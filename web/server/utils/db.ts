@@ -19,6 +19,7 @@ import {
   TagRepository,
   TempVoiceChannelRepository,
   TriggerRepository,
+  EventAnnouncementRepository,
   TranscriptRepository,
   PollTemplateRepository,
   PollRepository,
@@ -39,6 +40,7 @@ export interface Repos {
   tags: TagRepository;
   tempVoice: TempVoiceChannelRepository;
   triggers: TriggerRepository;
+  eventAnnouncements: EventAnnouncementRepository;
   transcripts: TranscriptRepository;
   pollTemplates: PollTemplateRepository;
   polls: PollRepository;
@@ -69,6 +71,7 @@ export function getRepos(): Repos | null {
       tags: new TagRepository(db),
       tempVoice: new TempVoiceChannelRepository(db),
       triggers: new TriggerRepository(db),
+      eventAnnouncements: new EventAnnouncementRepository(db),
       transcripts: new TranscriptRepository(db),
       pollTemplates: new PollTemplateRepository(db),
       polls: new PollRepository(db),

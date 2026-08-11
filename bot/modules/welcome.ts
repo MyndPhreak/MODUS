@@ -3,6 +3,7 @@ import {
   SlashCommandBuilder,
   GuildMember,
   TextChannel,
+  NewsChannel,
   AttachmentBuilder,
   ChannelType,
 } from "discord.js";
@@ -202,7 +203,7 @@ const welcomeModule: BotModule = {
           opt
             .setName("channel")
             .setDescription("The channel to send welcome images to")
-            .addChannelTypes(ChannelType.GuildText)
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(true),
         ),
     )
@@ -311,7 +312,11 @@ export function registerWelcomeEvents(moduleManager: ModuleManager) {
 
       // Get channel
       const channel = member.guild.channels.cache.get(template.channelId!);
-      if (!channel || !(channel instanceof TextChannel)) return;
+      if (
+        !channel ||
+        !(channel instanceof TextChannel || channel instanceof NewsChannel)
+      )
+        return;
 
       // Render via dashboard API
       const imageBuffer = await renderViaApi(guildId, member);
