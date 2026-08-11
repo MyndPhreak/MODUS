@@ -47,6 +47,7 @@
             color="neutral"
             variant="outline"
             size="xs"
+            aria-label="Background color"
             :style="{ backgroundColor: template.backgroundColor }"
             class="w-6 h-6 p-0 rounded-md"
           />
@@ -70,13 +71,21 @@
         <UFileUpload
           v-model="bgImageFile"
           accept="image/*"
-          variant="button"
+          :dropzone="false"
           :preview="false"
-          icon="i-heroicons-photo"
-          color="neutral"
-          size="xs"
-          :class="{ 'text-violet-400': !!template.backgroundImage }"
-        />
+        >
+          <template #default="{ open }">
+            <UButton
+              icon="i-heroicons-photo"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              title="Upload background image"
+              :class="{ 'text-violet-400': !!template.backgroundImage }"
+              @click="open()"
+            />
+          </template>
+        </UFileUpload>
         <button
           v-if="template.backgroundImage"
           class="we-tool-btn text-red-400 hover:text-red-300"
