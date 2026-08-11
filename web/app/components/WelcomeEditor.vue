@@ -94,18 +94,24 @@
       <div class="flex-1" />
 
       <div class="we-toolbar-group">
-        <button class="we-tool-btn" title="Reset" @click="resetTemplate">
-          <UIcon name="i-heroicons-arrow-uturn-left" />
-        </button>
-        <button class="we-btn-primary" :disabled="saving" @click="saveTemplate">
-          <UIcon
-            v-if="saving"
-            name="i-heroicons-arrow-path"
-            class="animate-spin"
-          />
-          <UIcon v-else name="i-heroicons-cloud-arrow-up" />
-          Save
-        </button>
+        <UButton
+          icon="i-heroicons-arrow-uturn-left"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          title="Reset"
+          @click="resetTemplate"
+        />
+        <UButton
+          icon="i-heroicons-cloud-arrow-up"
+          label="Save"
+          color="primary"
+          variant="solid"
+          size="xs"
+          :loading="saving"
+          :disabled="saving"
+          @click="saveTemplate"
+        />
       </div>
     </div>
 
@@ -1595,27 +1601,6 @@ onMounted(() => {
 .we-tool-square:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
-}
-.we-btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 4px;
-  background: #7c6ef6;
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.we-btn-primary:hover {
-  background: #6d5fd6;
-}
-.we-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 /* ── Color Chips ── */
