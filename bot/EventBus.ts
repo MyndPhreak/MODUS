@@ -35,6 +35,13 @@ export const CHANNEL_MODULES = "modus:realtime:modules";
  */
 export const CHANNEL_GUILD_CONFIGS = "modus:realtime:guild-configs";
 
+/**
+ * Poll vote events — `{ guildId, channelId, messageId, answerId, voterId, added }`.
+ * Published by DatabaseService.publishPollVote, consumed by the Nitro SSE
+ * bridge (web/server/utils/eventbus.ts) for live dashboard vote updates.
+ */
+export const CHANNEL_POLL_VOTES = "modus:realtime:poll-votes";
+
 export interface Envelope<T = unknown> {
   origin: string;
   ts: number;

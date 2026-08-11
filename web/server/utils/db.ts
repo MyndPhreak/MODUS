@@ -21,6 +21,8 @@ import {
   TriggerRepository,
   EventAnnouncementRepository,
   TranscriptRepository,
+  PollTemplateRepository,
+  PollRepository,
   type Database,
 } from "@modus/db";
 
@@ -40,6 +42,8 @@ export interface Repos {
   triggers: TriggerRepository;
   eventAnnouncements: EventAnnouncementRepository;
   transcripts: TranscriptRepository;
+  pollTemplates: PollTemplateRepository;
+  polls: PollRepository;
 }
 
 let cached: Repos | null = null;
@@ -69,6 +73,8 @@ export function getRepos(): Repos | null {
       triggers: new TriggerRepository(db),
       eventAnnouncements: new EventAnnouncementRepository(db),
       transcripts: new TranscriptRepository(db),
+      pollTemplates: new PollTemplateRepository(db),
+      polls: new PollRepository(db),
     };
     return cached;
   } catch (err) {

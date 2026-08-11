@@ -30,6 +30,8 @@ import {
   EventAnnouncementRepository,
   TranscriptRepository,
   RemindersRepository,
+  PollTemplateRepository,
+  PollRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -43,6 +45,7 @@ import {
   CHANNEL_GUILD_CONFIGS,
   CHANNEL_LOGS,
   CHANNEL_MODULES,
+  CHANNEL_POLL_VOTES,
   type EventBus,
 } from "./EventBus";
 
@@ -63,6 +66,8 @@ export class DatabaseService {
   public readonly eventAnnouncements: EventAnnouncementRepository;
   public readonly transcripts: TranscriptRepository;
   public readonly reminders: RemindersRepository;
+  public readonly pollTemplates: PollTemplateRepository;
+  public readonly polls: PollRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -116,7 +121,8 @@ export class DatabaseService {
     this.eventAnnouncements = new EventAnnouncementRepository(db);
     this.transcripts = new TranscriptRepository(db);
     this.reminders = new RemindersRepository(db);
-
+    this.pollTemplates = new PollTemplateRepository(db);
+    this.polls = new PollRepository(db);
 
     // Periodic log flush. unref() so a pending timer never holds the
     // process open during shutdown — gracefulShutdown calls flushLogs().
@@ -1070,5 +1076,28 @@ export class DatabaseService {
           }`,
         );
       });
+  }
+
+  /**
+   * Fan a Discord poll vote-add/remove gateway event out to the dashboard
+   * over Redis. No-op when Redis isn't configured (bot keeps working,
+   * dashboard just falls back to snapshot mode — see web/server/api/events).
+   */
+  publishPollVote(payload: {
+    guildId: string;
+    channelId: string;
+    messageId: string;
+    answerId: number;
+    voterId: string;
+    added: boolean;
+  }): void {
+    if (!this.eventBus) return;
+    this.eventBus.publish(CHANNEL_POLL_VOTES, payload).catch((err) => {
+      console.warn(
+        `[DatabaseService] poll-votes publish failed: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+    });
   }
 }
