@@ -81,6 +81,20 @@ export function buildGeocodeUrl(location: string): string {
   return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
 }
 
+/**
+ * Open-Meteo's geocoder matches on the literal place name and returns nothing
+ * for "City State"/"City Country" (space-separated, no comma) even though the
+ * identical "City, State" resolves fine. If a plain lookup comes back empty
+ * and the input looks like "<name> <TRAILING TOKEN>" with no comma already,
+ * retry once with a comma inserted before the trailing token.
+ */
+function withCommaBeforeTrailingToken(location: string): string | null {
+  if (location.includes(",")) return null;
+  const idx = location.lastIndexOf(" ");
+  if (idx <= 0) return null;
+  return `${location.slice(0, idx)},${location.slice(idx)}`;
+}
+
 export function buildForecastUrl(lat: number, lon: number, units: UnitChoice): string {
   const params = new URLSearchParams({
     latitude: String(lat),
@@ -149,7 +163,23 @@ export async function getWeather(
   } catch {
     return "❌ Couldn't reach the geocoding service. Try again in a moment.";
   }
-  const geo = geoJson?.results?.[0];
+  let geo = geoJson?.results?.[0];
+
+  if (!geo) {
+    const retryLocation = withCommaBeforeTrailingToken(location);
+    if (retryLocation) {
+      try {
+        const res = await fetchImpl(buildGeocodeUrl(retryLocation));
+        if (res.ok) {
+          geoJson = (await res.json()) as { results?: GeocodeResult[] };
+          geo = geoJson?.results?.[0];
+        }
+      } catch {
+        // Fall through — original "not found" message below still applies.
+      }
+    }
+  }
+
   if (!geo) {
     return `❌ I couldn't find a location called "${location}". Try adding a state or country.`;
   }
