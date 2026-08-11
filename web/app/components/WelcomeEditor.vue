@@ -679,13 +679,13 @@
                 >{{ Math.round((selectedElement.opacity ?? 1) * 100) }}%</span
               >
             </div>
-            <input
-              type="range"
-              v-model.number="selectedElementOpacityPct"
-              min="0"
-              max="100"
-              step="1"
-              class="we-range mt-1"
+            <USlider
+              v-model="selectedElementOpacityPct"
+              :min="0"
+              :max="100"
+              :step="1"
+              size="sm"
+              class="mt-1"
             />
           </div>
         </div>
@@ -1670,34 +1670,6 @@ onMounted(() => {
   min-width: 16px;
 }
 
-/* ── Range Slider ── */
-.we-range {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 3px;
-  background: #333;
-  border-radius: 2px;
-  outline: none;
-}
-.we-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #7c6ef6;
-  cursor: pointer;
-  border: 2px solid #1e1e1e;
-}
-.we-range::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #7c6ef6;
-  cursor: pointer;
-  border: 2px solid #1e1e1e;
-}
 
 /* ── Konva overrides ── */
 .we :deep(.konvajs-content) {
