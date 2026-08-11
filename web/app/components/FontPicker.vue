@@ -5,6 +5,11 @@
     :items="items"
     size="xs"
     class="w-full"
+    :ui="{
+      content: 'bg-[#1e1e1e] ring ring-zinc-800',
+      label: 'text-zinc-500',
+      item: 'text-zinc-100 text-base py-1.5 px-2 data-highlighted:not-data-disabled:text-white data-highlighted:not-data-disabled:before:bg-violet-500/20',
+    }"
     @update:model-value="$emit('update:modelValue', $event as string)"
     @update:open="handleOpenChange"
   >
