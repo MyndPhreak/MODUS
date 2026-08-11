@@ -511,26 +511,10 @@
             <!-- Font Family -->
             <div class="mt-1.5">
               <span class="we-prop-label block mb-1">Font</span>
-              <select
-                :value="selectedElement.fontFamily || 'sans-serif'"
-                @change="handleFontChange($event)"
-                class="we-select w-full"
-              >
-                <optgroup
-                  v-for="group in fontGroups"
-                  :key="group.label"
-                  :label="group.label"
-                >
-                  <option
-                    v-for="font in group.fonts"
-                    :key="font.family"
-                    :value="font.family"
-                    :style="{ fontFamily: `'${font.family}', ${font.category}` }"
-                  >
-                    {{ font.family }}
-                  </option>
-                </optgroup>
-              </select>
+              <FontPicker
+                :model-value="selectedElement.fontFamily || 'sans-serif'"
+                @update:model-value="handleFontChange"
+              />
             </div>
 
             <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-1.5">
@@ -718,7 +702,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useGoogleFonts } from "~/composables/useGoogleFonts";
 
-const { fontGroups, loadFont, loadTemplateFonts } = useGoogleFonts();
+const { loadFont, loadTemplateFonts } = useGoogleFonts();
 
 const props = defineProps<{
   guildId: string;
@@ -1315,12 +1299,11 @@ function selectElement(id: string) {
 
 // ── Font Change Handler ──
 
-function handleFontChange(event: Event) {
-  const family = (event.target as HTMLSelectElement).value;
-  if (selectedElement.value) {
-    selectedElement.value.fontFamily = family;
-    loadFont(family);
-  }
+async function handleFontChange(family: string) {
+  if (!selectedElement.value) return;
+  selectedElement.value.fontFamily = family;
+  await loadFont(family);
+  stageRef.value?.getNode()?.batchDraw();
 }
 
 // ── Keyboard Shortcuts ──
@@ -1440,9 +1423,11 @@ async function saveTemplate() {
 }
 
 onMounted(() => {
-  loadTemplate().then(() => {
-    // Load Google Fonts used in the template for Konva preview
-    loadTemplateFonts(template.value.elements);
+  loadTemplate().then(async () => {
+    // Load Google Fonts used in the template, then repaint once every
+    // one of them is actually ready to draw (fixes flash-of-fallback).
+    await loadTemplateFonts(template.value.elements);
+    stageRef.value?.getNode()?.batchDraw();
   });
 });
 </script>
