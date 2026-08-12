@@ -370,6 +370,48 @@
                     @tap="() => selectElement(el.id)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
+                  <template v-if="el.type === 'line'">
+                    <v-line
+                      v-if="!el.arrow"
+                      :config="lineConfig(el)"
+                      @dragend="(e: any) => handleDragEnd(e, el)"
+                      @click="() => selectElement(el.id)"
+                      @tap="() => selectElement(el.id)"
+                    />
+                    <v-arrow
+                      v-if="el.arrow"
+                      :config="lineConfig(el)"
+                      @dragend="(e: any) => handleDragEnd(e, el)"
+                      @click="() => selectElement(el.id)"
+                      @tap="() => selectElement(el.id)"
+                    />
+                    <template v-if="selectedElementId === el.id">
+                      <v-circle
+                        :config="{
+                          x: el.x + (el.points?.[0] ?? -60),
+                          y: el.y + (el.points?.[1] ?? 0),
+                          radius: 6,
+                          fill: '#7c6ef6',
+                          stroke: '#1e1e1e',
+                          strokeWidth: 1,
+                          draggable: true,
+                        }"
+                        @dragmove="(e: any) => handleLineHandleDrag(e, el, 0)"
+                      />
+                      <v-circle
+                        :config="{
+                          x: el.x + (el.points?.[2] ?? 60),
+                          y: el.y + (el.points?.[3] ?? 0),
+                          radius: 6,
+                          fill: '#7c6ef6',
+                          stroke: '#1e1e1e',
+                          strokeWidth: 1,
+                          draggable: true,
+                        }"
+                        @dragmove="(e: any) => handleLineHandleDrag(e, el, 2)"
+                      />
+                    </template>
+                  </template>
                   <v-text
                     v-if="el.type === 'text'"
                     :config="textConfig(el)"
@@ -693,7 +735,8 @@
           <div
             v-if="
               selectedElement.type !== 'avatar' &&
-              selectedElement.type !== 'image'
+              selectedElement.type !== 'image' &&
+              selectedElement.type !== 'line'
             "
             class="we-prop-section"
           >
@@ -761,6 +804,12 @@
                 placeholder="0"
               />
             </div>
+            <UCheckbox
+              v-if="selectedElement.type === 'line'"
+              v-model="selectedElement.arrow"
+              label="Arrow"
+              class="mt-2"
+            />
           </div>
 
           <!-- Avatar Border -->
@@ -1176,6 +1225,12 @@ const toolTypes = [
     color: "text-yellow-400",
   },
   {
+    type: "line" as const,
+    icon: "i-heroicons-minus",
+    label: "Line / Arrow",
+    color: "text-lime-400",
+  },
+  {
     type: "avatar" as const,
     icon: "i-heroicons-user-circle",
     label: "Avatar",
@@ -1347,6 +1402,19 @@ function starConfig(el: TemplateElement) {
   };
 }
 
+function lineConfig(el: TemplateElement) {
+  return {
+    x: el.x,
+    y: el.y,
+    points: el.points || [-60, 0, 60, 0],
+    stroke: el.stroke || "#e4e4e7",
+    strokeWidth: el.strokeWidth || 3,
+    opacity: el.opacity ?? 1,
+    draggable: true,
+    name: el.id,
+  };
+}
+
 function textConfig(el: TemplateElement) {
   const family = el.fontFamily || "sans-serif";
   return {
@@ -1480,6 +1548,16 @@ function addElement(type: TemplateElement["type"]) {
       fill: "#374151",
       opacity: 1,
     },
+    line: {
+      type: "line",
+      x: cx,
+      y: cy,
+      points: [-60, 0, 60, 0],
+      stroke: "#e4e4e7",
+      strokeWidth: 3,
+      opacity: 1,
+      arrow: false,
+    },
     avatar: {
       type: "avatar",
       x: cx,
@@ -1592,6 +1670,13 @@ function handleStageClick(e: any) {
 function handleDragEnd(e: any, el: TemplateElement) {
   el.x = Math.round(e.target.x());
   el.y = Math.round(e.target.y());
+}
+
+function handleLineHandleDrag(e: any, el: TemplateElement, pointIndex: number) {
+  const pts = el.points ? [...el.points] : [-60, 0, 60, 0];
+  pts[pointIndex] = Math.round(e.target.x() - el.x);
+  pts[pointIndex + 1] = Math.round(e.target.y() - el.y);
+  el.points = pts;
 }
 
 function handleTextDragEnd(e: any, el: TemplateElement) {
