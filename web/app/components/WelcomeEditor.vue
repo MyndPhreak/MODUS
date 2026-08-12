@@ -1643,6 +1643,7 @@ onMounted(() => {
   color: #a1a1aa;
   background: transparent;
   border: 1px solid transparent;
+  border-left-width: 3px;
   cursor: pointer;
   transition: all 0.1s;
 }
@@ -1653,7 +1654,7 @@ onMounted(() => {
 .we-layer-active {
   background: rgba(124, 110, 246, 0.22);
   border-color: rgba(124, 110, 246, 0.5);
-  border-left: 3px solid #7c6ef6;
+  border-left-color: #7c6ef6;
   color: #e4e4e7;
   font-weight: 500;
 }
