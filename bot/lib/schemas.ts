@@ -34,39 +34,60 @@ export type RecordingSettings = z.infer<typeof RecordingSettingsSchema>;
 
 // ── Welcome ────────────────────────────────────────────────────────
 
-const TemplateElementSchema = z.object({
-  id: z.string(),
-  type: z.literal(["text", "image", "rect", "circle", "avatar"]),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  // Text props
-  text: z.string().optional(),
-  fontSize: z.number().optional(),
-  fontFamily: z.string().optional(),
-  fontStyle: z.string().optional(),
-  fill: z.string().optional(),
-  align: z.string().optional(),
-  stroke: z.string().optional(),
-  strokeWidth: z.number().optional(),
-  // Rect/Circle props
-  cornerRadius: z.number().optional(),
-  opacity: z.number().optional(),
-  // Image props
-  src: z.string().optional(),
-  // Avatar
-  radius: z.number().optional(),
-  borderColor: z.string().optional(),
-  borderWidth: z.number().optional(),
-  // Rotation
-  rotation: z.number().optional(),
-  // Shadow
-  shadowColor: z.string().optional(),
-  shadowBlur: z.number().optional(),
-  shadowOffsetX: z.number().optional(),
-  shadowOffsetY: z.number().optional(),
-});
+const TemplateElementSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal([
+      "text",
+      "image",
+      "rect",
+      "circle",
+      "avatar",
+      "triangle",
+      "star",
+      "line",
+    ]),
+    x: z.number(),
+    y: z.number(),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    // Text props
+    text: z.string().optional(),
+    fontSize: z.number().optional(),
+    fontFamily: z.string().optional(),
+    fontStyle: z.string().optional(),
+    fill: z.string().optional(),
+    align: z.string().optional(),
+    stroke: z.string().optional(),
+    strokeWidth: z.number().optional(),
+    // Rect/Circle props
+    cornerRadius: z.number().optional(),
+    opacity: z.number().optional(),
+    // Image props
+    src: z.string().optional(),
+    // Avatar
+    radius: z.number().optional(),
+    borderColor: z.string().optional(),
+    borderWidth: z.number().optional(),
+    // Rotation
+    rotation: z.number().optional(),
+    // Shadow
+    shadowColor: z.string().optional(),
+    shadowBlur: z.number().optional(),
+    shadowOffsetX: z.number().optional(),
+    shadowOffsetY: z.number().optional(),
+    // Circle/Triangle/Star transform (Task 1/2)
+    scaleX: z.number().optional(),
+    scaleY: z.number().optional(),
+    // Star (Task 2)
+    numPoints: z.number().optional(),
+    innerRadius: z.number().optional(),
+    outerRadius: z.number().optional(),
+    // Line/Arrow (Task 3)
+    points: z.array(z.number()).optional(),
+    arrow: z.boolean().optional(),
+  })
+  .loose();
 
 export const WelcomeTemplateSchema = z.object({
   canvasWidth: z.number().default(1024),

@@ -15,7 +15,15 @@ import { parseSettings } from "../lib/validateSettings";
 
 export interface TemplateElement {
   id: string;
-  type: "text" | "image" | "rect" | "circle" | "avatar";
+  type:
+    | "text"
+    | "image"
+    | "rect"
+    | "circle"
+    | "avatar"
+    | "triangle"
+    | "star"
+    | "line";
   x: number;
   y: number;
   width?: number;
@@ -39,6 +47,13 @@ export interface TemplateElement {
   shadowBlur?: number;
   shadowOffsetX?: number;
   shadowOffsetY?: number;
+  scaleX?: number;
+  scaleY?: number;
+  numPoints?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  points?: number[];
+  arrow?: boolean;
 }
 
 export interface WelcomeTemplate {

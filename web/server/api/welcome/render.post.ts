@@ -38,7 +38,15 @@ interface RenderRequest {
 
 interface TemplateElement {
   id: string;
-  type: "text" | "image" | "rect" | "circle" | "avatar";
+  type:
+    | "text"
+    | "image"
+    | "rect"
+    | "circle"
+    | "avatar"
+    | "triangle"
+    | "star"
+    | "line";
   x: number;
   y: number;
   width?: number;
@@ -62,6 +70,13 @@ interface TemplateElement {
   shadowBlur?: number;
   shadowOffsetX?: number;
   shadowOffsetY?: number;
+  scaleX?: number;
+  scaleY?: number;
+  numPoints?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  points?: number[];
+  arrow?: boolean;
 }
 
 interface WelcomeTemplate {
@@ -190,6 +205,15 @@ async function renderWelcomeImage(
       ctx.translate(-el.x, -el.y);
     }
 
+    if (
+      (el.scaleX !== undefined && el.scaleX !== 1) ||
+      (el.scaleY !== undefined && el.scaleY !== 1)
+    ) {
+      ctx.translate(el.x, el.y);
+      ctx.scale(el.scaleX ?? 1, el.scaleY ?? 1);
+      ctx.translate(-el.x, -el.y);
+    }
+
     if (el.opacity !== undefined && el.opacity < 1) {
       ctx.globalAlpha = el.opacity;
     }
@@ -259,6 +283,88 @@ async function renderWelcomeImage(
         break;
       }
 
+      case "triangle": {
+        const r = el.radius || 50;
+        ctx.fillStyle = el.fill || "#374151";
+        ctx.beginPath();
+        for (let n = 0; n < 3; n++) {
+          const angle = (n * 2 * Math.PI) / 3;
+          const px = el.x + r * Math.sin(angle);
+          const py = el.y - r * Math.cos(angle);
+          if (n === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        if (el.stroke) {
+          ctx.strokeStyle = el.stroke;
+          ctx.lineWidth = el.strokeWidth || 1;
+          ctx.stroke();
+        }
+        break;
+      }
+
+      case "star": {
+        const numPoints = el.numPoints || 5;
+        const innerRadius = el.innerRadius || 25;
+        const outerRadius = el.outerRadius || 50;
+        ctx.fillStyle = el.fill || "#374151";
+        ctx.beginPath();
+        for (let n = 0; n < numPoints * 2; n++) {
+          const radius = n % 2 === 0 ? outerRadius : innerRadius;
+          const angle = (n * Math.PI) / numPoints;
+          const px = el.x + radius * Math.sin(angle);
+          const py = el.y - radius * Math.cos(angle);
+          if (n === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        if (el.stroke) {
+          ctx.strokeStyle = el.stroke;
+          ctx.lineWidth = el.strokeWidth || 1;
+          ctx.stroke();
+        }
+        break;
+      }
+
+      case "line": {
+        const [dx1 = -60, dy1 = 0, dx2 = 60, dy2 = 0] = el.points || [];
+        const x1 = el.x + dx1;
+        const y1 = el.y + dy1;
+        const x2 = el.x + dx2;
+        const y2 = el.y + dy2;
+
+        ctx.strokeStyle = el.stroke || "#e4e4e7";
+        ctx.lineWidth = el.strokeWidth || 3;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        if (el.arrow) {
+          const angle = Math.atan2(y2 - y1, x2 - x1);
+          const headLength = 10;
+          const headWidth = 10;
+          ctx.fillStyle = el.stroke || "#e4e4e7";
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.lineTo(
+            x2 - headLength * Math.cos(angle - Math.PI / 6),
+            y2 - headLength * Math.sin(angle - Math.PI / 6),
+          );
+          ctx.lineTo(
+            x2 - headWidth * Math.cos(angle + Math.PI / 6),
+            y2 - headWidth * Math.sin(angle + Math.PI / 6),
+          );
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      }
+
       case "text": {
         const resolvedText = resolvePlaceholders(el.text || "", data);
         const style = el.fontStyle || "";
@@ -320,6 +426,9 @@ async function renderWelcomeImage(
         }
         break;
       }
+
+      default:
+        break;
     }
 
     ctx.restore();
