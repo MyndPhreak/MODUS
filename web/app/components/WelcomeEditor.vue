@@ -214,6 +214,8 @@
               class="we-layer"
               :class="{ 'we-layer-active': selectedElementId === el.id }"
               @click="selectedElementId = el.id"
+              @mouseenter="hoveredElementId = el.id"
+              @mouseleave="hoveredElementId = null"
             >
               <UIcon
                 :name="elementTypeIcon(el.type)"
@@ -396,6 +398,20 @@
                     padding: 2,
                   }"
                   @transformend="handleTransformerEnd"
+                />
+
+                <v-rect
+                  v-if="hoveredElementRect"
+                  :config="{
+                    x: hoveredElementRect.x,
+                    y: hoveredElementRect.y,
+                    width: hoveredElementRect.width,
+                    height: hoveredElementRect.height,
+                    stroke: 'rgba(124, 110, 246, 0.6)',
+                    strokeWidth: 1.5,
+                    dash: [4, 4],
+                    listening: false,
+                  }"
                 />
               </v-layer>
             </v-stage>
@@ -1093,6 +1109,23 @@ const transformerNodes = computed(() => {
     return node ? [node] : [];
   } catch {
     return [];
+  }
+});
+
+const hoveredElementId = ref<string | null>(null);
+
+const hoveredElementRect = computed(() => {
+  if (!hoveredElementId.value || hoveredElementId.value === selectedElementId.value)
+    return null;
+  if (!stageRef.value) return null;
+  try {
+    const stage = stageRef.value.getNode();
+    if (!stage) return null;
+    const node = stage.findOne(`.${hoveredElementId.value}`);
+    if (!node) return null;
+    return node.getClientRect({ relativeTo: stage });
+  } catch {
+    return null;
   }
 });
 
