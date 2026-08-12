@@ -283,6 +283,7 @@
             );
             background-size: 16px 16px;
           "
+          @click="selectedElementId = null"
         />
 
         <!-- Empty state hint -->
