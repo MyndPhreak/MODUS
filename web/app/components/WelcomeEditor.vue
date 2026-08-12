@@ -186,27 +186,33 @@
           >
             <p class="we-panel-label">Layers</p>
             <div class="flex items-center gap-1">
-              <button
-                class="we-tool-btn-sm" title="Move up"
-                :disabled="!selectedElementId"
-                @click="moveLayer('up')"
-              >
-                <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
-              </button>
-              <button
-                class="we-tool-btn-sm" title="Move down"
-                :disabled="!selectedElementId"
-                @click="moveLayer('down')"
-              >
-                <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
-              </button>
-              <button
-                class="we-tool-btn-sm" title="Duplicate"
-                :disabled="!selectedElementId"
-                @click="duplicateSelectedElement"
-              >
-                <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
-              </button>
+              <UTooltip text="Move up">
+                <button
+                  class="we-tool-btn-sm"
+                  :disabled="!selectedElementId"
+                  @click="moveLayer('up')"
+                >
+                  <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
+                </button>
+              </UTooltip>
+              <UTooltip text="Move down">
+                <button
+                  class="we-tool-btn-sm"
+                  :disabled="!selectedElementId"
+                  @click="moveLayer('down')"
+                >
+                  <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
+                </button>
+              </UTooltip>
+              <UTooltip text="Duplicate">
+                <button
+                  class="we-tool-btn-sm"
+                  :disabled="!selectedElementId"
+                  @click="duplicateSelectedElement"
+                >
+                  <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
+                </button>
+              </UTooltip>
               <span class="text-[10px] text-zinc-500 tabular-nums ml-1">{{
                 template.elements.length
               }}</span>
@@ -474,12 +480,14 @@
                 elementLabel(selectedElement)
               }}</span>
             </div>
-            <button
-              class="we-tool-btn text-red-400 hover:text-red-300"
-              @click="deleteSelectedElement"
-            >
-              <UIcon name="i-heroicons-trash" class="text-sm" />
-            </button>
+            <UTooltip text="Delete element">
+              <button
+                class="we-tool-btn text-red-400 hover:text-red-300"
+                @click="deleteSelectedElement"
+              >
+                <UIcon name="i-heroicons-trash" class="text-sm" />
+              </button>
+            </UTooltip>
           </div>
 
           <!-- Transform -->
