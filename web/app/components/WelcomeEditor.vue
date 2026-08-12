@@ -354,6 +354,22 @@
                     @tap="() => selectElement(el.id)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
+                  <v-regular-polygon
+                    v-if="el.type === 'triangle'"
+                    :config="triangleConfig(el)"
+                    @dragend="(e: any) => handleDragEnd(e, el)"
+                    @click="() => selectElement(el.id)"
+                    @tap="() => selectElement(el.id)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
+                  />
+                  <v-star
+                    v-if="el.type === 'star'"
+                    :config="starConfig(el)"
+                    @dragend="(e: any) => handleDragEnd(e, el)"
+                    @click="() => selectElement(el.id)"
+                    @tap="() => selectElement(el.id)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
+                  />
                   <v-text
                     v-if="el.type === 'text'"
                     :config="textConfig(el)"
@@ -540,7 +556,8 @@
               <template
                 v-if="
                   selectedElement.type === 'circle' ||
-                  selectedElement.type === 'avatar'
+                  selectedElement.type === 'avatar' ||
+                  selectedElement.type === 'triangle'
                 "
               >
                 <div class="we-prop-row">
@@ -549,6 +566,34 @@
                     v-model.number="selectedElement.radius"
                     type="number"
                     class="we-num-input w-full"
+                  />
+                </div>
+              </template>
+              <template v-if="selectedElement.type === 'star'">
+                <div class="we-prop-row">
+                  <span class="we-prop-label">Outer</span>
+                  <input
+                    v-model.number="selectedElement.outerRadius"
+                    type="number"
+                    class="we-num-input w-full"
+                  />
+                </div>
+                <div class="we-prop-row">
+                  <span class="we-prop-label">Inner</span>
+                  <input
+                    v-model.number="selectedElement.innerRadius"
+                    type="number"
+                    class="we-num-input w-full"
+                  />
+                </div>
+                <div class="we-prop-row">
+                  <span class="we-prop-label">Points</span>
+                  <input
+                    v-model.number="selectedElement.numPoints"
+                    type="number"
+                    class="we-num-input w-full"
+                    min="3"
+                    max="12"
                   />
                 </div>
               </template>
@@ -1119,6 +1164,18 @@ const toolTypes = [
     color: "text-cyan-400",
   },
   {
+    type: "triangle" as const,
+    icon: "i-heroicons-play",
+    label: "Triangle",
+    color: "text-amber-400",
+  },
+  {
+    type: "star" as const,
+    icon: "i-heroicons-star",
+    label: "Star",
+    color: "text-yellow-400",
+  },
+  {
     type: "avatar" as const,
     icon: "i-heroicons-user-circle",
     label: "Avatar",
@@ -1253,6 +1310,43 @@ function circleConfig(el: TemplateElement) {
   };
 }
 
+function triangleConfig(el: TemplateElement) {
+  return {
+    x: el.x,
+    y: el.y,
+    sides: 3,
+    radius: el.radius || 50,
+    fill: el.fill || "#374151",
+    opacity: el.opacity ?? 1,
+    stroke: el.stroke,
+    strokeWidth: el.strokeWidth || 0,
+    rotation: el.rotation ?? 0,
+    scaleX: el.scaleX ?? 1,
+    scaleY: el.scaleY ?? 1,
+    draggable: true,
+    name: el.id,
+  };
+}
+
+function starConfig(el: TemplateElement) {
+  return {
+    x: el.x,
+    y: el.y,
+    numPoints: el.numPoints || 5,
+    innerRadius: el.innerRadius || 25,
+    outerRadius: el.outerRadius || 50,
+    fill: el.fill || "#374151",
+    opacity: el.opacity ?? 1,
+    stroke: el.stroke,
+    strokeWidth: el.strokeWidth || 0,
+    rotation: el.rotation ?? 0,
+    scaleX: el.scaleX ?? 1,
+    scaleY: el.scaleY ?? 1,
+    draggable: true,
+    name: el.id,
+  };
+}
+
 function textConfig(el: TemplateElement) {
   const family = el.fontFamily || "sans-serif";
   return {
@@ -1321,6 +1415,9 @@ function elementTypeIcon(type: string): string {
     circle: "i-heroicons-sun",
     avatar: "i-heroicons-user-circle",
     image: "i-heroicons-photo",
+    triangle: "i-heroicons-play",
+    star: "i-heroicons-star",
+    line: "i-heroicons-minus",
   };
   return map[type] || "i-heroicons-square-3-stack-3d";
 }
@@ -1363,6 +1460,24 @@ function addElement(type: TemplateElement["type"]) {
       y: cy,
       radius: 50,
       fill: "#4f46e5",
+      opacity: 1,
+    },
+    triangle: {
+      type: "triangle",
+      x: cx,
+      y: cy,
+      radius: 50,
+      fill: "#374151",
+      opacity: 1,
+    },
+    star: {
+      type: "star",
+      x: cx,
+      y: cy,
+      numPoints: 5,
+      innerRadius: 25,
+      outerRadius: 50,
+      fill: "#374151",
       opacity: 1,
     },
     avatar: {
