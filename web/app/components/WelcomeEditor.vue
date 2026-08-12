@@ -43,14 +43,16 @@
       <div class="we-toolbar-group">
         <span class="we-label">BG</span>
         <UPopover>
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="xs"
-            aria-label="Background color"
-            :style="{ backgroundColor: template.backgroundColor }"
-            class="w-6 h-6 p-0 rounded-md"
-          />
+          <UTooltip text="Background color">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="xs"
+              aria-label="Background color"
+              :style="{ backgroundColor: template.backgroundColor }"
+              class="w-6 h-6 p-0 rounded-md"
+            />
+          </UTooltip>
           <template #content>
             <div class="p-3 space-y-2">
               <UColorPicker v-model="template.backgroundColor" size="sm" />
@@ -75,25 +77,26 @@
           :preview="false"
         >
           <template #default="{ open }">
-            <UButton
-              icon="i-heroicons-photo"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              title="Upload background image"
-              :class="{ 'text-violet-400': !!template.backgroundImage }"
-              @click="open()"
-            />
+            <UTooltip text="Upload background image">
+              <UButton
+                icon="i-heroicons-photo"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :class="{ 'text-violet-400': !!template.backgroundImage }"
+                @click="open()"
+              />
+            </UTooltip>
           </template>
         </UFileUpload>
-        <button
-          v-if="template.backgroundImage"
-          class="we-tool-btn text-red-400 hover:text-red-300"
-          title="Remove background image"
-          @click="removeBgImage"
-        >
-          <UIcon name="i-heroicons-x-mark" class="text-xs" />
-        </button>
+        <UTooltip v-if="template.backgroundImage" text="Remove background image">
+          <button
+            class="we-tool-btn text-red-400 hover:text-red-300"
+            @click="removeBgImage"
+          >
+            <UIcon name="i-heroicons-x-mark" class="text-xs" />
+          </button>
+        </UTooltip>
         <span
           v-if="bgUploading"
           class="text-[10px] text-zinc-500 flex items-center gap-1"
@@ -105,14 +108,15 @@
       <div class="flex-1" />
 
       <div class="we-toolbar-group">
-        <UButton
-          icon="i-heroicons-arrow-uturn-left"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          title="Reset"
-          @click="resetTemplate"
-        />
+        <UTooltip text="Reset">
+          <UButton
+            icon="i-heroicons-arrow-uturn-left"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            @click="resetTemplate"
+          />
+        </UTooltip>
         <UButton
           icon="i-heroicons-cloud-arrow-up"
           label="Save"
@@ -136,19 +140,22 @@
         <div class="p-2 border-b border-zinc-800">
           <p class="we-panel-label mb-2">Presets</p>
           <div class="grid grid-cols-2 gap-1">
-            <button
+            <UTooltip
               v-for="preset in PRESETS"
               :key="preset.name"
-              class="we-preset-btn"
-              :title="preset.name"
-              @click="applyPreset(preset)"
+              :text="preset.name"
             >
-              <div
-                class="we-preset-swatch"
-                :style="{ background: preset.preview }"
-              />
-              <span class="text-[9px] truncate">{{ preset.name }}</span>
-            </button>
+              <button
+                class="we-preset-btn"
+                @click="applyPreset(preset)"
+              >
+                <div
+                  class="we-preset-swatch"
+                  :style="{ background: preset.preview }"
+                />
+                <span class="text-[9px] truncate">{{ preset.name }}</span>
+              </button>
+            </UTooltip>
           </div>
         </div>
 
@@ -156,16 +163,19 @@
         <div class="p-2 border-b border-zinc-800">
           <p class="we-panel-label mb-2">Tools</p>
           <div class="grid grid-cols-4 gap-1">
-            <button
+            <UTooltip
               v-for="t in toolTypes"
               :key="t.type"
-              class="we-tool-square"
-              :title="t.label"
-              @click="addElement(t.type)"
+              :text="t.label"
             >
-              <UIcon :name="t.icon" class="text-base" :class="t.color" />
-              <span class="text-[9px] truncate">{{ t.label }}</span>
-            </button>
+              <button
+                class="we-tool-square"
+                @click="addElement(t.type)"
+              >
+                <UIcon :name="t.icon" class="text-base" :class="t.color" />
+                <span class="text-[9px] truncate">{{ t.label }}</span>
+              </button>
+            </UTooltip>
           </div>
         </div>
 
