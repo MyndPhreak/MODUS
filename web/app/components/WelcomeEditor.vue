@@ -164,6 +164,7 @@
               @click="addElement(t.type)"
             >
               <UIcon :name="t.icon" class="text-base" :class="t.color" />
+              <span class="text-[9px] truncate">{{ t.label }}</span>
             </button>
           </div>
         </div>
@@ -1637,10 +1638,12 @@ onMounted(() => {
 }
 .we-tool-square {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   width: 100%;
-  aspect-ratio: 1;
+  padding: 4px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
