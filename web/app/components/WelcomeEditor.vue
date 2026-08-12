@@ -259,7 +259,6 @@
             </button>
           </div>
         </div>
-
       </div>
 
       <!-- CENTER: Canvas -->
@@ -1647,7 +1646,7 @@ onMounted(() => {
   border: 1px solid #333;
   border-radius: 6px;
   color: #d4d4d8;
-  font-size: 13px;
+  font-size: 14px;
   padding: 6px 8px;
   width: 100%;
   resize: vertical;
