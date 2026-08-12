@@ -9,16 +9,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
 const { state, loadChannels } = useServerSettings(guildId);
+const { setFullBleed, reset: resetPageChrome } = usePageChrome();
 
 const channels = computed(() => state.value.channels);
 const channelsLoading = computed(() => state.value.channelsLoading);
 
 onMounted(() => {
   loadChannels();
+  setFullBleed(true);
+});
+
+onUnmounted(() => {
+  resetPageChrome();
 });
 </script>

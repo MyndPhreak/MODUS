@@ -6,7 +6,10 @@
     </div>
 
     <!-- Scrollable Content -->
-    <div class="flex-1 overflow-y-auto px-6 pb-6 pt-24">
+    <div
+      class="flex-1 overflow-y-auto"
+      :class="chrome.fullBleed ? 'pt-16' : 'px-6 pb-6 pt-24'"
+    >
       <slot />
     </div>
   </main>
@@ -14,4 +17,5 @@
 
 <script setup lang="ts">
 // Basic panel layout mimicking UDashboardPanel
+const { state: chrome } = usePageChrome();
 </script>
