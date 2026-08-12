@@ -1637,7 +1637,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 6px 6px;
   border-radius: 8px;
   font-size: 12px;
   color: #a1a1aa;
@@ -1651,9 +1651,11 @@ onMounted(() => {
   color: #d4d4d8;
 }
 .we-layer-active {
-  background: rgba(124, 110, 246, 0.15);
-  border-color: rgba(124, 110, 246, 0.4);
+  background: rgba(124, 110, 246, 0.22);
+  border-color: rgba(124, 110, 246, 0.5);
+  border-left: 3px solid #7c6ef6;
   color: #e4e4e7;
+  font-weight: 500;
 }
 
 /* ── Property Sections ── */
