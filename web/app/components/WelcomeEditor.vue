@@ -459,13 +459,12 @@
                 </template>
 
                 <v-transformer
-                  v-if="selectedElementId"
+                  v-if="selectedElementId && selectedElement?.type !== 'line'"
                   ref="transformerRef"
                   :config="{
                     nodes: transformerNodes,
                     enabledAnchors:
-                      selectedElement?.type === 'avatar' ||
-                      selectedElement?.type === 'line'
+                      selectedElement?.type === 'avatar'
                         ? []
                         : [
                             'top-left',
