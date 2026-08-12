@@ -262,6 +262,21 @@
             background-size: 16px 16px;
           "
         />
+
+        <!-- Empty state hint -->
+        <div
+          v-if="template.elements.length === 0"
+          class="absolute inset-0 z-20 flex flex-col items-center justify-center text-center pointer-events-none"
+        >
+          <UIcon
+            name="i-heroicons-cursor-arrow-rays"
+            class="text-2xl text-zinc-500 mb-2"
+          />
+          <p class="text-xs text-zinc-500">
+            Click a tool on the left to add your first element
+          </p>
+        </div>
+
         <client-only>
           <div
             :style="{
