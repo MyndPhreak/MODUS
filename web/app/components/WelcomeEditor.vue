@@ -83,6 +83,7 @@
                 color="neutral"
                 variant="ghost"
                 size="xs"
+                aria-label="Upload background image"
                 :class="{ 'text-violet-400': !!template.backgroundImage }"
                 @click="open()"
               />
@@ -92,6 +93,7 @@
         <UTooltip v-if="template.backgroundImage" text="Remove background image">
           <button
             class="we-tool-btn text-red-400 hover:text-red-300"
+            aria-label="Remove background image"
             @click="removeBgImage"
           >
             <UIcon name="i-heroicons-x-mark" class="text-xs" />
@@ -114,6 +116,7 @@
             color="neutral"
             variant="ghost"
             size="xs"
+            aria-label="Reset"
             @click="resetTemplate"
           />
         </UTooltip>
@@ -189,7 +192,8 @@
               <UTooltip text="Move up">
                 <button
                   class="we-tool-btn-sm"
-                  :disabled="!selectedElementId"
+                  :aria-disabled="!selectedElementId"
+                  aria-label="Move up"
                   @click="moveLayer('up')"
                 >
                   <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
@@ -198,7 +202,8 @@
               <UTooltip text="Move down">
                 <button
                   class="we-tool-btn-sm"
-                  :disabled="!selectedElementId"
+                  :aria-disabled="!selectedElementId"
+                  aria-label="Move down"
                   @click="moveLayer('down')"
                 >
                   <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
@@ -207,7 +212,8 @@
               <UTooltip text="Duplicate">
                 <button
                   class="we-tool-btn-sm"
-                  :disabled="!selectedElementId"
+                  :aria-disabled="!selectedElementId"
+                  aria-label="Duplicate"
                   @click="duplicateSelectedElement"
                 >
                   <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
@@ -483,6 +489,7 @@
             <UTooltip text="Delete element">
               <button
                 class="we-tool-btn text-red-400 hover:text-red-300"
+                aria-label="Delete element"
                 @click="deleteSelectedElement"
               >
                 <UIcon name="i-heroicons-trash" class="text-sm" />
@@ -1669,11 +1676,11 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.08);
   color: #e4e4e7;
 }
-.we-tool-btn-sm:disabled {
+.we-tool-btn-sm[aria-disabled='true'] {
   opacity: 0.35;
   cursor: not-allowed;
 }
-.we-tool-btn-sm:disabled:hover {
+.we-tool-btn-sm[aria-disabled='true']:hover {
   background: transparent;
   color: #71717a;
 }
