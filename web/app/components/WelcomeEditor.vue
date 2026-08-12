@@ -137,7 +137,7 @@
     <div class="flex-1 flex min-h-0 gap-px bg-zinc-950">
       <!-- LEFT PANEL: Tools + Layers -->
       <div
-        class="w-[240px] shrink-0 flex flex-col we-glass-panel rounded-2xl"
+        class="w-72 shrink-0 flex flex-col we-glass-panel rounded-2xl"
       >
         <!-- Preset Templates -->
         <div class="p-2 border-b border-zinc-800">
@@ -471,7 +471,7 @@
 
       <!-- RIGHT PANEL: Properties -->
       <div
-        class="w-[260px] shrink-0 we-glass-panel rounded-2xl overflow-y-auto"
+        class="w-72 shrink-0 we-glass-panel rounded-2xl overflow-y-auto"
       >
         <div v-if="selectedElement" class="flex flex-col">
           <!-- Header -->
