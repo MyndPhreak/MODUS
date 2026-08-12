@@ -215,6 +215,16 @@
                   <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
                 </button>
               </UTooltip>
+              <UTooltip text="Delete">
+                <button
+                  class="we-tool-btn-sm text-red-400 hover:text-red-300"
+                  :aria-disabled="!selectedElementId"
+                  aria-label="Delete"
+                  @click="deleteSelectedElement"
+                >
+                  <UIcon name="i-heroicons-trash" class="text-xs" />
+                </button>
+              </UTooltip>
               <span class="text-[10px] text-zinc-500 tabular-nums ml-1">{{
                 template.elements.length
               }}</span>
