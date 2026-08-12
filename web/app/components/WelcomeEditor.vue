@@ -260,18 +260,6 @@
           </div>
         </div>
 
-        <!-- Placeholders -->
-        <div class="p-2 border-t border-zinc-800">
-          <p class="we-panel-label mb-1">Placeholders</p>
-          <div class="flex flex-wrap gap-1">
-            <code
-              v-for="ph in placeholders"
-              :key="ph"
-              class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 font-mono"
-              >{{ ph }}</code
-            >
-          </div>
-        </div>
       </div>
 
       <!-- CENTER: Canvas -->
@@ -581,11 +569,22 @@
           <div v-if="selectedElement.type === 'text'" class="we-prop-section">
             <p class="we-prop-title">Text</p>
             <textarea
+              ref="textFieldRef"
               v-model="selectedElement.text"
               rows="2"
               class="we-textarea"
               placeholder="Use {username}, etc."
             />
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <button
+                v-for="ph in placeholders"
+                :key="ph"
+                class="we-placeholder-chip"
+                @click="insertPlaceholder(ph)"
+              >
+                {{ ph }}
+              </button>
+            </div>
 
             <!-- Font Family -->
             <div class="mt-1.5">
@@ -983,6 +982,7 @@ const template = ref<WelcomeTemplate>(
 const selectedElementId = ref<string | null>(null);
 const saving = ref(false);
 const stageRef = ref<any>(null);
+const textFieldRef = ref<HTMLTextAreaElement | null>(null);
 const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
 const bgUploading = ref(false);
@@ -1358,6 +1358,25 @@ function addElement(type: TemplateElement["type"]) {
   if (!defs[type]) return;
   template.value.elements.push({ id, ...defs[type] } as TemplateElement);
   selectedElementId.value = id;
+}
+
+function insertPlaceholder(ph: string) {
+  if (!selectedElement.value || selectedElement.value.type !== "text") return;
+  const el = textFieldRef.value;
+  const current = selectedElement.value.text || "";
+  if (el) {
+    const start = el.selectionStart ?? current.length;
+    const end = el.selectionEnd ?? current.length;
+    selectedElement.value.text =
+      current.slice(0, start) + ph + current.slice(end);
+    nextTick(() => {
+      el.focus();
+      const pos = start + ph.length;
+      el.setSelectionRange(pos, pos);
+    });
+  } else {
+    selectedElement.value.text = current + ph;
+  }
 }
 
 function deleteSelectedElement() {
@@ -1768,6 +1787,21 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.we-placeholder-chip {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.we-placeholder-chip:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.4);
 }
 .we-prop-label {
   font-size: 11px;
