@@ -290,6 +290,7 @@
                     width: template.canvasWidth,
                     height: template.canvasHeight,
                     fill: template.backgroundColor,
+                    listening: false,
                   }"
                 />
 
@@ -302,6 +303,7 @@
                     width: template.canvasWidth,
                     height: template.canvasHeight,
                     image: bgImageObj,
+                    listening: false,
                   }"
                 />
 
