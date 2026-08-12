@@ -1493,7 +1493,7 @@ function handleTransformEnd(e: any, el: TemplateElement) {
   el.x = Math.round(node.x());
   el.y = Math.round(node.y());
   el.rotation = Math.round(node.rotation());
-  if (el.type === "rect" || el.type === "image") {
+  if (el.type === "rect" || el.type === "image" || el.type === "text") {
     el.width = Math.round(Math.max(5, node.width() * node.scaleX()));
     el.height = Math.round(Math.max(5, node.height() * node.scaleY()));
     node.scaleX(1);
