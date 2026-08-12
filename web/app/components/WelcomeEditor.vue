@@ -220,11 +220,7 @@
                 class="text-sm shrink-0"
               />
               <span class="truncate flex-1 text-left">
-                {{
-                  el.type === "text"
-                    ? (el.text || "Text").substring(0, 16)
-                    : el.type.charAt(0).toUpperCase() + el.type.slice(1)
-                }}
+                {{ elementLabel(el) }}
               </span>
               <span class="text-[9px] text-zinc-600 tabular-nums">{{
                 template.elements.length - index
@@ -432,8 +428,7 @@
                 class="text-sm text-zinc-400"
               />
               <span class="text-xs font-medium text-zinc-300">{{
-                selectedElement.type.charAt(0).toUpperCase() +
-                selectedElement.type.slice(1)
+                elementLabel(selectedElement)
               }}</span>
             </div>
             <button
@@ -1209,6 +1204,12 @@ function previewText(t: string): string {
     .replace(/\{tag\}/g, "NewUser#0001")
     .replace(/\{server_name\}/g, "My Server")
     .replace(/\{member_count\}/g, "42");
+}
+
+function elementLabel(el: TemplateElement): string {
+  return el.type === "text"
+    ? (el.text || "Text").substring(0, 16)
+    : el.type.charAt(0).toUpperCase() + el.type.slice(1);
 }
 
 function elementTypeIcon(type: string): string {
