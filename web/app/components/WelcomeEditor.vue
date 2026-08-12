@@ -352,6 +352,7 @@
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="() => selectElement(el.id)"
                     @tap="() => selectElement(el.id)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <v-text
                     v-if="el.type === 'text'"
@@ -405,8 +406,8 @@
                   :config="{
                     nodes: transformerNodes,
                     enabledAnchors:
-                      selectedElement?.type === 'circle' ||
-                      selectedElement?.type === 'avatar'
+                      selectedElement?.type === 'avatar' ||
+                      selectedElement?.type === 'line'
                         ? []
                         : [
                             'top-left',
@@ -418,6 +419,8 @@
                             'top-center',
                             'bottom-center',
                           ],
+                    keepRatio: selectedElement?.type !== 'circle',
+                    shiftBehavior: 'default',
                     rotateEnabled: true,
                     borderStroke: '#7c6ef6',
                     borderStrokeWidth: 2.5,
@@ -795,7 +798,15 @@ const toast = useToast();
 
 interface TemplateElement {
   id: string;
-  type: "text" | "image" | "rect" | "circle" | "avatar";
+  type:
+    | "text"
+    | "image"
+    | "rect"
+    | "circle"
+    | "avatar"
+    | "triangle"
+    | "star"
+    | "line";
   x: number;
   y: number;
   width?: number;
@@ -819,6 +830,13 @@ interface TemplateElement {
   shadowBlur?: number;
   shadowOffsetX?: number;
   shadowOffsetY?: number;
+  scaleX?: number;
+  scaleY?: number;
+  numPoints?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  points?: number[];
+  arrow?: boolean;
 }
 
 interface WelcomeTemplate {
@@ -1227,6 +1245,9 @@ function circleConfig(el: TemplateElement) {
     opacity: el.opacity ?? 1,
     stroke: el.stroke,
     strokeWidth: el.strokeWidth || 0,
+    rotation: el.rotation ?? 0,
+    scaleX: el.scaleX ?? 1,
+    scaleY: el.scaleY ?? 1,
     draggable: true,
     name: el.id,
   };
@@ -1471,11 +1492,16 @@ function handleTransformEnd(e: any, el: TemplateElement) {
   const node = e.target;
   el.x = Math.round(node.x());
   el.y = Math.round(node.y());
-  el.width = Math.round(Math.max(5, node.width() * node.scaleX()));
-  el.height = Math.round(Math.max(5, node.height() * node.scaleY()));
   el.rotation = Math.round(node.rotation());
-  node.scaleX(1);
-  node.scaleY(1);
+  if (el.type === "rect" || el.type === "image") {
+    el.width = Math.round(Math.max(5, node.width() * node.scaleX()));
+    el.height = Math.round(Math.max(5, node.height() * node.scaleY()));
+    node.scaleX(1);
+    node.scaleY(1);
+  } else {
+    el.scaleX = node.scaleX();
+    el.scaleY = node.scaleY();
+  }
 }
 
 function handleTransformerEnd(e: any) {
