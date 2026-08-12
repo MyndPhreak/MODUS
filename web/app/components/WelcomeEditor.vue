@@ -177,22 +177,22 @@
             <p class="we-panel-label">Layers</p>
             <div class="flex items-center gap-1">
               <button
-                v-if="selectedElementId"
                 class="we-tool-btn-sm" title="Move up"
+                :disabled="!selectedElementId"
                 @click="moveLayer('up')"
               >
                 <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
               </button>
               <button
-                v-if="selectedElementId"
                 class="we-tool-btn-sm" title="Move down"
+                :disabled="!selectedElementId"
                 @click="moveLayer('down')"
               >
                 <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
               </button>
               <button
-                v-if="selectedElementId"
                 class="we-tool-btn-sm" title="Duplicate"
+                :disabled="!selectedElementId"
                 @click="duplicateSelectedElement"
               >
                 <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
@@ -1635,6 +1635,14 @@ onMounted(() => {
 .we-tool-btn-sm:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #e4e4e7;
+}
+.we-tool-btn-sm:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.we-tool-btn-sm:disabled:hover {
+  background: transparent;
+  color: #71717a;
 }
 .we-tool-square {
   display: flex;
