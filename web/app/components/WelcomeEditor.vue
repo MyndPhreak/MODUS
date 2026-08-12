@@ -165,20 +165,16 @@
         <!-- Add Element Tools -->
         <div class="p-2 border-b border-zinc-800">
           <p class="we-panel-label mb-2">Tools</p>
-          <div class="grid grid-cols-4 gap-1">
-            <UTooltip
+          <div class="flex flex-col gap-1.5">
+            <button
               v-for="t in toolTypes"
               :key="t.type"
-              :text="t.label"
+              class="we-tool-row"
+              @click="addElement(t.type)"
             >
-              <button
-                class="we-tool-square"
-                @click="addElement(t.type)"
-              >
-                <UIcon :name="t.icon" class="text-base" :class="t.color" />
-                <span class="text-[9px] truncate">{{ t.label }}</span>
-              </button>
-            </UTooltip>
+              <UIcon :name="t.icon" class="text-lg shrink-0" :class="t.color" />
+              <span class="text-sm font-medium">{{ t.label }}</span>
+            </button>
           </div>
         </div>
 
@@ -1685,21 +1681,20 @@ onMounted(() => {
   background: transparent;
   color: #71717a;
 }
-.we-tool-square {
+.we-tool-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
+  gap: 10px;
   width: 100%;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
   transition: all 0.15s;
+  color: #e4e4e7;
 }
-.we-tool-square:hover {
+.we-tool-row:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
 }
