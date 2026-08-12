@@ -497,19 +497,19 @@
             <p class="we-prop-title">Transform</p>
             <div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <div class="we-prop-row">
-                <span class="we-prop-label">X</span
-                ><input
+                <span class="we-prop-label">X</span>
+                <input
                   v-model.number="selectedElement.x"
                   type="number"
-                  class="we-num-input flex-1"
+                  class="we-num-input w-full"
                 />
               </div>
               <div class="we-prop-row">
-                <span class="we-prop-label">Y</span
-                ><input
+                <span class="we-prop-label">Y</span>
+                <input
                   v-model.number="selectedElement.y"
                   type="number"
-                  class="we-num-input flex-1"
+                  class="we-num-input w-full"
                 />
               </div>
               <template
@@ -519,19 +519,19 @@
                 "
               >
                 <div class="we-prop-row">
-                  <span class="we-prop-label">W</span
-                  ><input
+                  <span class="we-prop-label">W</span>
+                  <input
                     v-model.number="selectedElement.width"
                     type="number"
-                    class="we-num-input flex-1"
+                    class="we-num-input w-full"
                   />
                 </div>
                 <div class="we-prop-row">
-                  <span class="we-prop-label">H</span
-                  ><input
+                  <span class="we-prop-label">H</span>
+                  <input
                     v-model.number="selectedElement.height"
                     type="number"
-                    class="we-num-input flex-1"
+                    class="we-num-input w-full"
                   />
                 </div>
               </template>
@@ -542,11 +542,11 @@
                 "
               >
                 <div class="we-prop-row">
-                  <span class="we-prop-label">R</span
-                  ><input
+                  <span class="we-prop-label">R</span>
+                  <input
                     v-model.number="selectedElement.radius"
                     type="number"
-                    class="we-num-input flex-1"
+                    class="we-num-input w-full"
                   />
                 </div>
               </template>
@@ -554,11 +554,11 @@
                 v-if="selectedElement.type === 'rect'"
                 class="we-prop-row col-span-2"
               >
-                <span class="we-prop-label">Radius</span
-                ><input
+                <span class="we-prop-label">Radius</span>
+                <input
                   v-model.number="selectedElement.cornerRadius"
                   type="number"
-                  class="we-num-input flex-1"
+                  class="we-num-input w-full"
                   min="0"
                 />
               </div>
@@ -597,11 +597,11 @@
 
             <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-1.5">
               <div class="we-prop-row">
-                <span class="we-prop-label">Size</span
-                ><input
+                <span class="we-prop-label">Size</span>
+                <input
                   v-model.number="selectedElement.fontSize"
                   type="number"
-                  class="we-num-input flex-1"
+                  class="we-num-input w-full"
                   min="6"
                 />
               </div>
@@ -609,7 +609,7 @@
                 <span class="we-prop-label">Style</span>
                 <select
                   v-model="selectedElement.fontStyle"
-                  class="we-select flex-1"
+                  class="we-select w-full"
                 >
                   <option value="">Normal</option>
                   <option value="bold">Bold</option>
@@ -1619,8 +1619,8 @@ onMounted(() => {
   border: 1px solid #333;
   border-radius: 6px;
   color: #d4d4d8;
-  font-size: 13px;
-  padding: 4px 6px;
+  font-size: 14px;
+  padding: 6px 8px;
   font-variant-numeric: tabular-nums;
   outline: none;
   transition: border-color 0.15s;
@@ -1633,8 +1633,8 @@ onMounted(() => {
   border: 1px solid #333;
   border-radius: 6px;
   color: #d4d4d8;
-  font-size: 12px;
-  padding: 4px 6px;
+  font-size: 13px;
+  padding: 6px 8px;
   font-family: "JetBrains Mono", monospace;
   outline: none;
   transition: border-color 0.15s;
@@ -1662,8 +1662,8 @@ onMounted(() => {
   border: 1px solid #333;
   border-radius: 6px;
   color: #d4d4d8;
-  font-size: 13px;
-  padding: 4px 6px;
+  font-size: 14px;
+  padding: 6px 8px;
   outline: none;
 }
 
@@ -1785,7 +1785,7 @@ onMounted(() => {
 }
 .we-prop-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
 }
 .we-placeholder-chip {
@@ -1807,7 +1807,6 @@ onMounted(() => {
   font-size: 11px;
   color: #a1a1aa;
   font-weight: 600;
-  min-width: 16px;
 }
 
 
