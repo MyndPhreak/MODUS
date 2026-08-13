@@ -511,7 +511,7 @@
                 </template>
 
                 <v-transformer
-                  v-if="selectedElementId && selectedElement?.type !== 'line'"
+                  v-if="transformerNodes.length > 0"
                   ref="transformerRef"
                   :config="{
                     nodes: transformerNodes,
@@ -528,7 +528,10 @@
                             'top-center',
                             'bottom-center',
                           ],
-                    keepRatio: selectedElement?.type !== 'circle',
+                    keepRatio:
+                      selectedElementIds.size > 1
+                        ? true
+                        : selectedElement?.type !== 'circle',
                     shiftBehavior: 'default',
                     rotateEnabled: true,
                     borderStroke: '#7c6ef6',
@@ -1331,12 +1334,16 @@ const selectedElementOpacityPct = computed({
 // ── Transformer ──
 
 const transformerNodes = computed(() => {
-  if (!stageRef.value || !selectedElementId.value) return [];
+  if (!stageRef.value || selectedElementIds.value.size === 0) return [];
   try {
     const stage = stageRef.value.getNode();
     if (!stage) return [];
-    const node = stage.findOne(`.${selectedElementId.value}`);
-    return node ? [node] : [];
+    return [...selectedElementIds.value]
+      .filter(
+        (id) => template.value.elements.find((el) => el.id === id)?.type !== "line",
+      )
+      .map((id) => stage.findOne(`.${id}`))
+      .filter((node): node is NonNullable<typeof node> => Boolean(node));
   } catch {
     return [];
   }
@@ -1359,7 +1366,7 @@ const hoveredElementRect = computed(() => {
   }
 });
 
-watch(selectedElementId, async () => {
+watch(selectedElementIds, async () => {
   await nextTick();
   if (transformerRef.value) {
     try {
