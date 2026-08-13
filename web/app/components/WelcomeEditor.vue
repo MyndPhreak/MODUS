@@ -284,7 +284,12 @@
       <div
         class="flex-1 flex items-center justify-center bg-[#2d2d2d] overflow-auto relative"
         ref="canvasWrap"
+        :class="{ 'cursor-grab': isSpaceHeld && !isPanning, 'cursor-grabbing': isPanning }"
         @wheel.prevent="handleWheelZoom"
+        @mousedown="handlePanStart"
+        @mousemove="handlePanMove"
+        @mouseup="handlePanEnd"
+        @mouseleave="handlePanEnd"
       >
         <!-- Checkerboard under canvas -->
         <div
@@ -1113,6 +1118,8 @@ const textFieldRef = ref<HTMLTextAreaElement | null>(null);
 const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
 const zoomMultiplier = ref(1);
+const isSpaceHeld = ref(false);
+const isPanning = ref(false);
 const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
 const bgImageFile = ref<File | null>(null);
@@ -1735,13 +1742,51 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     deleteSelectedElement();
   }
+  if (e.key === ' ' && !isSpaceHeld.value) {
+    e.preventDefault();
+    isSpaceHeld.value = true;
+    stageRef.value?.getNode()?.listening(false);
+  }
+}
+
+function handleKeyUp(e: KeyboardEvent) {
+  if (e.key === ' ') {
+    isSpaceHeld.value = false;
+    isPanning.value = false;
+    stageRef.value?.getNode()?.listening(true);
+  }
+}
+
+let panStart = { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 };
+
+function handlePanStart(e: MouseEvent) {
+  if (!isSpaceHeld.value || !canvasWrap.value) return;
+  isPanning.value = true;
+  panStart = {
+    x: e.clientX,
+    y: e.clientY,
+    scrollLeft: canvasWrap.value.scrollLeft,
+    scrollTop: canvasWrap.value.scrollTop,
+  };
+}
+
+function handlePanMove(e: MouseEvent) {
+  if (!isPanning.value || !canvasWrap.value) return;
+  canvasWrap.value.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
+  canvasWrap.value.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
+}
+
+function handlePanEnd() {
+  isPanning.value = false;
 }
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('keyup', handleKeyUp);
 });
 
 // ── Drag / Transform ──
