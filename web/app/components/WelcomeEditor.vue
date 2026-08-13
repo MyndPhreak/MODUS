@@ -20,22 +20,42 @@
       <div class="we-toolbar-sep" />
 
       <div class="we-toolbar-group">
-        <span class="we-label">W</span>
-        <UInputNumber
-          v-model="template.canvasWidth"
-          :min="200"
-          :max="1920"
-          size="xs"
-          class="w-20"
-        />
-        <span class="we-label">H</span>
-        <UInputNumber
-          v-model="template.canvasHeight"
-          :min="100"
-          :max="1080"
-          size="xs"
-          class="w-20"
-        />
+        <UPopover>
+          <UTooltip text="Canvas size">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="xs"
+              icon="i-heroicons-arrows-pointing-out"
+              :label="`${template.canvasWidth} × ${template.canvasHeight}`"
+              aria-label="Canvas size"
+            />
+          </UTooltip>
+          <template #content>
+            <div class="p-3 space-y-3 w-48">
+              <div>
+                <p class="we-prop-label mb-1">Width</p>
+                <UInputNumber
+                  v-model="template.canvasWidth"
+                  :min="200"
+                  :max="1920"
+                  size="sm"
+                  class="w-full"
+                />
+              </div>
+              <div>
+                <p class="we-prop-label mb-1">Height</p>
+                <UInputNumber
+                  v-model="template.canvasHeight"
+                  :min="100"
+                  :max="1080"
+                  size="sm"
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </template>
+        </UPopover>
       </div>
 
       <div class="we-toolbar-sep" />
