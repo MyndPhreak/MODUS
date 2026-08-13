@@ -1323,23 +1323,17 @@ watch(selectedElementId, async () => {
 // ── Config builders ──
 
 function rectConfig(el: TemplateElement) {
-  const grad = isGradient(el.fill);
+  const w = el.width || 100;
+  const h = el.height || 100;
   return {
     x: el.x,
     y: el.y,
-    width: el.width || 100,
-    height: el.height || 100,
-    fill: grad ? undefined : el.fill || "#ffffff",
-    fillLinearGradientStartPoint: grad ? { x: 0, y: 0 } : undefined,
-    fillLinearGradientEndPoint: grad
-      ? { x: el.width || 100, y: el.height || 100 }
-      : undefined,
-    fillLinearGradientColorStops: grad
-      ? parseGradientStops(el.fill!)
-      : undefined,
+    width: w,
+    height: h,
+    ...gradientFillProps(el.fill, 0, 0, w, h, "#ffffff"),
     cornerRadius: el.cornerRadius || 0,
     opacity: el.opacity ?? 1,
-    stroke: el.stroke,
+    ...gradientStrokeProps(el.stroke, 0, 0, w, h),
     strokeWidth: el.strokeWidth || 0,
     rotation: el.rotation || 0,
     draggable: true,
@@ -1348,13 +1342,14 @@ function rectConfig(el: TemplateElement) {
 }
 
 function circleConfig(el: TemplateElement) {
+  const r = el.radius || 50;
   return {
     x: el.x,
     y: el.y,
-    radius: el.radius || 50,
-    fill: el.fill || "#ffffff",
+    radius: r,
+    ...gradientFillProps(el.fill, -r, -r, r, r, "#ffffff"),
     opacity: el.opacity ?? 1,
-    stroke: el.stroke,
+    ...gradientStrokeProps(el.stroke, -r, -r, r, r),
     strokeWidth: el.strokeWidth || 0,
     rotation: el.rotation ?? 0,
     scaleX: el.scaleX ?? 1,
@@ -1365,14 +1360,15 @@ function circleConfig(el: TemplateElement) {
 }
 
 function triangleConfig(el: TemplateElement) {
+  const r = el.radius || 50;
   return {
     x: el.x,
     y: el.y,
     sides: 3,
-    radius: el.radius || 50,
-    fill: el.fill || "#374151",
+    radius: r,
+    ...gradientFillProps(el.fill, -r, -r, r, r, "#374151"),
     opacity: el.opacity ?? 1,
-    stroke: el.stroke,
+    ...gradientStrokeProps(el.stroke, -r, -r, r, r),
     strokeWidth: el.strokeWidth || 0,
     rotation: el.rotation ?? 0,
     scaleX: el.scaleX ?? 1,
@@ -1383,15 +1379,16 @@ function triangleConfig(el: TemplateElement) {
 }
 
 function starConfig(el: TemplateElement) {
+  const r = el.outerRadius || 50;
   return {
     x: el.x,
     y: el.y,
     numPoints: el.numPoints || 5,
     innerRadius: el.innerRadius || 25,
-    outerRadius: el.outerRadius || 50,
-    fill: el.fill || "#374151",
+    outerRadius: r,
+    ...gradientFillProps(el.fill, -r, -r, r, r, "#374151"),
     opacity: el.opacity ?? 1,
-    stroke: el.stroke,
+    ...gradientStrokeProps(el.stroke, -r, -r, r, r),
     strokeWidth: el.strokeWidth || 0,
     rotation: el.rotation ?? 0,
     scaleX: el.scaleX ?? 1,
@@ -1441,23 +1438,93 @@ function textConfig(el: TemplateElement) {
 
 // ── Helpers ──
 
-function isGradient(fill?: string): boolean {
-  return !!fill && fill.startsWith("linear-gradient");
+function gradientFillProps(
+  fill: string | undefined,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  defaultColor: string,
+) {
+  const type = gradientType(fill);
+  if (!type) return { fill: fill || defaultColor };
+
+  const stops = parseGradientStops(fill!);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  if (type === "linear") {
+    const angle = parseGradientAngle(fill!);
+    const rad = (angle * Math.PI) / 180;
+    const hw = (maxX - minX) / 2;
+    const hh = (maxY - minY) / 2;
+    return {
+      fill: undefined,
+      fillLinearGradientStartPoint: {
+        x: cx - Math.cos(rad) * hw,
+        y: cy - Math.sin(rad) * hh,
+      },
+      fillLinearGradientEndPoint: {
+        x: cx + Math.cos(rad) * hw,
+        y: cy + Math.sin(rad) * hh,
+      },
+      fillLinearGradientColorStops: stops,
+    };
+  }
+
+  const r = Math.max(maxX - minX, maxY - minY) / 2;
+  return {
+    fill: undefined,
+    fillRadialGradientStartPoint: { x: cx, y: cy },
+    fillRadialGradientEndPoint: { x: cx, y: cy },
+    fillRadialGradientStartRadius: 0,
+    fillRadialGradientEndRadius: r,
+    fillRadialGradientColorStops: stops,
+  };
 }
 
-function parseGradientStops(g: string): (string | number)[] {
-  const m = g.match(/linear-gradient\(([^)]+)\)/);
-  if (!m) return [0, "#ffffff", 1, "#000000"];
-  const colors = m[1]
-    .split(",")
-    .map((s) => s.trim())
-    .slice(1);
-  const stops: (string | number)[] = [];
-  colors.forEach((c, i) => {
-    stops.push(i / Math.max(colors.length - 1, 1));
-    stops.push(c);
-  });
-  return stops;
+function gradientStrokeProps(
+  stroke: string | undefined,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+) {
+  const type = gradientType(stroke);
+  if (!type) return { stroke };
+
+  const stops = parseGradientStops(stroke!);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  if (type === "linear") {
+    const angle = parseGradientAngle(stroke!);
+    const rad = (angle * Math.PI) / 180;
+    const hw = (maxX - minX) / 2;
+    const hh = (maxY - minY) / 2;
+    return {
+      stroke: undefined,
+      strokeLinearGradientStartPoint: {
+        x: cx - Math.cos(rad) * hw,
+        y: cy - Math.sin(rad) * hh,
+      },
+      strokeLinearGradientEndPoint: {
+        x: cx + Math.cos(rad) * hw,
+        y: cy + Math.sin(rad) * hh,
+      },
+      strokeLinearGradientColorStops: stops,
+    };
+  }
+
+  const r = Math.max(maxX - minX, maxY - minY) / 2;
+  return {
+    stroke: undefined,
+    strokeRadialGradientStartPoint: { x: cx, y: cy },
+    strokeRadialGradientEndPoint: { x: cx, y: cy },
+    strokeRadialGradientStartRadius: 0,
+    strokeRadialGradientEndRadius: r,
+    strokeRadialGradientColorStops: stops,
+  };
 }
 
 function previewText(t: string): string {
