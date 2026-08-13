@@ -393,6 +393,7 @@
                   <v-rect
                     v-if="el.type === 'rect'"
                     :config="rectConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -401,6 +402,7 @@
                   <v-circle
                     v-if="el.type === 'circle'"
                     :config="circleConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -409,6 +411,7 @@
                   <v-regular-polygon
                     v-if="el.type === 'triangle'"
                     :config="triangleConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -417,6 +420,7 @@
                   <v-star
                     v-if="el.type === 'star'"
                     :config="starConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -426,6 +430,7 @@
                     <v-line
                       v-if="!el.arrow"
                       :config="lineConfig(el)"
+                      @dragstart="(e: any) => handleDragStart(e, el)"
                       @dragend="(e: any) => handleDragEnd(e, el)"
                       @click="(e: any) => selectElement(el.id, e.evt)"
                       @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -433,6 +438,7 @@
                     <v-arrow
                       v-if="el.arrow"
                       :config="lineConfig(el)"
+                      @dragstart="(e: any) => handleDragStart(e, el)"
                       @dragend="(e: any) => handleDragEnd(e, el)"
                       @click="(e: any) => selectElement(el.id, e.evt)"
                       @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -467,6 +473,7 @@
                   <v-text
                     v-if="el.type === 'text'"
                     :config="textConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleTextDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -475,6 +482,7 @@
                   <v-group
                     v-if="el.type === 'avatar'"
                     :config="{ x: el.x, y: el.y, draggable: true, name: el.id }"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
@@ -1874,9 +1882,39 @@ function handleStageClick(e: any) {
   if (e.target === e.target.getStage()) selectedElementIds.value = new Set();
 }
 
+function handleDragStart(e: any, el: TemplateElement) {
+  if (!selectedElementIds.value.has(el.id)) {
+    selectedElementIds.value = new Set([el.id]);
+  }
+}
+
+function moveOtherSelectedElements(
+  movedEl: TemplateElement,
+  newX: number,
+  newY: number,
+) {
+  if (
+    selectedElementIds.value.size <= 1 ||
+    !selectedElementIds.value.has(movedEl.id)
+  )
+    return;
+  const dx = newX - movedEl.x;
+  const dy = newY - movedEl.y;
+  for (const id of selectedElementIds.value) {
+    if (id === movedEl.id) continue;
+    const el = template.value.elements.find((e) => e.id === id);
+    if (!el) continue;
+    el.x = Math.round(el.x + dx);
+    el.y = Math.round(el.y + dy);
+  }
+}
+
 function handleDragEnd(e: any, el: TemplateElement) {
-  el.x = Math.round(e.target.x());
-  el.y = Math.round(e.target.y());
+  const newX = Math.round(e.target.x());
+  const newY = Math.round(e.target.y());
+  moveOtherSelectedElements(el, newX, newY);
+  el.x = newX;
+  el.y = newY;
 }
 
 function handleLineHandleDrag(e: any, el: TemplateElement, pointIndex: number) {
@@ -1889,10 +1927,13 @@ function handleLineHandleDrag(e: any, el: TemplateElement, pointIndex: number) {
 function handleTextDragEnd(e: any, el: TemplateElement) {
   const rx = e.target.x(),
     ry = e.target.y();
-  el.x = Math.round(
+  const newX = Math.round(
     el.align === "center" ? rx + 200 : el.align === "right" ? rx + 400 : rx,
   );
-  el.y = Math.round(ry + (el.fontSize || 24) / 2);
+  const newY = Math.round(ry + (el.fontSize || 24) / 2);
+  moveOtherSelectedElements(el, newX, newY);
+  el.x = newX;
+  el.y = newY;
 }
 
 function handleTransformEnd(e: any, el: TemplateElement) {
