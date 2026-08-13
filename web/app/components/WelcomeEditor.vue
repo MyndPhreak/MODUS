@@ -68,6 +68,25 @@
 
       <div class="we-toolbar-sep" />
 
+      <div class="we-toolbar-group">
+        <span class="we-label">Zoom</span>
+        <span class="text-xs text-zinc-400 tabular-nums w-10 text-center">
+          {{ Math.round(zoomMultiplier * 100) }}%
+        </span>
+        <UTooltip text="Reset zoom">
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="xs"
+            icon="i-heroicons-arrow-path"
+            aria-label="Reset zoom"
+            @click="zoomMultiplier = 1"
+          />
+        </UTooltip>
+      </div>
+
+      <div class="we-toolbar-sep" />
+
       <!-- Background Image -->
       <div class="we-toolbar-group">
         <UFileUpload
@@ -265,6 +284,7 @@
       <div
         class="flex-1 flex items-center justify-center bg-[#2d2d2d] overflow-auto relative"
         ref="canvasWrap"
+        @wheel.prevent="handleWheelZoom"
       >
         <!-- Checkerboard under canvas -->
         <div
@@ -1092,6 +1112,7 @@ const stageRef = ref<any>(null);
 const textFieldRef = ref<HTMLTextAreaElement | null>(null);
 const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
+const zoomMultiplier = ref(1);
 const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
 const bgImageFile = ref<File | null>(null);
@@ -1247,7 +1268,8 @@ const scaleFactor = computed(() => {
     template.value.canvasWidth > maxW ? maxW / template.value.canvasWidth : 1;
   const sh =
     template.value.canvasHeight > maxH ? maxH / template.value.canvasHeight : 1;
-  return Math.min(sw, sh, 1);
+  const baseScale = Math.min(sw, sh, 1);
+  return baseScale * zoomMultiplier.value;
 });
 
 const selectedElement = computed(() => {
@@ -1723,6 +1745,18 @@ onUnmounted(() => {
 });
 
 // ── Drag / Transform ──
+
+const ZOOM_STEP = 0.1;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+
+function handleWheelZoom(e: WheelEvent) {
+  const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+  zoomMultiplier.value = Math.min(
+    ZOOM_MAX,
+    Math.max(ZOOM_MIN, Math.round((zoomMultiplier.value + delta) * 100) / 100),
+  );
+}
 
 function handleStageClick(e: any) {
   if (e.target === e.target.getStage()) selectedElementId.value = null;
