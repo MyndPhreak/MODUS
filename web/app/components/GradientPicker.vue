@@ -1,6 +1,6 @@
 <template>
   <div class="w-64 space-y-3 p-3">
-    <div class="flex gap-1 rounded-lg bg-white/5 p-1">
+    <div v-if="allowGradient !== false" class="flex gap-1 rounded-lg bg-white/5 p-1">
       <button
         type="button"
         class="flex-1 rounded-md py-1 text-xs font-medium transition-colors"
@@ -27,12 +27,12 @@
       </button>
     </div>
 
-    <template v-if="tab === 'solid'">
+    <template v-if="tab === 'solid' || allowGradient === false">
       <UColorPicker v-model="solidColor" size="sm" />
       <UInput v-model="solidColor" size="xs" class="w-full font-mono" />
     </template>
 
-    <template v-else>
+    <template v-else-if="tab === 'gradient'">
       <div class="flex gap-1 rounded-lg bg-white/5 p-1">
         <button
           type="button"
@@ -47,6 +47,7 @@
           Linear
         </button>
         <button
+          v-if="allowRadial !== false"
           type="button"
           class="flex-1 rounded-md py-1 text-xs font-medium transition-colors"
           :class="
@@ -128,6 +129,8 @@ import { ref, watch } from "vue";
 
 const props = defineProps<{
   modelValue?: string;
+  allowRadial?: boolean;
+  allowGradient?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -146,11 +149,17 @@ const gradientSwatches = [
 ];
 
 const initialType = gradientType(props.modelValue);
-const tab = ref<"solid" | "gradient">(initialType ? "gradient" : "solid");
+const tab = ref<"solid" | "gradient">(
+  initialType && props.allowGradient !== false ? "gradient" : "solid",
+);
 const solidColor = ref(
   initialType ? "#ffffff" : props.modelValue || "#ffffff",
 );
-const gradType = ref<"linear" | "radial">(initialType || "linear");
+const gradType = ref<"linear" | "radial">(
+  initialType === "radial" && props.allowRadial === false
+    ? "linear"
+    : initialType || "linear",
+);
 const angle = ref(
   initialType === "linear" ? parseGradientAngle(props.modelValue!) : 135,
 );

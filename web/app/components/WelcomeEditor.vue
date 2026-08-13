@@ -749,6 +749,7 @@
               <template #content>
                 <GradientPicker
                   :model-value="selectedElement.fill"
+                  :allow-gradient="selectedElement.type !== 'text'"
                   @update:model-value="
                     (v: string) => {
                       if (selectedElement) selectedElement.fill = v;
@@ -778,6 +779,11 @@
                 <template #content>
                   <GradientPicker
                     :model-value="selectedElement.stroke"
+                    :allow-radial="false"
+                    :allow-gradient="
+                      selectedElement.type !== 'text' &&
+                      selectedElement.type !== 'line'
+                    "
                     @update:model-value="
                       (v: string) => {
                         if (selectedElement) selectedElement.stroke = v;
