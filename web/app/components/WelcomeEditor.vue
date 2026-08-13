@@ -61,26 +61,73 @@
       <div class="we-toolbar-sep" />
 
       <div class="we-toolbar-group">
-        <span class="we-label">BG</span>
         <UPopover>
-          <UTooltip text="Background color">
+          <UTooltip text="Background">
             <UButton
               color="neutral"
               variant="outline"
               size="xs"
-              aria-label="Background color"
+              aria-label="Background"
               :style="{ backgroundColor: template.backgroundColor }"
-              class="w-6 h-6 p-0 rounded-md"
-            />
+              class="w-6 h-6 p-0 rounded-md relative"
+            >
+              <UIcon
+                v-if="template.backgroundImage"
+                name="i-heroicons-photo"
+                class="text-[10px] text-white drop-shadow"
+              />
+            </UButton>
           </UTooltip>
           <template #content>
-            <div class="p-3 space-y-2">
-              <UColorPicker v-model="template.backgroundColor" size="sm" />
-              <UInput
-                v-model="template.backgroundColor"
-                size="xs"
-                class="font-mono"
-              />
+            <div class="p-3 space-y-3 w-56">
+              <div>
+                <p class="we-prop-label mb-1.5">Color</p>
+                <div class="space-y-2">
+                  <UColorPicker v-model="template.backgroundColor" size="sm" />
+                  <UInput
+                    v-model="template.backgroundColor"
+                    size="xs"
+                    class="font-mono w-full"
+                  />
+                </div>
+              </div>
+              <div class="border-t border-white/10 pt-3">
+                <p class="we-prop-label mb-1.5">Image</p>
+                <div class="flex items-center gap-2">
+                  <UFileUpload
+                    v-model="bgImageFile"
+                    accept="image/*"
+                    :dropzone="false"
+                    :preview="false"
+                  >
+                    <template #default="{ open }">
+                      <UButton
+                        icon="i-heroicons-photo"
+                        color="neutral"
+                        variant="outline"
+                        size="xs"
+                        :label="template.backgroundImage ? 'Replace' : 'Upload'"
+                        @click="open()"
+                      />
+                    </template>
+                  </UFileUpload>
+                  <UButton
+                    v-if="template.backgroundImage"
+                    icon="i-heroicons-x-mark"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Remove background image"
+                    @click="removeBgImage"
+                  />
+                  <span
+                    v-if="bgUploading"
+                    class="text-[10px] text-zinc-500 flex items-center gap-1"
+                  >
+                    <UIcon name="i-heroicons-arrow-path" class="animate-spin text-xs" />
+                  </span>
+                </div>
+              </div>
             </div>
           </template>
         </UPopover>
@@ -103,47 +150,6 @@
             @click="zoomMultiplier = 1"
           />
         </UTooltip>
-      </div>
-
-      <div class="we-toolbar-sep" />
-
-      <!-- Background Image -->
-      <div class="we-toolbar-group">
-        <UFileUpload
-          v-model="bgImageFile"
-          accept="image/*"
-          :dropzone="false"
-          :preview="false"
-        >
-          <template #default="{ open }">
-            <UTooltip text="Upload background image">
-              <UButton
-                icon="i-heroicons-photo"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                aria-label="Upload background image"
-                :class="{ 'text-violet-400': !!template.backgroundImage }"
-                @click="open()"
-              />
-            </UTooltip>
-          </template>
-        </UFileUpload>
-        <UTooltip v-if="template.backgroundImage" text="Remove background image">
-          <button
-            class="we-tool-btn text-red-400 hover:text-red-300"
-            aria-label="Remove background image"
-            @click="removeBgImage"
-          >
-            <UIcon name="i-heroicons-x-mark" class="text-xs" />
-          </button>
-        </UTooltip>
-        <span
-          v-if="bgUploading"
-          class="text-[10px] text-zinc-500 flex items-center gap-1"
-        >
-          <UIcon name="i-heroicons-arrow-path" class="animate-spin text-xs" />
-        </span>
       </div>
 
       <div class="flex-1" />
