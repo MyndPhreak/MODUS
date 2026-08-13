@@ -481,7 +481,13 @@
                   />
                   <v-group
                     v-if="el.type === 'avatar'"
-                    :config="{ x: el.x, y: el.y, draggable: true, name: el.id }"
+                    :config="{
+                      x: el.x,
+                      y: el.y,
+                      rotation: el.rotation ?? 0,
+                      draggable: true,
+                      name: el.id,
+                    }"
                     @dragstart="(e: any) => handleDragStart(e, el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
@@ -1008,7 +1014,7 @@
               <div class="we-prop-row col-span-2">
                 <span class="we-prop-label">Rotation</span>
                 <input
-                  v-model.number="groupRotationDelta"
+                  v-model.number.lazy="groupRotationDelta"
                   type="number"
                   class="we-num-input w-full"
                 />
@@ -1521,10 +1527,13 @@ watch(
   async () => {
     await nextTick();
     recomputeGroupBounds();
-    if (selectedElementIds.value.size <= 1) groupRotationInput.value = 0;
   },
   { deep: true, immediate: true },
 );
+
+watch(selectedElementIds, () => {
+  groupRotationInput.value = 0;
+});
 
 const groupRotationDelta = computed({
   get: () => groupRotationInput.value,
@@ -1707,6 +1716,7 @@ function lineConfig(el: TemplateElement) {
     stroke: el.stroke || "#e4e4e7",
     strokeWidth: el.strokeWidth || 3,
     opacity: el.opacity ?? 1,
+    rotation: el.rotation ?? 0,
     draggable: true,
     name: el.id,
   };
@@ -1730,6 +1740,7 @@ function textConfig(el: TemplateElement) {
     fill: el.fill || "#ffffff",
     align: el.align || "center",
     opacity: el.opacity ?? 1,
+    rotation: el.rotation ?? 0,
     stroke: el.stroke,
     strokeWidth: el.strokeWidth || 0,
     draggable: true,
