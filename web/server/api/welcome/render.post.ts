@@ -159,6 +159,52 @@ function parseGradient(
   return gradient;
 }
 
+function parseRadialGradient(
+  ctx: any,
+  gradientStr: string,
+  cx: number,
+  cy: number,
+  r: number,
+): any {
+  const match = gradientStr.match(/radial-gradient\(([^)]+)\)/);
+  if (!match) return gradientStr;
+
+  const colors = match[1]!.split(",").map((s: string) => s.trim());
+  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  colors.forEach((color: string, i: number) => {
+    gradient.addColorStop(i / Math.max(colors.length - 1, 1), color);
+  });
+
+  return gradient;
+}
+
+function resolveFillStyle(
+  ctx: any,
+  fillValue: string,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): any {
+  if (fillValue.startsWith("linear-gradient")) {
+    return parseGradient(
+      ctx,
+      fillValue,
+      minX,
+      minY,
+      maxX - minX,
+      maxY - minY,
+    );
+  }
+  if (fillValue.startsWith("radial-gradient")) {
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const r = Math.max(maxX - minX, maxY - minY) / 2;
+    return parseRadialGradient(ctx, fillValue, cx, cy, r);
+  }
+  return fillValue;
+}
+
 // ── Image Renderer ───────────────────────────────────────────────────
 
 async function renderWelcomeImage(
@@ -231,11 +277,14 @@ async function renderWelcomeImage(
         const h = el.height || 100;
         const fillValue = el.fill || "#ffffff";
 
-        if (fillValue.startsWith("linear-gradient")) {
-          ctx.fillStyle = parseGradient(ctx, fillValue, el.x, el.y, w, h);
-        } else {
-          ctx.fillStyle = fillValue;
-        }
+        ctx.fillStyle = resolveFillStyle(
+          ctx,
+          fillValue,
+          el.x,
+          el.y,
+          el.x + w,
+          el.y + h,
+        );
 
         if (el.cornerRadius) {
           const r = el.cornerRadius;
@@ -256,7 +305,14 @@ async function renderWelcomeImage(
         }
 
         if (el.stroke) {
-          ctx.strokeStyle = el.stroke;
+          ctx.strokeStyle = resolveFillStyle(
+            ctx,
+            el.stroke,
+            el.x,
+            el.y,
+            el.x + w,
+            el.y + h,
+          );
           ctx.lineWidth = el.strokeWidth || 1;
           if (el.cornerRadius) {
             ctx.stroke();
@@ -269,14 +325,28 @@ async function renderWelcomeImage(
 
       case "circle": {
         const radius = el.radius || 50;
-        ctx.fillStyle = el.fill || "#ffffff";
+        ctx.fillStyle = resolveFillStyle(
+          ctx,
+          el.fill || "#ffffff",
+          el.x - radius,
+          el.y - radius,
+          el.x + radius,
+          el.y + radius,
+        );
         ctx.beginPath();
         ctx.arc(el.x, el.y, radius, 0, Math.PI * 2);
         ctx.closePath();
         ctx.fill();
 
         if (el.stroke) {
-          ctx.strokeStyle = el.stroke;
+          ctx.strokeStyle = resolveFillStyle(
+            ctx,
+            el.stroke,
+            el.x - radius,
+            el.y - radius,
+            el.x + radius,
+            el.y + radius,
+          );
           ctx.lineWidth = el.strokeWidth || 1;
           ctx.stroke();
         }
@@ -285,7 +355,14 @@ async function renderWelcomeImage(
 
       case "triangle": {
         const r = el.radius || 50;
-        ctx.fillStyle = el.fill || "#374151";
+        ctx.fillStyle = resolveFillStyle(
+          ctx,
+          el.fill || "#374151",
+          el.x - r,
+          el.y - r,
+          el.x + r,
+          el.y + r,
+        );
         ctx.beginPath();
         for (let n = 0; n < 3; n++) {
           const angle = (n * 2 * Math.PI) / 3;
@@ -298,7 +375,14 @@ async function renderWelcomeImage(
         ctx.fill();
 
         if (el.stroke) {
-          ctx.strokeStyle = el.stroke;
+          ctx.strokeStyle = resolveFillStyle(
+            ctx,
+            el.stroke,
+            el.x - r,
+            el.y - r,
+            el.x + r,
+            el.y + r,
+          );
           ctx.lineWidth = el.strokeWidth || 1;
           ctx.stroke();
         }
@@ -309,7 +393,14 @@ async function renderWelcomeImage(
         const numPoints = el.numPoints || 5;
         const innerRadius = el.innerRadius || 25;
         const outerRadius = el.outerRadius || 50;
-        ctx.fillStyle = el.fill || "#374151";
+        ctx.fillStyle = resolveFillStyle(
+          ctx,
+          el.fill || "#374151",
+          el.x - outerRadius,
+          el.y - outerRadius,
+          el.x + outerRadius,
+          el.y + outerRadius,
+        );
         ctx.beginPath();
         for (let n = 0; n < numPoints * 2; n++) {
           const radius = n % 2 === 0 ? outerRadius : innerRadius;
@@ -323,7 +414,14 @@ async function renderWelcomeImage(
         ctx.fill();
 
         if (el.stroke) {
-          ctx.strokeStyle = el.stroke;
+          ctx.strokeStyle = resolveFillStyle(
+            ctx,
+            el.stroke,
+            el.x - outerRadius,
+            el.y - outerRadius,
+            el.x + outerRadius,
+            el.y + outerRadius,
+          );
           ctx.lineWidth = el.strokeWidth || 1;
           ctx.stroke();
         }
