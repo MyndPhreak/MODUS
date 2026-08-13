@@ -282,7 +282,7 @@
 
       <!-- CENTER: Canvas -->
       <div
-        class="flex-1 flex items-center justify-center bg-[#2d2d2d] overflow-auto relative"
+        class="flex-1 flex [align-items:safe_center] [justify-content:safe_center] bg-[#2d2d2d] overflow-auto relative"
         ref="canvasWrap"
         :class="{ 'cursor-grab': isSpaceHeld && !isPanning, 'cursor-grabbing': isPanning }"
         @wheel.prevent="handleWheelZoom"
@@ -290,6 +290,7 @@
         @mousemove="handlePanMove"
         @mouseup="handlePanEnd"
         @mouseleave="handlePanEnd"
+        @contextmenu="(e: MouseEvent) => { if (isSpaceHeld) e.preventDefault(); }"
       >
         <!-- Checkerboard under canvas -->
         <div
@@ -301,7 +302,7 @@
             );
             background-size: 16px 16px;
           "
-          @click="selectedElementId = null"
+          @click="!isSpaceHeld && (selectedElementId = null)"
         />
 
         <!-- Empty state hint -->
@@ -1734,9 +1735,18 @@ async function handleFontChange(family: string) {
 // ── Keyboard Shortcuts ──
 
 function handleKeyDown(e: KeyboardEvent) {
-  // Don't intercept when typing in an input
-  const tag = (e.target as HTMLElement).tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // Don't intercept when typing in an input, or when a focused control
+  // needs Space for its own native activation (buttons, contenteditable)
+  const target = e.target as HTMLElement;
+  if (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable ||
+    target.closest('button, [role="button"]')
+  ) {
+    return;
+  }
 
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
@@ -1766,7 +1776,7 @@ function handleWindowBlur() {
 let panStart = { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 };
 
 function handlePanStart(e: MouseEvent) {
-  if (!isSpaceHeld.value || !canvasWrap.value) return;
+  if (e.button !== 0 || !isSpaceHeld.value || !canvasWrap.value) return;
   isPanning.value = true;
   panStart = {
     x: e.clientX,
@@ -1778,6 +1788,10 @@ function handlePanStart(e: MouseEvent) {
 
 function handlePanMove(e: MouseEvent) {
   if (!isPanning.value || !canvasWrap.value) return;
+  if (e.buttons === 0) {
+    handlePanEnd();
+    return;
+  }
   canvasWrap.value.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
   canvasWrap.value.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
 }
