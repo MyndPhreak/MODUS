@@ -237,7 +237,7 @@
                   aria-label="Move up"
                   @click="moveLayer('up')"
                 >
-                  <UIcon name="i-heroicons-chevron-up" class="text-[10px]" />
+                  <UIcon name="i-heroicons-chevron-up" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Move down">
@@ -247,7 +247,7 @@
                   aria-label="Move down"
                   @click="moveLayer('down')"
                 >
-                  <UIcon name="i-heroicons-chevron-down" class="text-[10px]" />
+                  <UIcon name="i-heroicons-chevron-down" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Duplicate">
@@ -257,7 +257,7 @@
                   aria-label="Duplicate"
                   @click="duplicateSelectedElement"
                 >
-                  <UIcon name="i-heroicons-document-duplicate" class="text-[10px]" />
+                  <UIcon name="i-heroicons-document-duplicate" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Delete">
@@ -267,7 +267,7 @@
                   aria-label="Delete"
                   @click="deleteSelectedElement"
                 >
-                  <UIcon name="i-heroicons-trash" class="text-xs" />
+                  <UIcon name="i-heroicons-trash" class="text-sm" />
                 </button>
               </UTooltip>
               <span class="text-[10px] text-zinc-500 tabular-nums ml-1">{{
@@ -2102,8 +2102,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   color: #71717a;
   background: transparent;
