@@ -45,14 +45,11 @@ async function extractTtfUrls(
   const encodedFamily = encodeURIComponent(family);
   const cssUrl = `https://fonts.googleapis.com/css2?family=${encodedFamily}:wght@${weightStr}&display=swap`;
 
-  // Use a User-Agent that triggers TTF format (not woff2)
-  const response = await fetch(cssUrl, {
-    headers: {
-      // Older IE UA to get .ttf instead of .woff2
-      "User-Agent":
-        "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)",
-    },
-  });
+  // No custom User-Agent: Google's CSS2 API now serves .ttf directly to a
+  // default request. The old-IE UA once used here to force .ttf instead of
+  // .woff2 now gets .woff back instead, which this function's regex below
+  // never matches — silently yielding zero URLs (see ensureGoogleFont).
+  const response = await fetch(cssUrl);
 
   if (!response.ok) {
     throw new Error(
@@ -98,13 +95,21 @@ async function downloadFont(url: string, destPath: string): Promise<void> {
 
 /**
  * Register a cached font file with @napi-rs/canvas GlobalFonts.
+ *
+ * @returns true if the font is registered (now or already), false if
+ * registration failed — callers must not treat a failed registration as
+ * done, or a corrupt/incompatible font file breaks that font permanently
+ * until the process restarts.
  */
-function registerFont(family: string, filePath: string): void {
+function registerFont(family: string, filePath: string): boolean {
   const key = filePath;
-  if (registeredFonts.has(key)) return;
+  if (registeredFonts.has(key)) return true;
 
-  GlobalFonts.registerFromPath(filePath, family);
+  const result = GlobalFonts.registerFromPath(filePath, family);
+  if (result === null) return false;
+
   registeredFonts.add(key);
+  return true;
 }
 
 /**
@@ -128,18 +133,19 @@ export async function ensureGoogleFont(family: string): Promise<boolean> {
 
   // Check if all weight files are already cached
   const missingWeights: number[] = [];
+  let allRegistered = true;
   for (const w of weights) {
     const fileName = fontFileName(family, w);
     const filePath = join(FONTS_DIR, fileName);
     if (existsSync(filePath)) {
       // Already cached — just register if not already
-      registerFont(family, filePath);
+      if (!registerFont(family, filePath)) allRegistered = false;
     } else {
       missingWeights.push(w);
     }
   }
 
-  if (missingWeights.length === 0) return true;
+  if (missingWeights.length === 0) return allRegistered;
 
   // Download missing weights
   try {
@@ -148,16 +154,27 @@ export async function ensureGoogleFont(family: string): Promise<boolean> {
     );
     const ttfUrls = await extractTtfUrls(family, missingWeights);
 
+    if (ttfUrls.length === 0) {
+      console.error(
+        `[FontManager] No .ttf URLs found for "${family}" — Google Fonts CSS response format may have changed.`,
+      );
+      return false;
+    }
+
     for (const { weight, url } of ttfUrls) {
       const fileName = fontFileName(family, weight);
       const filePath = join(FONTS_DIR, fileName);
 
       await downloadFont(url, filePath);
-      registerFont(family, filePath);
-      console.log(`[FontManager] Cached: ${fileName}`);
+      if (registerFont(family, filePath)) {
+        console.log(`[FontManager] Cached: ${fileName}`);
+      } else {
+        console.error(`[FontManager] Registration failed for: ${fileName}`);
+        allRegistered = false;
+      }
     }
 
-    return true;
+    return allRegistered;
   } catch (err) {
     console.error(`[FontManager] Failed to load font "${family}":`, err);
     return false;
