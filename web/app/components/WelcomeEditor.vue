@@ -286,8 +286,8 @@
               v-for="(el, index) in reversedElements"
               :key="el.id"
               class="we-layer"
-              :class="{ 'we-layer-active': selectedElementId === el.id }"
-              @click="selectedElementId = el.id"
+              :class="{ 'we-layer-active': selectedElementIds.has(el.id) }"
+              @click="(e: MouseEvent) => selectElement(el.id, e)"
               @mouseenter="hoveredElementId = el.id"
               @mouseleave="hoveredElementId = null"
             >
@@ -328,7 +328,7 @@
             );
             background-size: 16px 16px;
           "
-          @click="!isSpaceHeld && (selectedElementId = null)"
+          @click="!isSpaceHeld && (selectedElementIds = new Set())"
         />
 
         <!-- Empty state hint -->
@@ -394,32 +394,32 @@
                     v-if="el.type === 'rect'"
                     :config="rectConfig(el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <v-circle
                     v-if="el.type === 'circle'"
                     :config="circleConfig(el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <v-regular-polygon
                     v-if="el.type === 'triangle'"
                     :config="triangleConfig(el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <v-star
                     v-if="el.type === 'star'"
                     :config="starConfig(el)"
                     @dragend="(e: any) => handleDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <template v-if="el.type === 'line'">
@@ -427,15 +427,15 @@
                       v-if="!el.arrow"
                       :config="lineConfig(el)"
                       @dragend="(e: any) => handleDragEnd(e, el)"
-                      @click="() => selectElement(el.id)"
-                      @tap="() => selectElement(el.id)"
+                      @click="(e: any) => selectElement(el.id, e.evt)"
+                      @tap="(e: any) => selectElement(el.id, e.evt)"
                     />
                     <v-arrow
                       v-if="el.arrow"
                       :config="lineConfig(el)"
                       @dragend="(e: any) => handleDragEnd(e, el)"
-                      @click="() => selectElement(el.id)"
-                      @tap="() => selectElement(el.id)"
+                      @click="(e: any) => selectElement(el.id, e.evt)"
+                      @tap="(e: any) => selectElement(el.id, e.evt)"
                     />
                     <template v-if="selectedElementId === el.id">
                       <v-circle
@@ -468,15 +468,15 @@
                     v-if="el.type === 'text'"
                     :config="textConfig(el)"
                     @dragend="(e: any) => handleTextDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                   />
                   <v-group
                     v-if="el.type === 'avatar'"
                     :config="{ x: el.x, y: el.y, draggable: true, name: el.id }"
                     @dragend="(e: any) => handleDragEnd(e, el)"
-                    @click="() => selectElement(el.id)"
-                    @tap="() => selectElement(el.id)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
                   >
                     <v-circle
                       v-if="el.borderWidth"
@@ -1138,7 +1138,10 @@ const PRESETS: TemplatePreset[] = [
 const template = ref<WelcomeTemplate>(
   JSON.parse(JSON.stringify(DEFAULT_TEMPLATE)),
 );
-const selectedElementId = ref<string | null>(null);
+const selectedElementIds = ref<Set<string>>(new Set());
+const selectedElementId = computed(() =>
+  selectedElementIds.value.size === 1 ? [...selectedElementIds.value][0]! : null,
+);
 const saving = ref(false);
 const stageRef = ref<any>(null);
 const textFieldRef = ref<HTMLTextAreaElement | null>(null);
@@ -1233,7 +1236,7 @@ function applyPreset(preset: TemplatePreset) {
   // Preserve channel selection and background image
   if (channelId) template.value.channelId = channelId;
   if (bgImage) template.value.backgroundImage = bgImage;
-  selectedElementId.value = null;
+  selectedElementIds.value = new Set();
 }
 
 const placeholders = [
@@ -1687,7 +1690,7 @@ function addElement(type: TemplateElement["type"]) {
   };
   if (!defs[type]) return;
   template.value.elements.push({ id, ...defs[type] } as TemplateElement);
-  selectedElementId.value = id;
+  selectedElementIds.value = new Set([id]);
 }
 
 function insertPlaceholder(ph: string) {
@@ -1716,7 +1719,7 @@ function deleteSelectedElement() {
   );
   if (i !== -1) {
     template.value.elements.splice(i, 1);
-    selectedElementId.value = null;
+    selectedElementIds.value = new Set();
   }
 }
 
@@ -1731,7 +1734,7 @@ function duplicateSelectedElement() {
     y: src.y + 20,
   };
   template.value.elements.push(newEl);
-  selectedElementId.value = newEl.id;
+  selectedElementIds.value = new Set([newEl.id]);
 }
 
 function moveLayer(direction: 'up' | 'down') {
@@ -1745,8 +1748,15 @@ function moveLayer(direction: 'up' | 'down') {
   [els[i], els[target]] = [els[target], els[i]];
 }
 
-function selectElement(id: string) {
-  selectedElementId.value = id;
+function selectElement(id: string, e?: MouseEvent) {
+  if (e?.shiftKey || e?.ctrlKey || e?.metaKey) {
+    const next = new Set(selectedElementIds.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedElementIds.value = next;
+  } else {
+    selectedElementIds.value = new Set([id]);
+  }
 }
 
 // ── Font Change Handler ──
@@ -1852,7 +1862,7 @@ function handleWheelZoom(e: WheelEvent) {
 }
 
 function handleStageClick(e: any) {
-  if (e.target === e.target.getStage()) selectedElementId.value = null;
+  if (e.target === e.target.getStage()) selectedElementIds.value = new Set();
 }
 
 function handleDragEnd(e: any, el: TemplateElement) {
@@ -1901,7 +1911,7 @@ function handleTransformerEnd(e: any) {
 
 function resetTemplate() {
   template.value = JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
-  selectedElementId.value = null;
+  selectedElementIds.value = new Set();
 }
 
 // ── Load / Save ──
