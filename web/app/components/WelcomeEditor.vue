@@ -233,7 +233,7 @@
               <UTooltip text="Move up">
                 <button
                   class="we-tool-btn-sm"
-                  :aria-disabled="!selectedElementId"
+                  :aria-disabled="selectedElementIds.size !== 1"
                   aria-label="Move up"
                   @click="moveLayer('up')"
                 >
@@ -243,7 +243,7 @@
               <UTooltip text="Move down">
                 <button
                   class="we-tool-btn-sm"
-                  :aria-disabled="!selectedElementId"
+                  :aria-disabled="selectedElementIds.size !== 1"
                   aria-label="Move down"
                   @click="moveLayer('down')"
                 >
@@ -253,7 +253,7 @@
               <UTooltip text="Duplicate">
                 <button
                   class="we-tool-btn-sm"
-                  :aria-disabled="!selectedElementId"
+                  :aria-disabled="selectedElementIds.size === 0"
                   aria-label="Duplicate"
                   @click="duplicateSelectedElement"
                 >
@@ -263,7 +263,7 @@
               <UTooltip text="Delete">
                 <button
                   class="we-tool-btn-sm text-red-400 hover:text-red-300"
-                  :aria-disabled="!selectedElementId"
+                  :aria-disabled="selectedElementIds.size === 0"
                   aria-label="Delete"
                   @click="deleteSelectedElement"
                 >
@@ -917,6 +917,106 @@
           </div>
         </div>
 
+        <!-- Multi-select -->
+        <div v-else-if="selectedElementIds.size > 1" class="flex flex-col">
+          <!-- Header -->
+          <div
+            class="flex items-center justify-between p-2 border-b border-zinc-800"
+          >
+            <span class="text-xs font-medium text-zinc-300">
+              {{ selectedElementIds.size }} layers selected
+            </span>
+            <div class="flex items-center gap-1">
+              <UTooltip text="Duplicate selection">
+                <button
+                  class="we-tool-btn"
+                  aria-label="Duplicate selection"
+                  @click="duplicateSelectedElement"
+                >
+                  <UIcon
+                    name="i-heroicons-document-duplicate"
+                    class="text-sm"
+                  />
+                </button>
+              </UTooltip>
+              <UTooltip text="Delete selection">
+                <button
+                  class="we-tool-btn text-red-400 hover:text-red-300"
+                  aria-label="Delete selection"
+                  @click="deleteSelectedElement"
+                >
+                  <UIcon name="i-heroicons-trash" class="text-sm" />
+                </button>
+              </UTooltip>
+            </div>
+          </div>
+
+          <!-- Transform -->
+          <div class="we-prop-section">
+            <p class="we-prop-title">Transform</p>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div class="we-prop-row">
+                <span class="we-prop-label">X</span>
+                <input
+                  :value="Math.round(groupBounds?.x ?? 0)"
+                  type="number"
+                  class="we-num-input w-full"
+                  @change="
+                    (e: any) =>
+                      applyGroupMove(Number(e.target.value), groupBounds?.y ?? 0)
+                  "
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">Y</span>
+                <input
+                  :value="Math.round(groupBounds?.y ?? 0)"
+                  type="number"
+                  class="we-num-input w-full"
+                  @change="
+                    (e: any) =>
+                      applyGroupMove(groupBounds?.x ?? 0, Number(e.target.value))
+                  "
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">W</span>
+                <input
+                  :value="Math.round(groupBounds?.width ?? 0)"
+                  type="number"
+                  min="1"
+                  class="we-num-input w-full"
+                  @change="
+                    (e: any) =>
+                      applyGroupScale(Number(e.target.value), groupBounds?.height ?? 1)
+                  "
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">H</span>
+                <input
+                  :value="Math.round(groupBounds?.height ?? 0)"
+                  type="number"
+                  min="1"
+                  class="we-num-input w-full"
+                  @change="
+                    (e: any) =>
+                      applyGroupScale(groupBounds?.width ?? 1, Number(e.target.value))
+                  "
+                />
+              </div>
+              <div class="we-prop-row col-span-2">
+                <span class="we-prop-label">Rotation</span>
+                <input
+                  v-model.number="groupRotationDelta"
+                  type="number"
+                  class="we-num-input w-full"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- No selection -->
         <div
           v-else
@@ -1376,6 +1476,136 @@ const hoveredElementRect = computed(() => {
   }
 });
 
+const groupBounds = ref<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null>(null);
+const groupRotationInput = ref(0);
+
+function recomputeGroupBounds() {
+  if (selectedElementIds.value.size <= 1 || !stageRef.value) {
+    groupBounds.value = null;
+    return;
+  }
+  try {
+    const stage = stageRef.value.getNode();
+    if (!stage) {
+      groupBounds.value = null;
+      return;
+    }
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const id of selectedElementIds.value) {
+      const node = stage.findOne(`.${id}`);
+      if (!node) continue;
+      const rect = node.getClientRect({ relativeTo: stage });
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    }
+    groupBounds.value = isFinite(minX)
+      ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+      : null;
+  } catch {
+    groupBounds.value = null;
+  }
+}
+
+watch(
+  [selectedElementIds, () => template.value.elements],
+  async () => {
+    await nextTick();
+    recomputeGroupBounds();
+    if (selectedElementIds.value.size <= 1) groupRotationInput.value = 0;
+  },
+  { deep: true, immediate: true },
+);
+
+const groupRotationDelta = computed({
+  get: () => groupRotationInput.value,
+  set: (deg: number) => {
+    const bounds = groupBounds.value;
+    if (!bounds) return;
+    const delta = deg - groupRotationInput.value;
+    const cx = bounds.x + bounds.width / 2;
+    const cy = bounds.y + bounds.height / 2;
+    const rad = (delta * Math.PI) / 180;
+    const cos = Math.cos(rad),
+      sin = Math.sin(rad);
+    for (const id of selectedElementIds.value) {
+      const el = template.value.elements.find((e) => e.id === id);
+      if (!el) continue;
+      const relX = el.x - cx,
+        relY = el.y - cy;
+      el.x = Math.round(cx + relX * cos - relY * sin);
+      el.y = Math.round(cy + relX * sin + relY * cos);
+      el.rotation = Math.round(((el.rotation ?? 0) + delta + 360) % 360);
+    }
+    groupRotationInput.value = deg;
+  },
+});
+
+function applyGroupMove(newX: number, newY: number) {
+  const bounds = groupBounds.value;
+  if (!bounds) return;
+  const dx = newX - bounds.x;
+  const dy = newY - bounds.y;
+  for (const id of selectedElementIds.value) {
+    const el = template.value.elements.find((e) => e.id === id);
+    if (!el) continue;
+    el.x = Math.round(el.x + dx);
+    el.y = Math.round(el.y + dy);
+  }
+}
+
+function scaleElementSize(el: TemplateElement, sx: number, sy: number) {
+  switch (el.type) {
+    case "rect":
+    case "image":
+      el.width = Math.round(Math.max(5, (el.width ?? 100) * sx));
+      el.height = Math.round(Math.max(5, (el.height ?? 100) * sy));
+      break;
+    case "circle":
+    case "triangle":
+    case "star":
+      el.scaleX = (el.scaleX ?? 1) * sx;
+      el.scaleY = (el.scaleY ?? 1) * sy;
+      break;
+    case "avatar":
+      el.radius = Math.round(Math.max(5, (el.radius ?? 64) * ((sx + sy) / 2)));
+      break;
+    case "text":
+      el.fontSize = Math.round(Math.max(6, (el.fontSize ?? 24) * ((sx + sy) / 2)));
+      break;
+    case "line":
+      el.points = (el.points ?? [-60, 0, 60, 0]).map((p, i) =>
+        Math.round(i % 2 === 0 ? p * sx : p * sy),
+      );
+      break;
+  }
+}
+
+function applyGroupScale(newWidth: number, newHeight: number) {
+  const bounds = groupBounds.value;
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+  const sx = Math.max(0.01, newWidth) / bounds.width;
+  const sy = Math.max(0.01, newHeight) / bounds.height;
+  const originX = bounds.x;
+  const originY = bounds.y;
+  for (const id of selectedElementIds.value) {
+    const el = template.value.elements.find((e) => e.id === id);
+    if (!el) continue;
+    el.x = Math.round(originX + (el.x - originX) * sx);
+    el.y = Math.round(originY + (el.y - originY) * sy);
+    scaleElementSize(el, sx, sy);
+  }
+}
+
 watch(selectedElementIds, async () => {
   await nextTick();
   if (transformerRef.value) {
@@ -1730,28 +1960,30 @@ function insertPlaceholder(ph: string) {
 }
 
 function deleteSelectedElement() {
-  if (!selectedElementId.value) return;
-  const i = template.value.elements.findIndex(
-    (el) => el.id === selectedElementId.value,
+  if (selectedElementIds.value.size === 0) return;
+  template.value.elements = template.value.elements.filter(
+    (el) => !selectedElementIds.value.has(el.id),
   );
-  if (i !== -1) {
-    template.value.elements.splice(i, 1);
-    selectedElementIds.value = new Set();
-  }
+  selectedElementIds.value = new Set();
 }
 
 function duplicateSelectedElement() {
-  if (!selectedElement.value) return;
-  elementCounter++;
-  const src = selectedElement.value;
-  const newEl: TemplateElement = {
-    ...JSON.parse(JSON.stringify(src)),
-    id: `${src.type}-${Date.now()}-${elementCounter}`,
-    x: src.x + 20,
-    y: src.y + 20,
-  };
-  template.value.elements.push(newEl);
-  selectedElementIds.value = new Set([newEl.id]);
+  if (selectedElementIds.value.size === 0) return;
+  const newIds = new Set<string>();
+  for (const id of selectedElementIds.value) {
+    const src = template.value.elements.find((el) => el.id === id);
+    if (!src) continue;
+    elementCounter++;
+    const newEl: TemplateElement = {
+      ...JSON.parse(JSON.stringify(src)),
+      id: `${src.type}-${Date.now()}-${elementCounter}`,
+      x: src.x + 20,
+      y: src.y + 20,
+    };
+    template.value.elements.push(newEl);
+    newIds.add(newEl.id);
+  }
+  selectedElementIds.value = newIds;
 }
 
 function moveLayer(direction: 'up' | 'down') {
