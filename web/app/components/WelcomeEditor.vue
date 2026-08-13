@@ -470,6 +470,7 @@
                     @dragend="(e: any) => handleTextDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
                   />
                   <v-group
                     v-if="el.type === 'avatar'"
@@ -477,6 +478,7 @@
                     @dragend="(e: any) => handleDragEnd(e, el)"
                     @click="(e: any) => selectElement(el.id, e.evt)"
                     @tap="(e: any) => selectElement(el.id, e.evt)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
                   >
                     <v-circle
                       v-if="el.borderWidth"
