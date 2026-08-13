@@ -560,7 +560,6 @@
                     rotateAnchorOffset: 20,
                     padding: 2,
                   }"
-                  @transformend="handleTransformerEnd"
                 />
 
                 <v-rect
@@ -1725,13 +1724,10 @@ function lineConfig(el: TemplateElement) {
 function textConfig(el: TemplateElement) {
   const family = el.fontFamily || "sans-serif";
   return {
-    x:
-      el.align === "center"
-        ? el.x - 200
-        : el.align === "right"
-          ? el.x - 400
-          : el.x,
-    y: el.y - (el.fontSize || 24) / 2,
+    x: el.x,
+    y: el.y,
+    offsetX: el.align === "center" ? 200 : el.align === "right" ? 400 : 0,
+    offsetY: (el.fontSize || 24) / 2,
     width: 400,
     text: previewText(el.text || ""),
     fontSize: el.fontSize || 24,
@@ -2168,12 +2164,8 @@ function handleLineHandleDrag(e: any, el: TemplateElement, pointIndex: number) {
 }
 
 function handleTextDragEnd(e: any, el: TemplateElement) {
-  const rx = e.target.x(),
-    ry = e.target.y();
-  const newX = Math.round(
-    el.align === "center" ? rx + 200 : el.align === "right" ? rx + 400 : rx,
-  );
-  const newY = Math.round(ry + (el.fontSize || 24) / 2);
+  const newX = Math.round(e.target.x());
+  const newY = Math.round(e.target.y());
   moveOtherSelectedElements(el, newX, newY);
   el.x = newX;
   el.y = newY;
@@ -2189,17 +2181,16 @@ function handleTransformEnd(e: any, el: TemplateElement) {
     el.height = Math.round(Math.max(5, node.height() * node.scaleY()));
     node.scaleX(1);
     node.scaleY(1);
+  } else if (el.type === "avatar") {
+    el.radius = Math.round(
+      Math.max(5, (el.radius || 64) * ((node.scaleX() + node.scaleY()) / 2)),
+    );
+    node.scaleX(1);
+    node.scaleY(1);
   } else {
     el.scaleX = node.scaleX();
     el.scaleY = node.scaleY();
   }
-}
-
-function handleTransformerEnd(e: any) {
-  const node = e.target;
-  const el = template.value.elements.find((x) => x.id === node.name());
-  if (!el) return;
-  handleTransformEnd(e, el);
 }
 
 function resetTemplate() {
