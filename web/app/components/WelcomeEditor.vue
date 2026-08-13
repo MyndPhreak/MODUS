@@ -330,8 +330,8 @@
             <v-stage
               ref="stageRef"
               :config="{
-                width: template.canvasWidth,
-                height: template.canvasHeight,
+                width: template.canvasWidth * scaleFactor,
+                height: template.canvasHeight * scaleFactor,
                 scaleX: scaleFactor,
                 scaleY: scaleFactor,
               }"
