@@ -740,32 +740,23 @@
             class="we-prop-section"
           >
             <p class="we-prop-title">Fill</p>
-            <div class="flex items-center gap-2">
-              <div
-                class="we-color-chip-lg"
-                :style="{ background: selectedElementFill }"
-                @click="($refs.fillColor as HTMLInputElement).click()"
+            <UPopover>
+              <button
+                type="button"
+                class="we-color-chip-lg cursor-pointer"
+                :style="{ background: swatchPreview(selectedElement.fill) }"
               />
-              <input
-                ref="fillColor"
-                type="color"
-                :value="selectedElementFill"
-                @input="
-                  (e: any) => {
-                    if (selectedElement) selectedElement.fill = e.target.value;
-                  }
-                "
-                class="sr-only"
-              />
-              <input
-                v-model="selectedElement.fill"
-                class="we-hex-input flex-1"
-                placeholder="#ffffff or gradient"
-              />
-            </div>
-            <p class="text-[9px] text-zinc-600 mt-1">
-              Tip: linear-gradient(135deg, #color1, #color2)
-            </p>
+              <template #content>
+                <GradientPicker
+                  :model-value="selectedElement.fill"
+                  @update:model-value="
+                    (v: string) => {
+                      if (selectedElement) selectedElement.fill = v;
+                    }
+                  "
+                />
+              </template>
+            </UPopover>
           </div>
 
           <!-- Stroke -->
@@ -778,23 +769,23 @@
           >
             <p class="we-prop-title">Stroke</p>
             <div class="flex items-center gap-2">
-              <div
-                class="we-color-chip-lg"
-                :style="{ background: selectedElement.stroke || '#000' }"
-                @click="($refs.strokeColor as HTMLInputElement).click()"
-              />
-              <input
-                ref="strokeColor"
-                type="color"
-                :value="selectedElement.stroke || '#000000'"
-                @input="
-                  (e: any) => {
-                    if (selectedElement)
-                      selectedElement.stroke = e.target.value;
-                  }
-                "
-                class="sr-only"
-              />
+              <UPopover>
+                <button
+                  type="button"
+                  class="we-color-chip-lg cursor-pointer"
+                  :style="{ background: swatchPreview(selectedElement.stroke) }"
+                />
+                <template #content>
+                  <GradientPicker
+                    :model-value="selectedElement.stroke"
+                    @update:model-value="
+                      (v: string) => {
+                        if (selectedElement) selectedElement.stroke = v;
+                      }
+                    "
+                  />
+                </template>
+              </UPopover>
               <input
                 v-model.number="selectedElement.strokeWidth"
                 type="number"
@@ -1261,11 +1252,9 @@ const selectedElement = computed(() => {
   );
 });
 
-const selectedElementFill = computed(() => {
-  const el = selectedElement.value;
-  if (!el || !el.fill || el.fill.startsWith("linear")) return "#ffffff";
-  return el.fill;
-});
+function swatchPreview(value?: string): string {
+  return value || "#ffffff";
+}
 
 const selectedElementOpacityPct = computed({
   get: () => Math.round((selectedElement.value?.opacity ?? 1) * 100),
