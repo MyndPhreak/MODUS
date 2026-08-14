@@ -626,32 +626,56 @@
             <p class="we-prop-title">Align</p>
             <div class="grid grid-cols-6 gap-1">
               <UTooltip text="Align left">
-                <button class="we-tool-btn-sm" @click="alignLayers('left')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align left"
+                  @click="alignLayers('left')"
+                >
                   <UIcon name="i-lucide-align-start-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align center">
-                <button class="we-tool-btn-sm" @click="alignLayers('center-h')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align center"
+                  @click="alignLayers('center-h')"
+                >
                   <UIcon name="i-lucide-align-center-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align right">
-                <button class="we-tool-btn-sm" @click="alignLayers('right')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align right"
+                  @click="alignLayers('right')"
+                >
                   <UIcon name="i-lucide-align-end-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align top">
-                <button class="we-tool-btn-sm" @click="alignLayers('top')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align top"
+                  @click="alignLayers('top')"
+                >
                   <UIcon name="i-lucide-align-start-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align middle">
-                <button class="we-tool-btn-sm" @click="alignLayers('middle-v')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align middle"
+                  @click="alignLayers('middle-v')"
+                >
                   <UIcon name="i-lucide-align-center-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align bottom">
-                <button class="we-tool-btn-sm" @click="alignLayers('bottom')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align bottom"
+                  @click="alignLayers('bottom')"
+                >
                   <UIcon name="i-lucide-align-end-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
@@ -659,7 +683,8 @@
             <div class="grid grid-cols-2 gap-1 mt-1">
               <UTooltip text="Distribute horizontally">
                 <button
-                  class="we-tool-btn-sm w-full"
+                  class="we-tool-btn-sm !w-full"
+                  aria-label="Distribute horizontally"
                   :aria-disabled="selectedElementIds.size < 3"
                   @click="distributeLayers('horizontal')"
                 >
@@ -671,7 +696,8 @@
               </UTooltip>
               <UTooltip text="Distribute vertically">
                 <button
-                  class="we-tool-btn-sm w-full"
+                  class="we-tool-btn-sm !w-full"
+                  aria-label="Distribute vertically"
                   :aria-disabled="selectedElementIds.size < 3"
                   @click="distributeLayers('vertical')"
                 >
@@ -1024,32 +1050,56 @@
             <p class="we-prop-title">Align</p>
             <div class="grid grid-cols-6 gap-1">
               <UTooltip text="Align left">
-                <button class="we-tool-btn-sm" @click="alignLayers('left')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align left"
+                  @click="alignLayers('left')"
+                >
                   <UIcon name="i-lucide-align-start-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align center">
-                <button class="we-tool-btn-sm" @click="alignLayers('center-h')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align center"
+                  @click="alignLayers('center-h')"
+                >
                   <UIcon name="i-lucide-align-center-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align right">
-                <button class="we-tool-btn-sm" @click="alignLayers('right')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align right"
+                  @click="alignLayers('right')"
+                >
                   <UIcon name="i-lucide-align-end-vertical" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align top">
-                <button class="we-tool-btn-sm" @click="alignLayers('top')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align top"
+                  @click="alignLayers('top')"
+                >
                   <UIcon name="i-lucide-align-start-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align middle">
-                <button class="we-tool-btn-sm" @click="alignLayers('middle-v')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align middle"
+                  @click="alignLayers('middle-v')"
+                >
                   <UIcon name="i-lucide-align-center-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
               <UTooltip text="Align bottom">
-                <button class="we-tool-btn-sm" @click="alignLayers('bottom')">
+                <button
+                  class="we-tool-btn-sm"
+                  aria-label="Align bottom"
+                  @click="alignLayers('bottom')"
+                >
                   <UIcon name="i-lucide-align-end-horizontal" class="text-sm" />
                 </button>
               </UTooltip>
@@ -1057,7 +1107,8 @@
             <div class="grid grid-cols-2 gap-1 mt-1">
               <UTooltip text="Distribute horizontally">
                 <button
-                  class="we-tool-btn-sm w-full"
+                  class="we-tool-btn-sm !w-full"
+                  aria-label="Distribute horizontally"
                   :aria-disabled="selectedElementIds.size < 3"
                   @click="distributeLayers('horizontal')"
                 >
@@ -1069,7 +1120,8 @@
               </UTooltip>
               <UTooltip text="Distribute vertically">
                 <button
-                  class="we-tool-btn-sm w-full"
+                  class="we-tool-btn-sm !w-full"
+                  aria-label="Distribute vertically"
                   :aria-disabled="selectedElementIds.size < 3"
                   @click="distributeLayers('vertical')"
                 >
@@ -1624,7 +1676,19 @@ function getElementRect(
     if (!stage) return null;
     const node = stage.findOne(`.${id}`);
     if (!node) return null;
-    return node.getClientRect({ relativeTo: stage });
+    const rect = node.getClientRect({ relativeTo: stage });
+    if (node.getClassName() === "Text" && !node.rotation()) {
+      const textWidth = (node as any).getTextWidth();
+      const align = (node as any).align();
+      const inset =
+        align === "center"
+          ? (rect.width - textWidth) / 2
+          : align === "right"
+            ? rect.width - textWidth
+            : 0;
+      return { ...rect, x: rect.x + inset, width: textWidth };
+    }
+    return rect;
   } catch {
     return null;
   }
