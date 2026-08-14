@@ -494,25 +494,52 @@
                     @tap="(e: any) => selectElement(el.id, e.evt)"
                     @transformend="(e: any) => handleTransformEnd(e, el)"
                   >
-                    <v-circle
-                      v-if="el.borderWidth"
-                      :config="{
-                        x: 0,
-                        y: 0,
-                        radius: (el.radius || 64) + (el.borderWidth || 0),
-                        fill: el.borderColor || '#ffffff',
-                        opacity: el.opacity ?? 1,
-                      }"
-                    />
-                    <v-circle
-                      :config="{
-                        x: 0,
-                        y: 0,
-                        radius: el.radius || 64,
-                        fill: '#4f46e5',
-                        opacity: el.opacity ?? 1,
-                      }"
-                    />
+                    <template v-if="el.avatarShape === 'square'">
+                      <v-rect
+                        v-if="el.borderWidth"
+                        :config="{
+                          x: -(el.radius || 64) - (el.borderWidth || 0),
+                          y: -(el.radius || 64) - (el.borderWidth || 0),
+                          width: ((el.radius || 64) + (el.borderWidth || 0)) * 2,
+                          height: ((el.radius || 64) + (el.borderWidth || 0)) * 2,
+                          cornerRadius: el.avatarCornerRadius ?? 0,
+                          fill: el.borderColor || '#ffffff',
+                          opacity: el.opacity ?? 1,
+                        }"
+                      />
+                      <v-rect
+                        :config="{
+                          x: -(el.radius || 64),
+                          y: -(el.radius || 64),
+                          width: (el.radius || 64) * 2,
+                          height: (el.radius || 64) * 2,
+                          cornerRadius: el.avatarCornerRadius ?? 0,
+                          fill: '#4f46e5',
+                          opacity: el.opacity ?? 1,
+                        }"
+                      />
+                    </template>
+                    <template v-else>
+                      <v-circle
+                        v-if="el.borderWidth"
+                        :config="{
+                          x: 0,
+                          y: 0,
+                          radius: (el.radius || 64) + (el.borderWidth || 0),
+                          fill: el.borderColor || '#ffffff',
+                          opacity: el.opacity ?? 1,
+                        }"
+                      />
+                      <v-circle
+                        :config="{
+                          x: 0,
+                          y: 0,
+                          radius: el.radius || 64,
+                          fill: '#4f46e5',
+                          opacity: el.opacity ?? 1,
+                        }"
+                      />
+                    </template>
                     <v-text
                       :config="{
                         x: -(el.radius || 64),
@@ -531,23 +558,22 @@
                   ref="transformerRef"
                   :config="{
                     nodes: transformerNodes,
-                    enabledAnchors:
-                      selectedElement?.type === 'avatar'
-                        ? []
-                        : [
-                            'top-left',
-                            'top-right',
-                            'bottom-left',
-                            'bottom-right',
-                            'middle-left',
-                            'middle-right',
-                            'top-center',
-                            'bottom-center',
-                          ],
+                    enabledAnchors: [
+                      'top-left',
+                      'top-right',
+                      'bottom-left',
+                      'bottom-right',
+                      'middle-left',
+                      'middle-right',
+                      'top-center',
+                      'bottom-center',
+                    ],
                     keepRatio:
-                      selectedElementIds.size > 1
+                      selectedElement?.type === 'avatar'
                         ? true
-                        : selectedElement?.type !== 'circle',
+                        : selectedElementIds.size > 1
+                          ? true
+                          : selectedElement?.type !== 'circle',
                     shiftBehavior: 'default',
                     rotateEnabled: true,
                     rotationSnaps: isShiftHeld
@@ -978,6 +1004,41 @@
             />
           </div>
 
+          <!-- Avatar Shape -->
+          <div v-if="selectedElement.type === 'avatar'" class="we-prop-section">
+            <p class="we-prop-title">Shape</p>
+            <div class="flex gap-1">
+              <button
+                class="we-tool-btn-sm flex-1"
+                :class="{ 'we-layer-active': (selectedElement.avatarShape ?? 'circle') === 'circle' }"
+                aria-label="Circle"
+                @click="selectedElement.avatarShape = 'circle'"
+              >
+                <UIcon name="i-heroicons-sun" class="text-sm" />
+              </button>
+              <button
+                class="we-tool-btn-sm flex-1"
+                :class="{ 'we-layer-active': selectedElement.avatarShape === 'square' }"
+                aria-label="Square"
+                @click="selectedElement.avatarShape = 'square'"
+              >
+                <UIcon name="i-heroicons-stop" class="text-sm" />
+              </button>
+            </div>
+            <div
+              v-if="selectedElement.avatarShape === 'square'"
+              class="we-prop-row mt-1.5"
+            >
+              <span class="we-prop-label">Radius</span>
+              <input
+                v-model.number="selectedElement.avatarCornerRadius"
+                type="number"
+                class="we-num-input w-full"
+                min="0"
+              />
+            </div>
+          </div>
+
           <!-- Avatar Border -->
           <div v-if="selectedElement.type === 'avatar'" class="we-prop-section">
             <p class="we-prop-title">Border</p>
@@ -1286,6 +1347,8 @@ interface TemplateElement {
   outerRadius?: number;
   points?: number[];
   arrow?: boolean;
+  avatarShape?: "circle" | "square";
+  avatarCornerRadius?: number;
 }
 
 interface WelcomeTemplate {

@@ -54,6 +54,8 @@ export interface TemplateElement {
   outerRadius?: number;
   points?: number[];
   arrow?: boolean;
+  avatarShape?: "circle" | "square";
+  avatarCornerRadius?: number;
 }
 
 export interface WelcomeTemplate {

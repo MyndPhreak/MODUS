@@ -86,6 +86,9 @@ const TemplateElementSchema = z
     // Line/Arrow (Task 3)
     points: z.array(z.number()).optional(),
     arrow: z.boolean().optional(),
+    // Avatar shape (Sub-project C)
+    avatarShape: z.enum(["circle", "square"]).optional(),
+    avatarCornerRadius: z.number().optional(),
   })
   .loose();
 
