@@ -77,6 +77,8 @@ interface TemplateElement {
   outerRadius?: number;
   points?: number[];
   arrow?: boolean;
+  avatarShape?: "circle" | "square";
+  avatarCornerRadius?: number;
 }
 
 interface WelcomeTemplate {
@@ -485,19 +487,35 @@ async function renderWelcomeImage(
       case "avatar": {
         if (!avatarImage) break;
         const r = el.radius || 64;
+        const isSquare = el.avatarShape === "square";
+        const cr = el.avatarCornerRadius ?? 0;
 
         // Border
         if (el.borderWidth && el.borderColor) {
           ctx.fillStyle = el.borderColor;
           ctx.beginPath();
-          ctx.arc(el.x, el.y, r + el.borderWidth, 0, Math.PI * 2);
+          if (isSquare) {
+            ctx.roundRect(
+              el.x - r - el.borderWidth,
+              el.y - r - el.borderWidth,
+              (r + el.borderWidth) * 2,
+              (r + el.borderWidth) * 2,
+              cr,
+            );
+          } else {
+            ctx.arc(el.x, el.y, r + el.borderWidth, 0, Math.PI * 2);
+          }
           ctx.closePath();
           ctx.fill();
         }
 
         // Clip + draw avatar
         ctx.beginPath();
-        ctx.arc(el.x, el.y, r, 0, Math.PI * 2);
+        if (isSquare) {
+          ctx.roundRect(el.x - r, el.y - r, r * 2, r * 2, cr);
+        } else {
+          ctx.arc(el.x, el.y, r, 0, Math.PI * 2);
+        }
         ctx.closePath();
         ctx.clip();
         ctx.drawImage(avatarImage, el.x - r, el.y - r, r * 2, r * 2);
