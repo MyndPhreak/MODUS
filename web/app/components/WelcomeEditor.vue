@@ -2014,18 +2014,42 @@ function lineConfig(el: TemplateElement) {
   };
 }
 
+const measureCanvas =
+  typeof document !== "undefined" ? document.createElement("canvas") : null;
+const measureCtx = measureCanvas?.getContext("2d") ?? null;
+
+function measureTextWidth(
+  text: string,
+  fontSize: number,
+  fontFamily: string,
+  fontStyle: string,
+): number {
+  if (!measureCtx) return text.length * fontSize * 0.6;
+  measureCtx.font = `${fontStyle} ${fontSize}px "${fontFamily}"`.trim();
+  return measureCtx.measureText(text).width;
+}
+
 function textConfig(el: TemplateElement) {
   const family = el.fontFamily || "sans-serif";
+  const fontSize = el.fontSize || 24;
+  const fontStyle = el.fontStyle || "";
+  const text = previewText(el.text || "");
+  const textWidth = measureTextWidth(text, fontSize, family, fontStyle) || 1;
   return {
     x: el.x,
     y: el.y,
-    offsetX: el.align === "center" ? 200 : el.align === "right" ? 400 : 0,
-    offsetY: (el.fontSize || 24) / 2,
-    width: 400,
-    text: previewText(el.text || ""),
-    fontSize: el.fontSize || 24,
+    offsetX:
+      el.align === "center"
+        ? textWidth / 2
+        : el.align === "right"
+          ? textWidth
+          : 0,
+    offsetY: fontSize / 2,
+    width: textWidth,
+    text,
+    fontSize,
     fontFamily: family,
-    fontStyle: el.fontStyle || "",
+    fontStyle,
     fill: el.fill || "#ffffff",
     align: el.align || "center",
     opacity: el.opacity ?? 1,
@@ -2481,7 +2505,7 @@ function handleTransformEnd(e: any, el: TemplateElement) {
   el.x = Math.round(node.x());
   el.y = Math.round(node.y());
   el.rotation = Math.round(node.rotation());
-  if (el.type === "rect" || el.type === "image" || el.type === "text") {
+  if (el.type === "rect" || el.type === "image") {
     el.width = Math.round(Math.max(5, node.width() * node.scaleX()));
     el.height = Math.round(Math.max(5, node.height() * node.scaleY()));
     node.scaleX(1);
@@ -2489,6 +2513,12 @@ function handleTransformEnd(e: any, el: TemplateElement) {
   } else if (el.type === "avatar") {
     el.radius = Math.round(
       Math.max(5, (el.radius || 64) * ((node.scaleX() + node.scaleY()) / 2)),
+    );
+    node.scaleX(1);
+    node.scaleY(1);
+  } else if (el.type === "text") {
+    el.fontSize = Math.round(
+      Math.max(6, (el.fontSize || 24) * ((node.scaleX() + node.scaleY()) / 2)),
     );
     node.scaleX(1);
     node.scaleY(1);
