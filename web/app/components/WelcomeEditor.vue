@@ -1489,36 +1489,41 @@ const groupBounds = ref<{
 } | null>(null);
 const groupRotationInput = ref(0);
 
+function getElementRect(
+  id: string,
+): { x: number; y: number; width: number; height: number } | null {
+  if (!stageRef.value) return null;
+  try {
+    const stage = stageRef.value.getNode();
+    if (!stage) return null;
+    const node = stage.findOne(`.${id}`);
+    if (!node) return null;
+    return node.getClientRect({ relativeTo: stage });
+  } catch {
+    return null;
+  }
+}
+
 function recomputeGroupBounds() {
-  if (selectedElementIds.value.size <= 1 || !stageRef.value) {
+  if (selectedElementIds.value.size <= 1) {
     groupBounds.value = null;
     return;
   }
-  try {
-    const stage = stageRef.value.getNode();
-    if (!stage) {
-      groupBounds.value = null;
-      return;
-    }
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    for (const id of selectedElementIds.value) {
-      const node = stage.findOne(`.${id}`);
-      if (!node) continue;
-      const rect = node.getClientRect({ relativeTo: stage });
-      minX = Math.min(minX, rect.x);
-      minY = Math.min(minY, rect.y);
-      maxX = Math.max(maxX, rect.x + rect.width);
-      maxY = Math.max(maxY, rect.y + rect.height);
-    }
-    groupBounds.value = isFinite(minX)
-      ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-      : null;
-  } catch {
-    groupBounds.value = null;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const id of selectedElementIds.value) {
+    const rect = getElementRect(id);
+    if (!rect) continue;
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.width);
+    maxY = Math.max(maxY, rect.y + rect.height);
   }
+  groupBounds.value = isFinite(minX)
+    ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+    : null;
 }
 
 watch(
@@ -1568,6 +1573,92 @@ function applyGroupMove(newX: number, newY: number) {
     if (!el) continue;
     el.x = Math.round(el.x + dx);
     el.y = Math.round(el.y + dy);
+  }
+}
+
+const alignmentBounds = computed(() => {
+  if (selectedElementIds.value.size >= 2) return groupBounds.value;
+  if (selectedElementIds.value.size === 1) {
+    return {
+      x: 0,
+      y: 0,
+      width: template.value.canvasWidth,
+      height: template.value.canvasHeight,
+    };
+  }
+  return null;
+});
+
+type AlignDirection = "left" | "center-h" | "right" | "top" | "middle-v" | "bottom";
+
+function alignLayers(direction: AlignDirection) {
+  const bounds = alignmentBounds.value;
+  if (!bounds) return;
+  for (const id of selectedElementIds.value) {
+    const rect = getElementRect(id);
+    const el = template.value.elements.find((e) => e.id === id);
+    if (!rect || !el) continue;
+    let dx = 0,
+      dy = 0;
+    switch (direction) {
+      case "left":
+        dx = bounds.x - rect.x;
+        break;
+      case "center-h":
+        dx = bounds.x + bounds.width / 2 - (rect.x + rect.width / 2);
+        break;
+      case "right":
+        dx = bounds.x + bounds.width - (rect.x + rect.width);
+        break;
+      case "top":
+        dy = bounds.y - rect.y;
+        break;
+      case "middle-v":
+        dy = bounds.y + bounds.height / 2 - (rect.y + rect.height / 2);
+        break;
+      case "bottom":
+        dy = bounds.y + bounds.height - (rect.y + rect.height);
+        break;
+    }
+    el.x = Math.round(el.x + dx);
+    el.y = Math.round(el.y + dy);
+  }
+}
+
+function distributeLayers(axis: "horizontal" | "vertical") {
+  const ids = [...selectedElementIds.value];
+  if (ids.length < 3) return;
+
+  const items: {
+    id: string;
+    el: TemplateElement;
+    rect: { x: number; y: number; width: number; height: number };
+  }[] = [];
+  for (const id of ids) {
+    const el = template.value.elements.find((e) => e.id === id);
+    const rect = getElementRect(id);
+    if (el && rect) items.push({ id, el, rect });
+  }
+  if (items.length < 3) return;
+
+  const key = axis === "horizontal" ? "x" : "y";
+  const sizeKey = axis === "horizontal" ? "width" : "height";
+  items.sort((a, b) => a.rect[key] - b.rect[key]);
+
+  const first = items[0]!;
+  const last = items[items.length - 1]!;
+  const totalSpan = last.rect[key] + last.rect[sizeKey] - first.rect[key];
+  const totalSize = items.reduce((sum, i) => sum + i.rect[sizeKey], 0);
+  const gap = (totalSpan - totalSize) / (items.length - 1);
+
+  let cursor = first.rect[key] + first.rect[sizeKey] + gap;
+  for (let i = 1; i < items.length - 1; i++) {
+    const item = items[i]!;
+    const { el, rect } = item;
+    const delta = Math.round(cursor - rect[key]);
+    if (axis === "horizontal") el.x = Math.round(el.x + delta);
+    else el.y = Math.round(el.y + delta);
+    cursor += rect[sizeKey] + gap;
   }
 }
 
