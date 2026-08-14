@@ -488,7 +488,7 @@ async function renderWelcomeImage(
         if (!avatarImage) break;
         const r = el.radius || 64;
         const isSquare = el.avatarShape === "square";
-        const cr = el.avatarCornerRadius ?? 0;
+        const cr = Math.max(0, el.avatarCornerRadius ?? 0);
 
         // Border
         if (el.borderWidth && el.borderColor) {
