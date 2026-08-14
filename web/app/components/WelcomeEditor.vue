@@ -550,6 +550,9 @@
                         : selectedElement?.type !== 'circle',
                     shiftBehavior: 'default',
                     rotateEnabled: true,
+                    rotationSnaps: isShiftHeld
+                      ? [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345]
+                      : [],
                     borderStroke: '#7c6ef6',
                     borderStrokeWidth: 2.5,
                     anchorStroke: '#7c6ef6',
@@ -726,6 +729,14 @@
                 <span class="we-prop-label">Y</span>
                 <input
                   v-model.number="selectedElement.y"
+                  type="number"
+                  class="we-num-input w-full"
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">Rotation</span>
+                <input
+                  v-model.number="selectedElement.rotation"
                   type="number"
                   class="we-num-input w-full"
                 />
@@ -1445,6 +1456,7 @@ const transformerRef = ref<any>(null);
 const canvasWrap = ref<HTMLElement | null>(null);
 const zoomMultiplier = ref(1);
 const isSpaceHeld = ref(false);
+const isShiftHeld = ref(false);
 const isPanning = ref(false);
 const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
@@ -2308,6 +2320,14 @@ async function handleFontChange(family: string) {
 // ── Keyboard Shortcuts ──
 
 function handleKeyDown(e: KeyboardEvent) {
+  // Shift is a pure modifier with no side effects when typing (unlike Space,
+  // which must reach text inputs), so track it before the input-focus guard —
+  // rotation-snap should still work even if a properties-panel input happens
+  // to still have focus.
+  if (e.key === 'Shift' && !isShiftHeld.value) {
+    isShiftHeld.value = true;
+  }
+
   // Don't intercept when typing in an input, or when a focused control
   // needs Space for its own native activation (buttons, contenteditable)
   const target = e.target as HTMLElement;
@@ -2333,6 +2353,9 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 function handleKeyUp(e: KeyboardEvent) {
+  if (e.key === 'Shift') {
+    isShiftHeld.value = false;
+  }
   if (e.key === ' ') {
     isSpaceHeld.value = false;
     isPanning.value = false;
@@ -2341,6 +2364,7 @@ function handleKeyUp(e: KeyboardEvent) {
 }
 
 function handleWindowBlur() {
+  isShiftHeld.value = false;
   isSpaceHeld.value = false;
   isPanning.value = false;
   stageRef.value?.getNode()?.listening(true);
