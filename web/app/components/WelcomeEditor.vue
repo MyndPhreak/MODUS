@@ -558,16 +558,19 @@
                   ref="transformerRef"
                   :config="{
                     nodes: transformerNodes,
-                    enabledAnchors: [
-                      'top-left',
-                      'top-right',
-                      'bottom-left',
-                      'bottom-right',
-                      'middle-left',
-                      'middle-right',
-                      'top-center',
-                      'bottom-center',
-                    ],
+                    enabledAnchors:
+                      selectedElement?.type === 'avatar'
+                        ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+                        : [
+                            'top-left',
+                            'top-right',
+                            'bottom-left',
+                            'bottom-right',
+                            'middle-left',
+                            'middle-right',
+                            'top-center',
+                            'bottom-center',
+                          ],
                     keepRatio:
                       selectedElement?.type === 'avatar'
                         ? true
