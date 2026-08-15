@@ -4,8 +4,10 @@ import {
   eq,
   gt,
   gte,
+  isNull,
   lt,
   lte,
+  or,
   sql,
 } from "drizzle-orm";
 import { requireReturningRow } from "../client";
@@ -75,6 +77,7 @@ export interface MusicMutationResult {
 
 export interface MusicCheckpointInput {
   guildId: string;
+  expectedRevision: number;
   currentEntryId: string | null;
   positionMs: number;
   checkpointedAt?: Date;
@@ -367,7 +370,7 @@ export class MusicRepository {
     });
   }
 
-  async checkpoint(input: MusicCheckpointInput): Promise<void> {
+  async checkpoint(input: MusicCheckpointInput): Promise<boolean> {
     const now = new Date();
     const checkpointedAt = input.checkpointedAt ?? now;
     const patch: Partial<typeof musicSessions.$inferInsert> = {
@@ -380,7 +383,23 @@ export class MusicRepository {
     if (input.repeatMode !== undefined) patch.repeatMode = input.repeatMode;
     if (input.filters !== undefined) patch.filters = input.filters;
 
-    await this.db
+    const [updated] = await this.db
+      .update(musicSessions)
+      .set(patch)
+      .where(and(
+        eq(musicSessions.guildId, input.guildId),
+        eq(musicSessions.revision, input.expectedRevision),
+        or(
+          isNull(musicSessions.checkpointedAt),
+          lte(musicSessions.checkpointedAt, checkpointedAt),
+        ),
+      ))
+      .returning({ id: musicSessions.id });
+    if (updated) return true;
+
+    if (input.expectedRevision !== 0) return false;
+
+    const [inserted] = await this.db
       .insert(musicSessions)
       .values({
         guildId: input.guildId,
@@ -391,10 +410,9 @@ export class MusicRepository {
         repeatMode: input.repeatMode ?? "off",
         filters: input.filters ?? {},
       })
-      .onConflictDoUpdate({
-        target: musicSessions.guildId,
-        set: patch,
-      });
+      .onConflictDoNothing({ target: musicSessions.guildId })
+      .returning({ id: musicSessions.id });
+    return inserted !== undefined;
   }
 
   async recordNodeAssignment(input: MusicNodeAssignmentInput): Promise<void> {

@@ -113,4 +113,26 @@ describe("applyQueueMutation", () => {
     expect(replay.entries.map(({ id }) => id)).toEqual(["a", "b", "c"]);
     expect(replay.appliedOperations).toEqual({ "insert-once": 4 });
   });
+
+  it("preserves the current snapshot revision when an older operation is replayed", () => {
+    const insert = {
+      type: "insert" as const,
+      operationId: "insert-c",
+      expectedRevision: 3,
+      entry: entry("c", 0),
+      position: 2,
+    };
+    const afterInsert = applyQueueMutation(snapshot(), insert);
+    const afterRemove = applyQueueMutation(afterInsert, {
+      type: "remove",
+      operationId: "remove-a",
+      expectedRevision: 4,
+      entryId: "a",
+    });
+
+    const replay = applyQueueMutation(afterRemove, insert);
+
+    expect(replay.revision).toBe(5);
+    expect(replay.entries.map(({ id }) => id)).toEqual(["b", "c"]);
+  });
 });

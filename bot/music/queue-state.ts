@@ -54,7 +54,6 @@ export function applyQueueMutation(
   if (replayRevision !== undefined) {
     return {
       ...snapshot,
-      revision: replayRevision,
       entries: snapshot.entries.map((entry) => ({ ...entry })),
       appliedOperations: { ...appliedOperations },
     };
