@@ -1530,6 +1530,58 @@ const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
 const bgImageFile = ref<File | null>(null);
 
+// ── Undo/Redo History ──
+
+const undoStack = ref<string[]>([]);
+const redoStack = ref<string[]>([]);
+const HISTORY_LIMIT = 50;
+let historyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function captureSnapshot() {
+  const json = JSON.stringify(template.value);
+  if (undoStack.value[undoStack.value.length - 1] === json) return;
+  undoStack.value.push(json);
+  if (undoStack.value.length > HISTORY_LIMIT) undoStack.value.shift();
+  redoStack.value = [];
+}
+
+watch(
+  template,
+  () => {
+    if (historyTimer) clearTimeout(historyTimer);
+    historyTimer = setTimeout(captureSnapshot, 500);
+  },
+  { deep: true },
+);
+
+function pruneSelectionToExisting() {
+  selectedElementIds.value = new Set(
+    [...selectedElementIds.value].filter((id) =>
+      template.value.elements.some((el) => el.id === id),
+    ),
+  );
+}
+
+function undo() {
+  if (undoStack.value.length <= 1) return;
+  const current = undoStack.value.pop()!;
+  redoStack.value.push(current);
+  const prev = undoStack.value[undoStack.value.length - 1]!;
+  template.value = JSON.parse(prev);
+  pruneSelectionToExisting();
+}
+
+function redo() {
+  if (redoStack.value.length === 0) return;
+  const next = redoStack.value.pop()!;
+  undoStack.value.push(next);
+  template.value = JSON.parse(next);
+  pruneSelectionToExisting();
+}
+
+const canUndo = computed(() => undoStack.value.length > 1);
+const canRedo = computed(() => redoStack.value.length > 0);
+
 // ── Background Image ──
 
 function loadBgImage(url: string) {
@@ -2476,6 +2528,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
   window.removeEventListener('keyup', handleKeyUp);
   window.removeEventListener('blur', handleWindowBlur);
+  if (historyTimer) clearTimeout(historyTimer);
 });
 
 // ── Drag / Transform ──
@@ -2636,6 +2689,7 @@ onMounted(() => {
     // one of them is actually ready to draw (fixes flash-of-fallback).
     await loadTemplateFonts(template.value.elements);
     stageRef.value?.getNode()?.batchDraw();
+    undoStack.value = [JSON.stringify(template.value)];
   });
 });
 </script>
