@@ -128,6 +128,20 @@ async function loadWelcomeBackground(reference: string): Promise<any | null> {
   return loadImage(reference);
 }
 
+async function loadWelcomeImageLayer(reference: string): Promise<any | null> {
+  if (!reference.startsWith(WELCOME_PROXY_PREFIX) || !getR2()) return null;
+  const key = reference.slice(WELCOME_PROXY_PREFIX.length);
+  if (!key.startsWith("welcome/")) return null;
+
+  try {
+    const object = await getR2Object(key);
+    return object ? await loadImage(object.body) : null;
+  } catch (err) {
+    console.warn("[Welcome Render] R2 asset load failed:", err);
+    return null;
+  }
+}
+
 // ── Gradient Parsing ─────────────────────────────────────────────────
 
 function parseGradient(
@@ -523,23 +537,13 @@ async function renderWelcomeImage(
       }
 
       case "image": {
-        if (el.src) {
-          try {
-            const img = await loadImage(el.src);
-            ctx.drawImage(
-              img,
-              el.x,
-              el.y,
-              el.width || img.width,
-              el.height || img.height,
-            );
-          } catch (err) {
-            console.warn(
-              "[Welcome Render] Failed to load element image:",
-              err,
-            );
-          }
+        if (!el.src) break;
+        const img = await loadWelcomeImageLayer(el.src);
+        if (!img) {
+          console.warn("[Welcome Render] Failed to load element image:", el.src);
+          break;
         }
+        ctx.drawImage(img, el.x, el.y, el.width || img.width, el.height || img.height);
         break;
       }
 
