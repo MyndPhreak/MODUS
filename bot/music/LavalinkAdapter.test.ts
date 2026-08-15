@@ -234,7 +234,7 @@ describe("LavalinkAdapter", () => {
           ephemeralEncodedTrack: "encoded-secret",
           track: {
             requestedInput: "https://media.example/audio",
-            requestType: "track",
+            requestType: "url",
             artworkUrl: "https://img.example/art.jpg",
             requestedSource: { name: "youtube", uri: "https://media.example/audio" },
             playbackSource: { name: "youtube", identifier: "video-123" },
@@ -242,6 +242,40 @@ describe("LavalinkAdapter", () => {
         }],
       },
     });
+  });
+
+  it("redacts multi-token secret headers and hostile ISRC metadata from canonical candidates", async () => {
+    const { adapter } = setup();
+    await adapter.connect();
+    const node = addNode();
+    node.rest.resolve.mockResolvedValue({
+      loadType: "track",
+      data: track({
+        title: "Authorization: Bearer bearer-secret",
+        author: "Cookie: session=cookie-secret; csrf=csrf-secret",
+        isrc: "X-Api-Key: api-key-secret",
+      }),
+    });
+
+    const result = await adapter.loadTracks({
+      guildId: "guild-1",
+      input: "https://media.example/audio?Signature=url-secret",
+      requestedBy: "user-1",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        candidates: [{
+          track: {
+            title: "Authorization: [REDACTED]",
+            artists: ["Cookie: [REDACTED]"],
+            isrc: "X-Api-Key: [REDACTED]",
+          },
+        }],
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/bearer-secret|cookie-secret|csrf-secret|api-key-secret|url-secret/);
   });
 
   it.each([
@@ -287,6 +321,7 @@ describe("LavalinkAdapter", () => {
       guildId: "guild-1",
       input: "https://music.example/playlist?id=signed",
       requestedBy: "user-1",
+      requestType: "playlist",
     });
 
     expect(result).toMatchObject({
@@ -488,8 +523,9 @@ describe("LavalinkAdapter", () => {
       guildId: "guild-1",
       track: track({
         identifier: "https://signed.example/file?Signature=identifier-secret",
-        title: "Authorization: bearer-secret",
-        author: "token=artist-secret",
+        title: "Authorization: Bearer bearer-secret",
+        author: "Cookie: session=cookie-secret; csrf=csrf-secret",
+        isrc: "X-Api-Key: api-key-secret",
       }),
     });
     player.emit("end", { guildId: "guild-1", track: track(), reason: "finished" });
@@ -511,7 +547,8 @@ describe("LavalinkAdapter", () => {
         track: {
           identifier: "https://signed.example/file",
           title: "Authorization: [REDACTED]",
-          artist: "token=[REDACTED]",
+          artist: "Cookie: [REDACTED]",
+          isrc: "X-Api-Key: [REDACTED]",
         },
       },
       { type: "track.end", guildId: "guild-1", nodeId: "primary", reason: "finished", track: { identifier: "video-123" } },
@@ -530,7 +567,9 @@ describe("LavalinkAdapter", () => {
       },
     ]);
     const loggable = JSON.stringify(events);
-    expect(loggable).not.toMatch(/identifier-secret|bearer-secret|artist-secret|encoded-secret|voice-token-secret|password|Signature/i);
+    expect(loggable).not.toMatch(
+      /identifier-secret|bearer-secret|cookie-secret|csrf-secret|api-key-secret|encoded-secret|voice-token-secret|password|Signature/i,
+    );
   });
 
   it("feeds Shoukaku readiness, disconnects, and raw statistics into NodeRegistry", async () => {

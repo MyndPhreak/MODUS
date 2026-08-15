@@ -22,6 +22,7 @@ export interface LavalinkLoadRequest {
   guildId: string;
   input: string;
   requestedBy: string;
+  requestType?: CanonicalTrack["requestType"];
   source?: LavalinkSearchSource;
   nodeId?: string;
   region?: string;
@@ -111,7 +112,10 @@ function isDirectUrl(input: string): boolean {
 function redactText(value: string): string {
   const withoutSignedUrls = value.replace(/https?:\/\/[^\s]+/gi, (url) => safeUrl(url) ?? "[REDACTED]");
   return withoutSignedUrls
-    .replace(/\b(authorization|proxy-authorization)\s*([:=])\s*[^\s;,]+/gi, "$1$2 [REDACTED]")
+    .replace(
+      /\b([a-z0-9-]*(?:authorization|cookie|api-key|access-key|auth-token|access-token|secret|password|token)[a-z0-9-]*)\s*:\s*[^\r\n]*/gi,
+      "$1: [REDACTED]",
+    )
     .replace(/\b(token|password|secret|signature|x-amz-signature)\s*=\s*[^\s;,]+/gi, "$1=[REDACTED]");
 }
 
@@ -180,7 +184,7 @@ function playbackTrack(track: Track): MusicPlaybackTrack {
     artist: redactText(track.info.author),
     durationMs: track.info.length,
     sourceName: redactText(track.info.sourceName),
-    ...(track.info.isrc ? { isrc: track.info.isrc } : {}),
+    ...(track.info.isrc ? { isrc: redactText(track.info.isrc) } : {}),
   };
 }
 
@@ -266,6 +270,7 @@ export class LavalinkAdapter extends EventEmitter {
 
     const directUrl = isDirectUrl(request.input);
     const identifier = directUrl ? request.input : `${SEARCH_PREFIX[source]}:${request.input}`;
+    const requestType = request.requestType ?? (directUrl ? "url" : "search");
 
     try {
       const response = await selected.value.rest.resolve(identifier);
@@ -301,7 +306,7 @@ export class LavalinkAdapter extends EventEmitter {
             request,
             requestedInput,
             requestedSource,
-            "playlist",
+            requestType,
           )),
         });
       }
@@ -316,7 +321,7 @@ export class LavalinkAdapter extends EventEmitter {
           request,
           requestedInput,
           requestedSource,
-          response.loadType,
+          requestType,
         )),
       });
     } catch {
@@ -439,7 +444,7 @@ export class LavalinkAdapter extends EventEmitter {
         artists: [redactText(item.info.author)],
         durationMs: item.info.length,
         ...(safeUrl(item.info.artworkUrl) ? { artworkUrl: safeUrl(item.info.artworkUrl) } : {}),
-        ...(item.info.isrc ? { isrc: item.info.isrc } : {}),
+        ...(item.info.isrc ? { isrc: redactText(item.info.isrc) } : {}),
         requestedBy: request.requestedBy,
         requestedAt: new Date().toISOString(),
         requestedSource: { ...requestedSource },
