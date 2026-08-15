@@ -11,7 +11,8 @@
     "start:sharded": "node dist/sharding.js",
     "export-commands": "node scripts/export-commands.js",
     "sweep:orphans": "ts-node --files scripts/orphan-sweep.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -41,6 +42,7 @@
     "openai": "^6.34.0",
     "opusscript": "^0.1.1",
     "prism-media": "^1.3.5",
+    "shoukaku": "^4.3.0",
     "sodium-native": "^5.1.0",
     "ws": "^8.20.1",
     "youtube-dl-exec": "^3.1.5",
@@ -52,6 +54,7 @@
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.7"
   }
 }
