@@ -66,15 +66,18 @@ async function extractTtfUrls(
 
   while ((blockMatch = blockRegex.exec(css)) !== null) {
     const block = blockMatch[1];
+    if (!block) continue;
 
     // Extract font-weight
     const weightMatch = block.match(/font-weight:\s*(\d+)/);
-    const weight = weightMatch ? parseInt(weightMatch[1]) : 400;
+    const weightValue = weightMatch?.[1];
+    const weight = weightValue ? parseInt(weightValue) : 400;
 
     // Extract URL (prefer .ttf)
     const urlMatch = block.match(/url\(([^)]+\.ttf[^)]*)\)/);
-    if (urlMatch) {
-      results.push({ weight, url: urlMatch[1].replace(/['"]/g, "") });
+    const url = urlMatch?.[1];
+    if (url) {
+      results.push({ weight, url: url.replace(/['"]/g, "") });
     }
   }
 

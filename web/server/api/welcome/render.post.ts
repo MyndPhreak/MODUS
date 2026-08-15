@@ -148,7 +148,7 @@ async function loadWelcomeImageLayer(reference: string): Promise<any | null> {
 
 // ── Gradient Parsing ─────────────────────────────────────────────────
 
-function parseGradient(
+export function parseGradient(
   ctx: any,
   gradientStr: string,
   x: number,
@@ -157,10 +157,11 @@ function parseGradient(
   height: number,
 ): any {
   const match = gradientStr.match(/linear-gradient\(([^)]+)\)/);
-  if (!match) return gradientStr;
+  const gradientContents = match?.[1];
+  if (!gradientContents) return gradientStr;
 
-  const parts = match[1].split(",").map((s: string) => s.trim());
-  const angleDeg = parseFloat(parts[0]) || 0;
+  const parts = gradientContents.split(",").map((s: string) => s.trim());
+  const angleDeg = parseFloat(parts[0] ?? "") || 0;
   const angleRad = (angleDeg * Math.PI) / 180;
 
   const cx = x + width / 2;
@@ -179,7 +180,7 @@ function parseGradient(
   return gradient;
 }
 
-function parseRadialGradient(
+export function parseRadialGradient(
   ctx: any,
   gradientStr: string,
   cx: number,
@@ -187,9 +188,10 @@ function parseRadialGradient(
   r: number,
 ): any {
   const match = gradientStr.match(/radial-gradient\(([^)]+)\)/);
-  if (!match) return gradientStr;
+  const gradientContents = match?.[1];
+  if (!gradientContents) return gradientStr;
 
-  const colors = match[1]!.split(",").map((s: string) => s.trim());
+  const colors = gradientContents.split(",").map((s: string) => s.trim());
   const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   colors.forEach((color: string, i: number) => {
     gradient.addColorStop(i / Math.max(colors.length - 1, 1), color);
@@ -723,7 +725,7 @@ export default defineEventHandler(async (event) => {
 
     // Return as PNG
     setResponseHeader(event, "Content-Type", "image/png");
-    setResponseHeader(event, "Content-Length", String(imageBuffer.length));
+    setResponseHeader(event, "Content-Length", imageBuffer.length);
     setResponseHeader(event, "Cache-Control", "no-store");
     return imageBuffer;
   } catch (err) {

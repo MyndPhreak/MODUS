@@ -168,7 +168,7 @@ function buildDiscordMessageBody(embed: any, content?: string): Record<string, a
     const rawDesc = String(embed.description).trim();
     const parts = rawDesc.split(/(?:\r?\n){2,}(?:---|[*]{3})(?:\r?\n){2,}|(?:\r?\n)(?:---|[*]{3})(?:\r?\n)/);
     for (let i = 0; i < parts.length; i++) {
-      const chunk = parts[i].trim();
+      const chunk = parts[i]?.trim();
       if (chunk) {
         innerComponents.push({
           type: 10, // TextDisplay
