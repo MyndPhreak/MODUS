@@ -6,6 +6,7 @@
  * shape keeps the string form for wire-compat.
  */
 import { and, eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { tags, type Tag } from "../schema";
 
@@ -108,7 +109,7 @@ export class TagRepository {
         description: data.description ?? null,
       })
       .returning({ id: tags.id });
-    return row.id;
+    return requireReturningRow(row, "Tag insert").id;
   }
 
   async update(tagId: string, data: Record<string, any>): Promise<void> {

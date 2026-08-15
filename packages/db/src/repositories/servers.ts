@@ -2,6 +2,7 @@
  * ServerRepository — guild metadata + premium flag + admin/dashboard ACLs.
  */
 import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { servers, type Server } from "../schema";
 
@@ -222,7 +223,7 @@ export class ServerRepository {
           lastChecked: new Date(),
         })
         .returning();
-      return toDoc(row);
+      return toDoc(requireReturningRow(row, "Server insert"));
     } catch (err: any) {
       // Unique index on guild_id — race between the pre-check and insert.
       if (err?.code === "23505") {
@@ -256,7 +257,10 @@ export class ServerRepository {
       })
       .where(eq(servers.guildId, guildId))
       .returning();
-    return { server: toDoc(row), wasAlreadyAdmin: false };
+    return {
+      server: toDoc(requireReturningRow(row, "Server admin update")),
+      wasAlreadyAdmin: false,
+    };
   }
 
   /**

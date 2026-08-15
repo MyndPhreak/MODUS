@@ -4,6 +4,7 @@
  * Repository for managing user reminders in Postgres.
  */
 import { and, eq, lte, desc } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { reminders, type Reminder, type NewReminder } from "../schema";
 
@@ -15,7 +16,7 @@ export class RemindersRepository {
       .insert(reminders)
       .values(data)
       .returning();
-    return row;
+    return requireReturningRow(row, "Reminder insert");
   }
 
   async findById(id: string): Promise<Reminder | null> {

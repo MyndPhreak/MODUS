@@ -5,6 +5,7 @@
  * dashboard and from the retention worker. No updates.
  */
 import { and, asc, desc, eq, lt, isNotNull } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import {
   ticketTranscripts,
@@ -112,7 +113,7 @@ export class TranscriptRepository {
         }
       }
 
-      return inserted;
+      return requireReturningRow(inserted, "Ticket transcript insert");
     });
   }
 }

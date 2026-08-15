@@ -5,11 +5,19 @@
  * has its own. Pool config is tuned for a typical workload — override via env
  * if you see saturation.
  */
-import { Pool, PoolConfig } from "pg";
+import { Pool } from "pg";
+import type { PoolConfig } from "pg";
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
+
+export function requireReturningRow<T>(row: T | undefined, context: string): T {
+  if (row === undefined) {
+    throw new Error(`${context} did not return a row.`);
+  }
+  return row;
+}
 
 export interface CreateDbOptions {
   /** Override connection string (defaults to env `DATABASE_URL`). */

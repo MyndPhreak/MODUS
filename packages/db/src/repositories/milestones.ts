@@ -5,6 +5,7 @@
  * user; this is O(log n) with the (guild_id, char_count) index.
  */
 import { and, count, desc, eq, gt } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { milestoneUsers, type MilestoneUser } from "../schema";
 
@@ -72,7 +73,7 @@ export class MilestoneUserRepository {
         optedIn: data.opted_in,
       })
       .returning({ id: milestoneUsers.id });
-    return row.id;
+    return requireReturningRow(row, "Milestone user insert").id;
   }
 
   async update(docId: string, data: Record<string, any>): Promise<void> {

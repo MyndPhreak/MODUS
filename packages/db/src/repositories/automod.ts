@@ -7,6 +7,7 @@
  * the respective `_parsed` fields.
  */
 import { and, eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { automodRules, type AutomodRule } from "../schema";
 
@@ -118,7 +119,7 @@ export class AutomodRuleRepository {
         createdBy: data.created_by ?? null,
       })
       .returning({ id: automodRules.id });
-    return row.id;
+    return requireReturningRow(row, "Automod rule insert").id;
   }
 
   async update(ruleId: string, data: Record<string, any>): Promise<void> {

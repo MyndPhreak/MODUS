@@ -6,6 +6,7 @@
  * Postgres lets us target the row directly.
  */
 import { eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { tempVoiceChannels, type TempVoiceChannel } from "../schema";
 
@@ -46,7 +47,7 @@ export class TempVoiceChannelRepository {
         lobbyChannelId: data.lobby_channel_id,
       })
       .returning({ id: tempVoiceChannels.id });
-    return row.id;
+    return requireReturningRow(row, "Temporary voice channel insert").id;
   }
 
   async deleteByChannelId(channelId: string): Promise<void> {

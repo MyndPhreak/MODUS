@@ -3,6 +3,7 @@
  * this only tracks a poll's existence/metadata (see schema.ts comment).
  */
 import { and, eq, gt } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { polls, type Poll, type NewPoll } from "../schema";
 
@@ -11,7 +12,7 @@ export class PollRepository {
 
   async create(data: NewPoll): Promise<Poll> {
     const [row] = await this.db.insert(polls).values(data).returning();
-    return row;
+    return requireReturningRow(row, "Poll insert");
   }
 
   async listActiveByGuild(

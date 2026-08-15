@@ -4,6 +4,7 @@
  * count, "now live" status) after it's posted.
  */
 import { and, eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import {
   eventAnnouncements,
@@ -19,7 +20,7 @@ export class EventAnnouncementRepository {
       .insert(eventAnnouncements)
       .values(data)
       .returning();
-    return row;
+    return requireReturningRow(row, "Event announcement insert");
   }
 
   async getByEvent(

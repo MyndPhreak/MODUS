@@ -8,6 +8,7 @@
  * during the transition.
  */
 import { and, eq, lt, desc, asc } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import {
   recordings,
@@ -167,7 +168,7 @@ export class RecordingRepository {
         endedAt: input.ended_at ? toDate(input.ended_at) : null,
       })
       .returning({ id: recordings.id });
-    return row.id;
+    return requireReturningRow(row, "Recording insert").id;
   }
 
   async update(id: string, input: UpdateRecordingInput): Promise<void> {
@@ -270,7 +271,7 @@ export class RecordingRepository {
         segments: parseSegments(input.segments),
       })
       .returning({ id: recordingTracks.id });
-    return row.id;
+    return requireReturningRow(row, "Recording track insert").id;
   }
 
   async listTracks(recordingId: string): Promise<RecordingTrackDoc[]> {

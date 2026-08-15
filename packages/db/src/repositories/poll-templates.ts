@@ -2,6 +2,7 @@
  * PollTemplateRepository — reusable, on-demand poll presets.
  */
 import { eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import {
   pollTemplates,
@@ -14,7 +15,7 @@ export class PollTemplateRepository {
 
   async create(data: NewPollTemplate): Promise<PollTemplate> {
     const [row] = await this.db.insert(pollTemplates).values(data).returning();
-    return row;
+    return requireReturningRow(row, "Poll template insert");
   }
 
   async listByGuild(guildId: string): Promise<PollTemplate[]> {

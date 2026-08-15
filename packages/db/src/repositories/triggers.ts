@@ -5,6 +5,7 @@
  * Doc shape preserves strings for existing callers.
  */
 import { eq } from "drizzle-orm";
+import { requireReturningRow } from "../client";
 import type { Database } from "../client";
 import { triggers, type TriggerRow } from "../schema";
 
@@ -70,7 +71,7 @@ export class TriggerRepository {
         enabled: true,
       })
       .returning({ id: triggers.id });
-    return row.id;
+    return requireReturningRow(row, "Trigger insert").id;
   }
 
   async listByGuild(guildId: string): Promise<TriggerDoc[]> {
