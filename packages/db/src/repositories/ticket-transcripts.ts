@@ -102,6 +102,10 @@ export class TranscriptRepository {
         .insert(ticketTranscripts)
         .values(transcript)
         .returning();
+      const insertedTranscript = requireReturningRow(
+        inserted,
+        "Ticket transcript insert",
+      );
 
       if (messages.length > 0) {
         // Chunk to avoid overflowing Postgres parameter limit (~65k).
@@ -113,7 +117,7 @@ export class TranscriptRepository {
         }
       }
 
-      return requireReturningRow(inserted, "Ticket transcript insert");
+      return insertedTranscript;
     });
   }
 }
