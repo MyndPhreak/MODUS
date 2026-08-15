@@ -86,6 +86,10 @@ export interface MusicCheckpointInput {
   filters?: Record<string, unknown>;
 }
 
+export interface MusicApplyCheckpointOperationInput extends MusicMutationBase {
+  checkpoint: Omit<MusicCheckpointInput, "guildId" | "expectedRevision">;
+}
+
 export interface MusicNodeAssignmentInput {
   guildId: string;
   nodeId: string | null;
@@ -413,6 +417,64 @@ export class MusicRepository {
       .onConflictDoNothing({ target: musicSessions.guildId })
       .returning({ id: musicSessions.id });
     return inserted !== undefined;
+  }
+
+  async applyCheckpointOperation(
+    input: MusicApplyCheckpointOperationInput,
+  ): Promise<MusicMutationResult> {
+    return this.db.transaction(async (tx) => {
+      await tx
+        .insert(musicSessions)
+        .values({ guildId: input.guildId })
+        .onConflictDoNothing({ target: musicSessions.guildId });
+
+      const [sessionRow] = await tx
+        .select()
+        .from(musicSessions)
+        .where(eq(musicSessions.guildId, input.guildId))
+        .for("update");
+      const session = requireReturningRow(sessionRow, "Music session lock");
+
+      const [existingOperation] = await tx
+        .select({ resultingRevision: musicOperations.resultingRevision })
+        .from(musicOperations)
+        .where(and(
+          eq(musicOperations.guildId, input.guildId),
+          eq(musicOperations.operationId, input.operationId),
+        ))
+        .limit(1);
+      if (existingOperation) {
+        return { revision: existingOperation.resultingRevision, replayed: true };
+      }
+
+      if (input.expectedRevision !== session.revision) {
+        throw new MusicRevisionConflictError(input.expectedRevision, session.revision);
+      }
+
+      const checkpointedAt = input.checkpoint.checkpointedAt ?? new Date();
+      const patch: Partial<typeof musicSessions.$inferInsert> = {
+        revision: session.revision + 1,
+        currentEntryId: input.checkpoint.currentEntryId,
+        checkpointPositionMs: Math.max(0, Math.trunc(input.checkpoint.positionMs)),
+        checkpointedAt,
+        updatedAt: new Date(),
+      };
+      if (input.checkpoint.volume !== undefined) patch.volume = input.checkpoint.volume;
+      if (input.checkpoint.repeatMode !== undefined) patch.repeatMode = input.checkpoint.repeatMode;
+      if (input.checkpoint.filters !== undefined) patch.filters = input.checkpoint.filters;
+
+      await tx
+        .update(musicSessions)
+        .set(patch)
+        .where(eq(musicSessions.guildId, input.guildId));
+      await tx.insert(musicOperations).values({
+        guildId: input.guildId,
+        operationId: input.operationId,
+        resultingRevision: patch.revision!,
+      });
+
+      return { revision: patch.revision!, replayed: false };
+    });
   }
 
   async recordNodeAssignment(input: MusicNodeAssignmentInput): Promise<void> {

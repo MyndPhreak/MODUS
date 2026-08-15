@@ -35,7 +35,7 @@ type RecoveryRepository = Pick<
 
 type RecoveryLease = Pick<
   GuildPlaybackLease,
-  "fenceAndAcquire" | "assertOwner"
+  "fenceAndAcquire" | "renew" | "assertOwner"
 >;
 
 type RecoveryAdapter = Pick<
@@ -82,6 +82,7 @@ export interface MusicRecoveryOutcome {
   queue: MusicQueueSnapshot;
   nodeId: string | null;
   fencingToken: number | null;
+  trackIdentifier: string | null;
 }
 
 /**
@@ -135,7 +136,12 @@ export class MusicRecovery {
       const current = currentEntry(durable);
 
       if (!current) {
-        const outcome: MusicRecoveryOutcome = { queue, nodeId: null, fencingToken: null };
+        const outcome: MusicRecoveryOutcome = {
+          queue,
+          nodeId: null,
+          fencingToken: null,
+          trackIdentifier: null,
+        };
         await this.publish({
           guildId: input.guildId,
           queueRevision,
@@ -147,6 +153,32 @@ export class MusicRecovery {
         });
         return { ok: true, value: outcome };
       }
+
+      const currentPlayer = this.adapter.getPlayer(input.guildId);
+      if (currentPlayer && currentPlayer.nodeId !== input.failedNodeId) {
+        const outcome: MusicRecoveryOutcome = {
+          queue,
+          nodeId: currentPlayer.nodeId,
+          fencingToken: null,
+          trackIdentifier: current.track.playbackSource?.identifier ?? null,
+        };
+        await this.publish({
+          guildId: input.guildId,
+          queueRevision,
+          nodeId: currentPlayer.nodeId,
+          operationId,
+          status: currentPlayer.paused ? "paused" : "playing",
+          currentEntryId: current.id,
+          positionMs: currentPlayer.positionMs,
+        });
+        return { ok: true, value: outcome };
+      }
+
+      const fencingToken = await this.lease.fenceAndAcquire(
+        input.guildId,
+        input.failedNodeId,
+        durable.revision,
+      );
 
       const source = recoverySource(current.track);
       if (!source) {
@@ -167,35 +199,10 @@ export class MusicRecovery {
         capabilities: [source],
       });
       if (!selected.ok) {
-        await this.lease.fenceAndAcquire(input.guildId, input.failedNodeId, durable.revision);
         return await this.failure(input, operationId, queueRevision, null, selected.error);
       }
       selectedNodeId = selected.value.id;
-
-      const currentPlayer = this.adapter.getPlayer(input.guildId);
-      if (currentPlayer && currentPlayer.nodeId !== input.failedNodeId) {
-        const outcome: MusicRecoveryOutcome = {
-          queue,
-          nodeId: currentPlayer.nodeId,
-          fencingToken: null,
-        };
-        await this.publish({
-          guildId: input.guildId,
-          queueRevision,
-          nodeId: currentPlayer.nodeId,
-          operationId,
-          status: currentPlayer.paused ? "paused" : "playing",
-          currentEntryId: current.id,
-          positionMs: currentPlayer.positionMs,
-        });
-        return { ok: true, value: outcome };
-      }
-
-      const fencingToken = await this.lease.fenceAndAcquire(
-        input.guildId,
-        selectedNodeId,
-        durable.revision,
-      );
+      await this.lease.renew(input.guildId, fencingToken, selectedNodeId, durable.revision);
       await this.repository.recordNodeAssignment({ guildId: input.guildId, nodeId: selectedNodeId });
 
       const resolved = await this.retryTransient(() => this.adapter.loadTracks({
@@ -210,6 +217,7 @@ export class MusicRecovery {
       if (!resolved.ok) {
         return await this.failure(input, operationId, queueRevision, selectedNodeId, resolved.error);
       }
+      await this.assertCurrentRevision(input.guildId, durable.revision, current.id);
 
       const candidate = selectCandidate(current.track, resolved.value);
       if (!candidate) {
@@ -224,6 +232,7 @@ export class MusicRecovery {
 
       if (currentPlayer) {
         const transferred = await this.retryTransient(async () => {
+          await this.assertCurrentRevision(input.guildId, durable.revision, current.id);
           await this.lease.assertOwner(input.guildId, fencingToken);
           return this.adapter.transferPlayer(input.guildId, selectedNodeId!);
         });
@@ -242,6 +251,7 @@ export class MusicRecovery {
 
       const positionMs = recoverablePosition(durable.checkpointPositionMs, current.track.durationMs);
       const restored = await this.retryTransient(async () => {
+        await this.assertCurrentRevision(input.guildId, durable.revision, current.id);
         await this.lease.assertOwner(input.guildId, fencingToken);
         const playerForAttempt = this.adapter.getPlayer(input.guildId);
         return this.adapter.createOrUpdatePlayer({
@@ -268,12 +278,24 @@ export class MusicRecovery {
         repeatMode: durable.repeatMode,
         filters: durable.filters,
       };
-      await this.repository.checkpoint(checkpoint);
+      const checkpointed = await this.repository.checkpoint(checkpoint);
+      if (!checkpointed) {
+        return await this.failure(
+          input,
+          operationId,
+          queueRevision,
+          selectedNodeId,
+          new MusicError("MUSIC_CONFLICT", "The music queue changed before recovery could checkpoint."),
+        );
+      }
 
       const outcome: MusicRecoveryOutcome = {
         queue,
         nodeId: selectedNodeId,
         fencingToken,
+        trackIdentifier: candidate.track.playbackSource?.identifier
+          ?? current.track.playbackSource?.identifier
+          ?? null,
       };
       await this.publish({
         guildId: input.guildId,
@@ -312,6 +334,17 @@ export class MusicRecovery {
       if (this.retryDelayMs > 0) await this.sleep(this.retryDelayMs);
     }
     throw new Error("Unreachable music retry state.");
+  }
+
+  private async assertCurrentRevision(
+    guildId: string,
+    expectedRevision: number,
+    currentEntryId: string,
+  ): Promise<void> {
+    const latest = await this.repository.readSnapshot(guildId);
+    if (latest.revision !== expectedRevision || latest.currentEntryId !== currentEntryId) {
+      throw new MusicError("MUSIC_CONFLICT", "The music queue changed during recovery.");
+    }
   }
 
   private async failure(

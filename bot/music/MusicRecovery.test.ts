@@ -62,6 +62,7 @@ const durableSnapshot = (): DurableMusicQueueSnapshot => ({
 class FakeRepository {
   readonly assignments: MusicNodeAssignmentInput[] = [];
   readonly checkpoints: MusicCheckpointInput[] = [];
+  checkpointResult: boolean | null = null;
 
   constructor(
     readonly snapshot: DurableMusicQueueSnapshot,
@@ -81,12 +82,13 @@ class FakeRepository {
   async checkpoint(input: MusicCheckpointInput): Promise<boolean> {
     this.order.push("checkpoint");
     this.checkpoints.push(structuredClone(input));
-    return input.expectedRevision === this.snapshot.revision;
+    return this.checkpointResult ?? input.expectedRevision === this.snapshot.revision;
   }
 }
 
 class FakeLease {
   fenceCalls = 0;
+  renewCalls = 0;
   assertCalls = 0;
 
   constructor(private readonly order: string[]) {}
@@ -94,6 +96,12 @@ class FakeLease {
   async fenceAndAcquire(): Promise<number> {
     this.order.push("fence");
     this.fenceCalls += 1;
+    return 29;
+  }
+
+  async renew(): Promise<number> {
+    this.order.push("renew");
+    this.renewCalls += 1;
     return 29;
   }
 
@@ -111,6 +119,8 @@ class FakeAdapter {
   loadResults: Array<MusicResult<LavalinkLoadResult>> = [];
   updateResults: Array<MusicResult<LavalinkPlayerSnapshot>> = [];
   materializePlayerOnFailure = false;
+  onLoad: (() => void) | null = null;
+  onTransfer: (() => void) | null = null;
   player: LavalinkPlayerSnapshot | null = {
     guildId: "guild-1",
     nodeId: "primary",
@@ -129,6 +139,7 @@ class FakeAdapter {
   async loadTracks(request: LavalinkLoadRequest): Promise<MusicResult<LavalinkLoadResult>> {
     this.order.push("resolve");
     this.loadRequests.push(structuredClone(request));
+    this.onLoad?.();
     return this.loadResults.shift() ?? {
       ok: true,
       value: {
@@ -145,6 +156,7 @@ class FakeAdapter {
     this.order.push("transfer");
     this.transfers.push({ guildId, nodeId });
     this.player = { ...this.player!, nodeId };
+    this.onTransfer?.();
     return { ok: true, value: structuredClone(this.player) };
   }
 
@@ -373,5 +385,58 @@ describe("MusicRecovery", () => {
     expect(adapter.updates[0]).toMatchObject({ voiceChannelId: "voice-1", shardId: 3 });
     expect(adapter.updates[1]?.voiceChannelId).toBeUndefined();
     expect(adapter.updates[1]?.shardId).toBeUndefined();
+  });
+
+  it("aborts before transfer when the queue revision changes during slow resolution", async () => {
+    const { adapter, eventBus, recovery, repository } = setup();
+    adapter.onLoad = () => {
+      repository.snapshot.revision = 9;
+    };
+
+    const result = await recovery.recoverGuild({ guildId: "guild-1", failedNodeId: "primary" });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "MUSIC_CONFLICT" } });
+    expect(adapter.transfers).toHaveLength(0);
+    expect(adapter.updates).toHaveLength(0);
+    expect(eventBus.events.at(-1)?.payload).toMatchObject({ errorCode: "MUSIC_CONFLICT" });
+  });
+
+  it("re-checks revision between transfer and restore", async () => {
+    const { adapter, recovery, repository } = setup();
+    adapter.onTransfer = () => {
+      repository.snapshot.revision = 9;
+    };
+
+    const result = await recovery.recoverGuild({ guildId: "guild-1", failedNodeId: "primary" });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "MUSIC_CONFLICT" } });
+    expect(adapter.transfers).toHaveLength(1);
+    expect(adapter.updates).toHaveLength(0);
+  });
+
+  it("does not report recovery success when the post-restore checkpoint CAS is rejected", async () => {
+    const { adapter, recovery, repository } = setup();
+    repository.checkpointResult = false;
+
+    const result = await recovery.recoverGuild({ guildId: "guild-1", failedNodeId: "primary" });
+
+    expect(adapter.updates).toHaveLength(1);
+    expect(result).toMatchObject({ ok: false, error: { code: "MUSIC_CONFLICT" } });
+  });
+
+  it("fences active failed ownership before returning an unsupported-source error", async () => {
+    const { adapter, lease, recovery, repository } = setup();
+    repository.snapshot.entries[0]!.track = {
+      ...repository.snapshot.entries[0]!.track,
+      requestedSource: { name: "unsupported" },
+      playbackSource: { name: "unsupported", identifier: "opaque" },
+    };
+
+    const result = await recovery.recoverGuild({ guildId: "guild-1", failedNodeId: "primary" });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "MUSIC_SOURCE_UNAVAILABLE" } });
+    expect(lease.fenceCalls).toBe(1);
+    expect(lease.renewCalls).toBe(0);
+    expect(adapter.loadRequests).toHaveLength(0);
   });
 });

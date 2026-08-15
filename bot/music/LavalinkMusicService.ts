@@ -20,7 +20,7 @@ import type {
   LavalinkPlayerUpdate,
   LavalinkSearchSource,
 } from "./LavalinkAdapter";
-import type { MusicPlaybackEvent } from "./LavalinkEvents";
+import type { MusicPlaybackEvent, MusicPlaybackTrack } from "./LavalinkEvents";
 import type { MusicService } from "./MusicService";
 import {
   CHANNEL_MUSIC_STATE,
@@ -46,7 +46,7 @@ const MIN_MATCH_SCORE = 0.85;
 
 type CoordinatorRepository = Pick<
   MusicRepository,
-  "readSnapshot" | "applyMutation" | "checkpoint" | "recordNodeAssignment"
+  "readSnapshot" | "applyMutation" | "applyCheckpointOperation" | "checkpoint" | "recordNodeAssignment"
 >;
 
 type CoordinatorLease = Pick<
@@ -93,6 +93,7 @@ interface ActivePlayback {
   fencingToken: number;
   queueRevision: number;
   currentEntryId: string | null;
+  trackIdentifier: string | null;
   voiceChannelId?: string;
   shardId?: number;
   paused: boolean;
@@ -124,7 +125,6 @@ export class LavalinkMusicService implements MusicService {
   private readonly random: () => number;
   private readonly active = new Map<string, ActivePlayback>();
   private readonly checkpointTimes = new Map<string, number>();
-  private readonly completedLiveOperations = new Map<string, number>();
   private readonly commandTails = new Map<string, Promise<void>>();
   private closed = false;
 
@@ -218,7 +218,6 @@ export class LavalinkMusicService implements MusicService {
     ));
     this.active.clear();
     this.checkpointTimes.clear();
-    this.completedLiveOperations.clear();
   }
 
   async handlePlaybackEvent(event: MusicPlaybackEvent): Promise<void> {
@@ -241,6 +240,7 @@ export class LavalinkMusicService implements MusicService {
               nodeId: result.value.nodeId,
               fencingToken: result.value.fencingToken,
               queueRevision: result.value.queue.revision,
+              trackIdentifier: result.value.trackIdentifier,
             });
           }
         });
@@ -250,6 +250,13 @@ export class LavalinkMusicService implements MusicService {
 
     const ownedPlayback = this.active.get(event.guildId);
     if (ownedPlayback && ownedPlayback.nodeId !== event.nodeId) return;
+    if (ownedPlayback) {
+      try {
+        await this.lease.assertOwner(event.guildId, ownedPlayback.fencingToken);
+      } catch {
+        return;
+      }
+    }
     const durable = await this.repository.readSnapshot(event.guildId);
     const playback = ownedPlayback;
     const currentEntryId = durable.currentEntryId
@@ -257,11 +264,21 @@ export class LavalinkMusicService implements MusicService {
       ?? durable.entries.find((entry) => entry.status === "playing")?.id
       ?? durable.entries[0]?.id
       ?? null;
+    const currentQueueEntry = durable.entries.find((entry) => entry.id === currentEntryId);
+    if (
+      isTrackPlaybackEvent(event)
+      && currentQueueEntry
+      && !matchesPlaybackTrack(currentQueueEntry.track, event.track, playback?.trackIdentifier)
+    ) {
+      return;
+    }
 
     if (event.type === "track.start") {
       await this.checkpointEvent(durable, currentEntryId, 0);
       this.checkpointTimes.set(event.guildId, this.now());
       this.updateActiveFromEvent(event.guildId, event.nodeId, currentEntryId, false);
+      const active = this.active.get(event.guildId);
+      if (active) this.active.set(event.guildId, { ...active, trackIdentifier: event.track.identifier });
       await this.publishPlaybackEvent(event.guildId, durable.revision, event.nodeId, "track.start", currentEntryId, 0);
       return;
     }
@@ -306,11 +323,6 @@ export class LavalinkMusicService implements MusicService {
   }
 
   private async executeValidated(command: MusicCommand): Promise<MusicResult<MusicQueueSnapshot>> {
-    const completedRevision = this.completedLiveOperations.get(operationKey(command.guildId, command.operationId));
-    if (completedRevision !== undefined && isCheckpointCommand(command)) {
-      return { ok: true, value: await this.getQueue(command.guildId) };
-    }
-
     switch (command.type) {
       case "play":
         return this.executePlay(command);
@@ -372,6 +384,18 @@ export class LavalinkMusicService implements MusicService {
       if (!entry || entry.status !== "pending") {
         return { ok: true, value: toQueueSnapshot(durable) };
       }
+      if (durable.revision !== committed.revision) {
+        return { ok: true, value: toQueueSnapshot(durable) };
+      }
+      if (durable.currentEntryId && durable.currentEntryId !== entry.id) {
+        await this.repository.applyMutation({
+          guildId: command.guildId,
+          operationId: `${command.operationId}:ready`,
+          expectedRevision: committed.revision,
+          mutation: { type: "setStatus", entryId: entry.id, status: "ready" },
+        });
+        return { ok: true, value: await this.getQueue(command.guildId) };
+      }
       const player = this.adapter.getPlayer(command.guildId);
       if (player) {
         return this.reconcilePendingDispatch(durable, entry, command.operationId, player);
@@ -398,7 +422,6 @@ export class LavalinkMusicService implements MusicService {
         mutation: { type: "setStatus", entryId: entry.id, status: "ready" },
       });
       durable = await this.repository.readSnapshot(command.guildId);
-      this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), ready.revision);
       return { ok: true, value: toQueueSnapshot(durable) };
     }
 
@@ -440,6 +463,7 @@ export class LavalinkMusicService implements MusicService {
       fencingToken,
       queueRevision: context.durable.revision,
       currentEntryId: context.entry.id,
+      trackIdentifier: context.entry.track.playbackSource?.identifier ?? null,
       ...(context.voiceChannelId
         ? { voiceChannelId: context.voiceChannelId }
         : existingActive?.voiceChannelId ? { voiceChannelId: existingActive.voiceChannelId } : {}),
@@ -462,6 +486,15 @@ export class LavalinkMusicService implements MusicService {
     const candidate = selectCandidate(context.entry.track, resolved.value);
     if (!candidate) {
       return { ok: false, error: new MusicError("MUSIC_NO_MATCH", "No safe canonical track match was found.") };
+    }
+    const activeWithCandidate = this.active.get(context.durable.guildId);
+    if (activeWithCandidate) {
+      this.active.set(context.durable.guildId, {
+        ...activeWithCandidate,
+        trackIdentifier: candidate.track.playbackSource?.identifier
+          ?? context.entry.track.playbackSource?.identifier
+          ?? null,
+      });
     }
 
     const dispatched = await this.retryTransient(async () => {
@@ -505,11 +538,13 @@ export class LavalinkMusicService implements MusicService {
       fencingToken,
       queueRevision: playing.revision,
       currentEntryId: context.entry.id,
+      trackIdentifier: candidate.track.playbackSource?.identifier
+        ?? context.entry.track.playbackSource?.identifier
+        ?? null,
       ...(context.voiceChannelId ? { voiceChannelId: context.voiceChannelId } : {}),
       ...(context.shardId !== undefined ? { shardId: context.shardId } : {}),
       paused: dispatched.value.paused,
     });
-    this.completedLiveOperations.set(operationKey(context.durable.guildId, context.operationId), playing.revision);
     return { ok: true, value: await this.getQueue(context.durable.guildId) };
   }
 
@@ -546,7 +581,6 @@ export class LavalinkMusicService implements MusicService {
       });
     }
     this.checkpointTimes.set(durable.guildId, this.now());
-    this.completedLiveOperations.set(operationKey(durable.guildId, operationId), playing.revision);
     return { ok: true, value: await this.getQueue(durable.guildId) };
   }
 
@@ -558,9 +592,7 @@ export class LavalinkMusicService implements MusicService {
     const positionMs = command.type === "seek"
       ? command.positionMs
       : player?.positionMs ?? durable.checkpointPositionMs;
-    const checkpoint: MusicCheckpointInput = {
-      guildId: command.guildId,
-      expectedRevision: command.expectedRevision,
+    const checkpoint: Omit<MusicCheckpointInput, "guildId" | "expectedRevision"> = {
       currentEntryId: durable.currentEntryId,
       positionMs,
       checkpointedAt: new Date(this.now()),
@@ -568,25 +600,28 @@ export class LavalinkMusicService implements MusicService {
       ...(command.type === "repeat" ? { repeatMode: command.repeatMode } : {}),
       ...(command.type === "filters" ? { filters: command.filters } : {}),
     };
-    const checkpointed = await this.repository.checkpoint(checkpoint);
-    if (!checkpointed) {
-      const latest = await this.repository.readSnapshot(command.guildId);
-      throw new MusicRevisionConflictError(command.expectedRevision, latest.revision);
+    const committed = await this.repository.applyCheckpointOperation({
+      guildId: command.guildId,
+      operationId: command.operationId,
+      expectedRevision: command.expectedRevision,
+      checkpoint,
+    });
+    const latest = await this.repository.readSnapshot(command.guildId);
+    if (committed.replayed && latest.revision !== committed.revision) {
+      return { ok: true, value: toQueueSnapshot(latest) };
     }
 
     if (command.type === "repeat") {
-      this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), durable.revision);
       return { ok: true, value: await this.getQueue(command.guildId) };
     }
     if (!player) {
       if (command.type === "volume" || command.type === "filters") {
-        this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), durable.revision);
         return { ok: true, value: await this.getQueue(command.guildId) };
       }
       return { ok: false, error: new MusicError("MUSIC_VOICE_FAILED", "No active voice player exists.") };
     }
 
-    const fencingToken = await this.ensureLease(command.guildId, player.nodeId, durable.revision);
+    const fencingToken = await this.ensureLease(command.guildId, player.nodeId, committed.revision);
     const update: LavalinkPlayerUpdate = {
       guildId: command.guildId,
       nodeId: player.nodeId,
@@ -606,14 +641,16 @@ export class LavalinkMusicService implements MusicService {
     this.active.set(command.guildId, {
       nodeId: player.nodeId,
       fencingToken,
-      queueRevision: durable.revision,
-      currentEntryId: durable.currentEntryId,
+      queueRevision: committed.revision,
+      currentEntryId: latest.currentEntryId,
+      trackIdentifier: active?.trackIdentifier
+        ?? latest.entries.find((entry) => entry.id === latest.currentEntryId)?.track.playbackSource?.identifier
+        ?? null,
       ...(active?.voiceChannelId ? { voiceChannelId: active.voiceChannelId } : {}),
       ...(active?.shardId !== undefined ? { shardId: active.shardId } : {}),
       paused: dispatched.value.paused,
     });
     this.checkpointTimes.set(command.guildId, this.now());
-    this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), durable.revision);
     return { ok: true, value: await this.getQueue(command.guildId) };
   }
 
@@ -627,13 +664,22 @@ export class LavalinkMusicService implements MusicService {
       expectedRevision: command.expectedRevision,
       mutation: { type: "setStatus", entryId: current.id, status: "failed" },
     });
-    if (ended.replayed) return { ok: true, value: await this.getQueue(command.guildId) };
+    if (
+      ended.replayed
+      && before.revision > ended.revision
+      && current.status === "playing"
+    ) {
+      return { ok: true, value: toQueueSnapshot(before) };
+    }
 
     const after = await this.repository.readSnapshot(command.guildId);
     const next = after.entries
       .filter((entry) => entry.id !== current.id && entry.status !== "failed")
       .sort((left, right) => left.position - right.position)[0];
-    if (!next) return this.destroyCommittedPlayer(command.guildId, ended.revision, command.operationId);
+    if (!next) {
+      if (after.revision !== ended.revision) return { ok: true, value: toQueueSnapshot(after) };
+      return this.destroyCommittedPlayer(command.guildId, ended.revision, command.operationId);
+    }
 
     const pending = await this.repository.applyMutation({
       guildId: command.guildId,
@@ -642,9 +688,17 @@ export class LavalinkMusicService implements MusicService {
       mutation: { type: "setStatus", entryId: next.id, status: "pending" },
     });
     const durable = await this.repository.readSnapshot(command.guildId);
+    const durableNext = durable.entries.find((entry) => entry.id === next.id);
+    if (!durableNext) return { ok: true, value: toQueueSnapshot(durable) };
+    if (pending.replayed && durable.revision !== pending.revision) {
+      return { ok: true, value: toQueueSnapshot(durable) };
+    }
+    if (durable.currentEntryId === next.id && durableNext.status === "playing") {
+      return { ok: true, value: toQueueSnapshot(durable) };
+    }
     return this.dispatchEntry({
       durable: { ...durable, revision: pending.revision },
-      entry: durable.entries.find((entry) => entry.id === next.id)!,
+      entry: durableNext,
       operationId: command.operationId,
     });
   }
@@ -658,7 +712,10 @@ export class LavalinkMusicService implements MusicService {
       expectedRevision: command.expectedRevision,
       mutation: { type: "clear" },
     });
-    if (committed.replayed) return { ok: true, value: await this.getQueue(command.guildId) };
+    const durable = await this.repository.readSnapshot(command.guildId);
+    if (committed.replayed && durable.revision !== committed.revision) {
+      return { ok: true, value: toQueueSnapshot(durable) };
+    }
     return this.destroyCommittedPlayer(command.guildId, committed.revision, command.operationId);
   }
 
@@ -672,11 +729,17 @@ export class LavalinkMusicService implements MusicService {
       expectedRevision: command.expectedRevision,
       mutation: { type: "remove", entryId: command.entryId },
     });
-    if (committed.replayed) return { ok: true, value: await this.getQueue(command.guildId) };
+    const durable = await this.repository.readSnapshot(command.guildId);
+    if (committed.replayed) {
+      if (durable.revision !== committed.revision) return { ok: true, value: toQueueSnapshot(durable) };
+      if (durable.currentEntryId === null && this.adapter.getPlayer(command.guildId)) {
+        return this.destroyCommittedPlayer(command.guildId, committed.revision, command.operationId);
+      }
+      return { ok: true, value: toQueueSnapshot(durable) };
+    }
     if (before.currentEntryId === command.entryId) {
       return this.destroyCommittedPlayer(command.guildId, committed.revision, command.operationId);
     }
-    this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), committed.revision);
     return { ok: true, value: await this.getQueue(command.guildId) };
   }
 
@@ -690,7 +753,6 @@ export class LavalinkMusicService implements MusicService {
       expectedRevision: command.expectedRevision,
       mutation,
     });
-    this.completedLiveOperations.set(operationKey(command.guildId, command.operationId), committed.revision);
     return { ok: true, value: await this.getQueue(command.guildId) };
   }
 
@@ -714,7 +776,6 @@ export class LavalinkMusicService implements MusicService {
     }
     this.active.delete(guildId);
     this.checkpointTimes.delete(guildId);
-    this.completedLiveOperations.set(operationKey(guildId, operationId), revision);
     return { ok: true, value: await this.getQueue(guildId) };
   }
 
@@ -726,7 +787,16 @@ export class LavalinkMusicService implements MusicService {
       }
       return this.lease.renew(guildId, active.fencingToken, nodeId, queueRevision);
     }
-    return this.lease.acquire(guildId, nodeId, queueRevision);
+    const fencingToken = await this.lease.acquire(guildId, nodeId, queueRevision);
+    this.active.set(guildId, {
+      nodeId,
+      fencingToken,
+      queueRevision,
+      currentEntryId: null,
+      trackIdentifier: null,
+      paused: false,
+    });
+    return fencingToken;
   }
 
   private async retryTransient<T>(operation: () => Promise<MusicResult<T>>): Promise<MusicResult<T>> {
@@ -929,6 +999,27 @@ function selectCandidate(requested: CanonicalTrack, result: LavalinkLoadResult) 
     .sort((left, right) => right.score - left.score)[0]?.candidate ?? null;
 }
 
+function isTrackPlaybackEvent(
+  event: MusicPlaybackEvent,
+): event is Extract<MusicPlaybackEvent, { type: "track.start" | "track.end" | "track.stuck" }> {
+  return event.type === "track.start" || event.type === "track.end" || event.type === "track.stuck";
+}
+
+function matchesPlaybackTrack(
+  canonical: CanonicalTrack,
+  playback: MusicPlaybackTrack,
+  activeIdentifier?: string | null,
+): boolean {
+  const expectedIdentifier = activeIdentifier?.trim() || canonical.playbackSource?.identifier?.trim();
+  if (expectedIdentifier) return expectedIdentifier === playback.identifier.trim();
+  return scoreTrackMatch(canonical, {
+    title: playback.title,
+    artists: [playback.artist],
+    durationMs: playback.durationMs,
+    isrc: playback.isrc,
+  }) >= MIN_MATCH_SCORE;
+}
+
 function toQueueSnapshot(snapshot: DurableMusicQueueSnapshot): MusicQueueSnapshot {
   return {
     guildId: snapshot.guildId,
@@ -966,21 +1057,6 @@ function isTransientBoundaryError(error: MusicError): boolean {
     || error.code === "MUSIC_RELAY_OFFLINE"
     || error.code === "MUSIC_VOICE_FAILED"
   );
-}
-
-function operationKey(guildId: string, operationId: string): string {
-  return `${guildId}:${operationId}`;
-}
-
-function isCheckpointCommand(
-  command: MusicCommand,
-): command is Extract<MusicCommand, { type: "pause" | "resume" | "seek" | "volume" | "repeat" | "filters" }> {
-  return command.type === "pause"
-    || command.type === "resume"
-    || command.type === "seek"
-    || command.type === "volume"
-    || command.type === "repeat"
-    || command.type === "filters";
 }
 
 function shuffle(values: string[], random: () => number): void {

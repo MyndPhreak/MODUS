@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type {
   DurableMusicQueueSnapshot,
+  MusicApplyCheckpointOperationInput,
   MusicApplyMutationInput,
   MusicCheckpointInput,
   MusicMutationResult,
@@ -40,7 +41,7 @@ const track = (id = "track-1"): CanonicalTrack => ({
   requestedBy: "user-1",
   requestedAt: "2026-08-15T12:00:00.000Z",
   requestedSource: { name: "youtube" },
-  playbackSource: { name: "youtube", identifier: "video-1" },
+  playbackSource: { name: "youtube", identifier: id === "track-1" ? "video-1" : `video-${id}` },
   matchConfidence: 1,
 });
 
@@ -60,8 +61,10 @@ const emptySnapshot = (revision = 0): DurableMusicQueueSnapshot => ({
 class FakeMusicRepository {
   readonly operations = new Map<string, number>();
   readonly mutationInputs: MusicApplyMutationInput[] = [];
+  readonly checkpointOperationInputs: MusicApplyCheckpointOperationInput[] = [];
   readonly checkpointInputs: MusicCheckpointInput[] = [];
   readonly assignmentInputs: MusicNodeAssignmentInput[] = [];
+  throwAfterCommittedOperationId: string | null = null;
 
   constructor(
     public snapshot: DurableMusicQueueSnapshot,
@@ -111,6 +114,9 @@ class FakeMusicRepository {
     });
     this.snapshot.revision += 1;
     this.operations.set(operationKey, this.snapshot.revision);
+    if (this.throwAfterCommittedOperationId === input.operationId) {
+      throw new Error("Simulated process crash after durable commit.");
+    }
     return { revision: this.snapshot.revision, replayed: false };
   }
 
@@ -125,6 +131,28 @@ class FakeMusicRepository {
     if (input.repeatMode !== undefined) this.snapshot.repeatMode = input.repeatMode;
     if (input.filters !== undefined) this.snapshot.filters = structuredClone(input.filters);
     return true;
+  }
+
+  async applyCheckpointOperation(input: MusicApplyCheckpointOperationInput): Promise<MusicMutationResult> {
+    this.order.push("commit:checkpoint");
+    this.checkpointOperationInputs.push(structuredClone(input));
+    const key = `${input.guildId}:${input.operationId}`;
+    const replayRevision = this.operations.get(key);
+    if (replayRevision !== undefined) return { revision: replayRevision, replayed: true };
+    if (input.expectedRevision !== this.snapshot.revision) {
+      throw new MusicRevisionConflictError(input.expectedRevision, this.snapshot.revision);
+    }
+
+    const checkpoint = input.checkpoint;
+    this.snapshot.currentEntryId = checkpoint.currentEntryId;
+    this.snapshot.checkpointPositionMs = checkpoint.positionMs;
+    this.snapshot.checkpointedAt = checkpoint.checkpointedAt ?? new Date();
+    if (checkpoint.volume !== undefined) this.snapshot.volume = checkpoint.volume;
+    if (checkpoint.repeatMode !== undefined) this.snapshot.repeatMode = checkpoint.repeatMode;
+    if (checkpoint.filters !== undefined) this.snapshot.filters = structuredClone(checkpoint.filters);
+    this.snapshot.revision += 1;
+    this.operations.set(key, this.snapshot.revision);
+    return { revision: this.snapshot.revision, replayed: false };
   }
 
   async recordNodeAssignment(input: MusicNodeAssignmentInput): Promise<void> {
@@ -171,6 +199,7 @@ class FakeAdapter extends EventEmitter {
   readonly destroyCalls: string[] = [];
   loadResults: Array<MusicResult<LavalinkLoadResult>> = [];
   updateResults: Array<MusicResult<LavalinkPlayerSnapshot>> = [];
+  destroyResults: Array<MusicResult<void>> = [];
   player: LavalinkPlayerSnapshot | null = null;
   materializePlayerOnFailure = false;
 
@@ -225,6 +254,8 @@ class FakeAdapter extends EventEmitter {
   async destroyPlayer(guildId: string): Promise<MusicResult<void>> {
     this.order.push("dispatch");
     this.destroyCalls.push(guildId);
+    const result = this.destroyResults.shift();
+    if (result) return result;
     this.player = null;
     return { ok: true, value: undefined };
   }
@@ -386,6 +417,195 @@ describe("LavalinkMusicService", () => {
     expect(adapter.playerUpdates).toHaveLength(2);
   });
 
+  it("resumes replayed clear destruction only while its durable revision is still current", async () => {
+    const durable = emptySnapshot(3);
+    durable.entries = [{
+      id: "track-1",
+      track: track(),
+      requesterId: "user-1",
+      position: 0,
+      status: "playing",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    }];
+    durable.currentEntryId = "track-1";
+    durable.assignedNodeId = "primary";
+    const { adapter, service } = setup(durable);
+    adapter.player = {
+      guildId: "guild-1",
+      nodeId: "primary",
+      positionMs: 30_000,
+      volume: 100,
+      paused: false,
+      filters: {},
+    };
+    adapter.destroyResults.push({
+      ok: false,
+      error: new MusicError("MUSIC_VOICE_FAILED", "Temporary destroy failure."),
+    });
+    const command: MusicCommand = {
+      type: "queue.clear",
+      guildId: "guild-1",
+      operationId: "clear-1",
+      expectedRevision: 3,
+    };
+
+    const failed = await service.execute(command);
+    const replay = await service.execute(command);
+
+    expect(failed).toMatchObject({ ok: false, error: { code: "MUSIC_VOICE_FAILED" } });
+    expect(replay).toMatchObject({ ok: true, value: { revision: 4, entries: [] } });
+    expect(adapter.destroyCalls).toEqual(["guild-1", "guild-1"]);
+    expect(adapter.player).toBeNull();
+  });
+
+  it("resumes replayed current-entry removal destruction after its first live dispatch fails", async () => {
+    const durable = emptySnapshot(3);
+    durable.entries = [{
+      id: "track-1",
+      track: track(),
+      requesterId: "user-1",
+      position: 0,
+      status: "playing",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    }];
+    durable.currentEntryId = "track-1";
+    durable.assignedNodeId = "primary";
+    const { adapter, service } = setup(durable);
+    adapter.player = {
+      guildId: "guild-1",
+      nodeId: "primary",
+      positionMs: 30_000,
+      volume: 100,
+      paused: false,
+      filters: {},
+    };
+    adapter.destroyResults.push({
+      ok: false,
+      error: new MusicError("MUSIC_VOICE_FAILED", "Temporary destroy failure."),
+    });
+    const command: MusicCommand = {
+      type: "queue.remove",
+      guildId: "guild-1",
+      operationId: "remove-current",
+      expectedRevision: 3,
+      entryId: "track-1",
+    };
+
+    const failed = await service.execute(command);
+    const replay = await service.execute(command);
+
+    expect(failed).toMatchObject({ ok: false, error: { code: "MUSIC_VOICE_FAILED" } });
+    expect(replay.ok).toBe(true);
+    expect(adapter.destroyCalls).toEqual(["guild-1", "guild-1"]);
+    expect(adapter.player).toBeNull();
+  });
+
+  it("resumes the persisted skip pending phase after the first next-track dispatch fails", async () => {
+    const durable = emptySnapshot(3);
+    durable.entries = ["track-1", "track-2"].map((id, position) => ({
+      id,
+      track: track(id),
+      requesterId: "user-1",
+      position,
+      status: position === 0 ? "playing" as const : "ready" as const,
+      matchSource: "youtube",
+      matchConfidence: 1,
+    }));
+    durable.currentEntryId = "track-1";
+    durable.assignedNodeId = "primary";
+    const { adapter, repository, service } = setup(durable);
+    adapter.player = {
+      guildId: "guild-1",
+      nodeId: "primary",
+      positionMs: 30_000,
+      volume: 100,
+      paused: false,
+      filters: {},
+    };
+    adapter.updateResults.push({
+      ok: false,
+      error: new MusicError("MUSIC_VOICE_FAILED", "Temporary next-track failure."),
+    });
+    const command: MusicCommand = {
+      type: "skip",
+      guildId: "guild-1",
+      operationId: "skip-1",
+      expectedRevision: 3,
+    };
+
+    const failed = await service.execute(command);
+    const replay = await service.execute(command);
+
+    expect(failed).toMatchObject({ ok: false, error: { code: "MUSIC_VOICE_FAILED" } });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: {
+        currentEntryId: "track-2",
+        entries: expect.arrayContaining([expect.objectContaining({ id: "track-2", status: "playing" })]),
+      },
+    });
+    expect(repository.snapshot.entries).toHaveLength(2);
+    expect(adapter.playerUpdates).toHaveLength(2);
+  });
+
+  it("replays enqueue-behind-active as ready without promoting it or checkpointing the old player", async () => {
+    const durable = emptySnapshot(3);
+    durable.entries = [{
+      id: "track-1",
+      track: track(),
+      requesterId: "user-1",
+      position: 0,
+      status: "playing",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    }];
+    durable.currentEntryId = "track-1";
+    durable.assignedNodeId = "primary";
+    const { adapter, eventBus, lease, nodeRegistry, repository, service } = setup(durable);
+    adapter.player = {
+      guildId: "guild-1",
+      nodeId: "primary",
+      positionMs: 30_000,
+      volume: 100,
+      paused: false,
+      filters: {},
+    };
+    repository.throwAfterCommittedOperationId = "enqueue-2";
+    const command = playCommand({
+      operationId: "enqueue-2",
+      expectedRevision: 3,
+      track: track("track-2"),
+    });
+
+    const crashed = await service.execute(command);
+    repository.throwAfterCommittedOperationId = null;
+    await service.shutdown();
+    const restarted = new LavalinkMusicService({
+      repository,
+      nodeRegistry,
+      lease,
+      adapter,
+      eventBus,
+      shardId: 2,
+      retryDelayMs: 0,
+    });
+    const checkpointsBeforeReplay = repository.checkpointInputs.length;
+    const replay = await restarted.execute(command);
+
+    expect(crashed.ok).toBe(false);
+    expect(replay).toMatchObject({
+      ok: true,
+      value: {
+        currentEntryId: "track-1",
+        entries: expect.arrayContaining([expect.objectContaining({ id: "track-2", status: "ready" })]),
+      },
+    });
+    expect(adapter.playerUpdates).toHaveLength(0);
+    expect(repository.checkpointInputs).toHaveLength(checkpointsBeforeReplay);
+  });
+
   it("retries only the same transient source resolution a bounded number of times", async () => {
     const { adapter, service } = setup();
     adapter.loadResults.push(
@@ -509,10 +729,88 @@ describe("LavalinkMusicService", () => {
     const result = await service.execute(command);
 
     expect(result.ok).toBe(true);
-    expect(repository.checkpointInputs.at(-1)).toMatchObject({ expectedRevision: 3, ...expectedCheckpoint });
+    expect(repository.checkpointOperationInputs.at(-1)).toMatchObject({
+      expectedRevision: 3,
+      checkpoint: expectedCheckpoint,
+    });
     expect(adapter.playerUpdates.at(-1)).toMatchObject(expectedUpdate);
-    expect(order.indexOf("checkpoint")).toBeLessThan(order.indexOf("assert"));
+    expect(order.indexOf("commit:checkpoint")).toBeLessThan(order.indexOf("assert"));
     expect(order[order.indexOf("dispatch") - 1]).toBe("assert");
+  });
+
+  it("treats a delayed checkpoint-command replay after restart as success without overwriting newer settings", async () => {
+    const currentTrack = track();
+    const durable = emptySnapshot(3);
+    durable.entries = [{
+      id: currentTrack.id,
+      track: currentTrack,
+      requesterId: "user-1",
+      position: 0,
+      status: "playing",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    }];
+    durable.currentEntryId = currentTrack.id;
+    durable.assignedNodeId = "primary";
+    const { adapter, eventBus, lease, nodeRegistry, repository, service } = setup(durable);
+    adapter.player = {
+      guildId: "guild-1",
+      nodeId: "primary",
+      positionMs: 25_000,
+      volume: 100,
+      paused: false,
+      filters: {},
+    };
+
+    const first = await service.execute({
+      type: "volume",
+      guildId: "guild-1",
+      operationId: "volume-64",
+      expectedRevision: 3,
+      volume: 64,
+    });
+    await service.shutdown();
+    const restarted = new LavalinkMusicService({
+      repository,
+      nodeRegistry,
+      lease,
+      adapter,
+      eventBus,
+      shardId: 2,
+      retryDelayMs: 0,
+    });
+    const newer = await restarted.execute({
+      type: "volume",
+      guildId: "guild-1",
+      operationId: "volume-80",
+      expectedRevision: 4,
+      volume: 80,
+    });
+    const dispatchesBeforeDelayedReplay = adapter.playerUpdates.length;
+    await restarted.shutdown();
+    const secondRestart = new LavalinkMusicService({
+      repository,
+      nodeRegistry,
+      lease,
+      adapter,
+      eventBus,
+      shardId: 2,
+      retryDelayMs: 0,
+    });
+
+    const delayedReplay = await secondRestart.execute({
+      type: "volume",
+      guildId: "guild-1",
+      operationId: "volume-64",
+      expectedRevision: 3,
+      volume: 64,
+    });
+
+    expect(first).toMatchObject({ ok: true, value: { revision: 4, volume: 64 } });
+    expect(newer).toMatchObject({ ok: true, value: { revision: 5, volume: 80 } });
+    expect(delayedReplay).toMatchObject({ ok: true, value: { revision: 5, volume: 80 } });
+    expect(repository.snapshot).toMatchObject({ revision: 5, volume: 80 });
+    expect(adapter.playerUpdates).toHaveLength(dispatchesBeforeDelayedReplay);
   });
 
   it("checkpoints track transitions and throttles player updates to the bounded playing interval", async () => {
@@ -588,5 +886,68 @@ describe("LavalinkMusicService", () => {
 
     expect(repository.checkpointInputs).toHaveLength(checkpointsBeforeLateEvent);
     expect(repository.snapshot.currentEntryId).toBe("track-1");
+  });
+
+  it("ignores a delayed same-node track end whose track identity is not current", async () => {
+    const { repository, service } = setup();
+    await service.execute(playCommand());
+    const checkpointsBeforeLateEvent = repository.checkpointInputs.length;
+
+    await service.handlePlaybackEvent({
+      type: "track.end",
+      guildId: "guild-1",
+      nodeId: "primary",
+      reason: "finished",
+      track: {
+        identifier: "old-video",
+        title: "Old Song",
+        artist: "Old Artist",
+        durationMs: 120_000,
+        sourceName: "youtube",
+      },
+    });
+
+    expect(repository.checkpointInputs).toHaveLength(checkpointsBeforeLateEvent);
+    expect(repository.snapshot.currentEntryId).toBe("track-1");
+  });
+
+  it("accepts the selected transport candidate identity when it differs from canonical metadata", async () => {
+    const { adapter, repository, service } = setup();
+    const requested = {
+      ...track(),
+      playbackSource: { name: "youtube", identifier: "canonical-video" },
+    };
+    adapter.loadResults.push({
+      ok: true,
+      value: {
+        kind: "track",
+        candidates: [{
+          track: {
+            ...requested,
+            playbackSource: { name: "youtube", identifier: "resolved-video" },
+          },
+          ephemeralEncodedTrack: "resolved-encoding",
+        }],
+      },
+    });
+    await service.execute(playCommand({ track: requested }));
+    const checkpointsBeforeEnd = repository.checkpointInputs.length;
+
+    await service.handlePlaybackEvent({
+      type: "track.end",
+      guildId: "guild-1",
+      nodeId: "primary",
+      reason: "finished",
+      track: {
+        identifier: "resolved-video",
+        title: "Durable Song",
+        artist: "MODUS",
+        durationMs: 180_000,
+        sourceName: "youtube",
+      },
+    });
+
+    expect(repository.checkpointInputs).toHaveLength(checkpointsBeforeEnd + 1);
+    expect(repository.snapshot.currentEntryId).toBeNull();
   });
 });
