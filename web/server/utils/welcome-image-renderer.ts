@@ -1,6 +1,7 @@
 import { createCanvas } from "@napi-rs/canvas";
 import {
   getWelcomeImageRenderCacheKey,
+  getWelcomeImageTintRasterSize,
   isTintableWelcomeSvgSource,
 } from "@modus/db/welcome-images";
 
@@ -8,6 +9,8 @@ interface WelcomeImageRenderElement {
   id: string;
   src: string;
   fill?: string;
+  width?: number;
+  height?: number;
 }
 
 interface WelcomeImageCacheEntry {
@@ -21,11 +24,17 @@ export function createTintedWelcomeImage(
   image: any,
   source: string,
   fill?: string,
+  renderedWidth?: number,
+  renderedHeight?: number,
 ): any {
   if (!fill || !isTintableWelcomeSvgSource(source)) return image;
 
-  const width = Math.max(1, Math.ceil(Number(image.width) || 1));
-  const height = Math.max(1, Math.ceil(Number(image.height) || 1));
+  const { width, height } = getWelcomeImageTintRasterSize(
+    Number(image.width) || 1,
+    Number(image.height) || 1,
+    Number(renderedWidth) || Number(image.width) || 1,
+    Number(renderedHeight) || Number(image.height) || 1,
+  );
   const canvas = createCanvas(width, height);
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0, width, height);
@@ -51,7 +60,13 @@ export async function getCachedWelcomeImage(
 
   const sourceImage = await loadImage(element.src);
   const image = sourceImage
-    ? createTintedWelcomeImage(sourceImage, element.src, element.fill)
+    ? createTintedWelcomeImage(
+        sourceImage,
+        element.src,
+        element.fill,
+        element.width,
+        element.height,
+      )
     : null;
   cache.set(element.id, { key, image });
   return image;

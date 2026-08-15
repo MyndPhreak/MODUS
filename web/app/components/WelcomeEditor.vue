@@ -1393,6 +1393,7 @@
 <script setup lang="ts">
 import {
   getWelcomeImageRenderCacheKey,
+  getWelcomeImageTintRasterSize,
   isTintableWelcomeSvgSource,
 } from "~/utils/welcome-images";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
@@ -1788,12 +1789,20 @@ function createTintedBrowserWelcomeImage(
   image: HTMLImageElement,
   source: string,
   fill?: string,
+  width?: number,
+  height?: number,
 ): BrowserWelcomeImage {
   if (!fill || !isTintableWelcomeSvgSource(source)) return image;
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, image.naturalWidth || image.width);
-  canvas.height = Math.max(1, image.naturalHeight || image.height);
+  const size = getWelcomeImageTintRasterSize(
+    image.naturalWidth || image.width,
+    image.naturalHeight || image.height,
+    width || image.width,
+    height || image.height,
+  );
+  canvas.width = size.width;
+  canvas.height = size.height;
   const context = canvas.getContext("2d");
   if (!context) return image;
 
@@ -1811,7 +1820,13 @@ function cacheElementImage(
   renderKey: string,
 ) {
   if (!el.src) return;
-  const rendered = createTintedBrowserWelcomeImage(original, el.src, el.fill);
+  const rendered = createTintedBrowserWelcomeImage(
+    original,
+    el.src,
+    el.fill,
+    el.width,
+    el.height,
+  );
   imageCache.set(el.id, {
     source: el.src,
     renderKey,

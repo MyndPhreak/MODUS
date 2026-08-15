@@ -545,7 +545,7 @@ async function renderWelcomeImage(
       case "image": {
         if (!el.src) break;
         const img = await getCachedWelcomeImage(
-          { id: el.id, src: el.src, fill: el.fill },
+          { id: el.id, src: el.src, fill: el.fill, width: el.width, height: el.height },
           imageRenderCache,
           loadWelcomeImageLayer,
         );
