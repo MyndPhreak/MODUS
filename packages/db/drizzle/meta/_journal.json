@@ -43,6 +43,13 @@
       "when": 1786408834161,
       "tag": "0005_icy_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786829734226,
+      "tag": "0006_music_playback_state",
+      "breakpoints": true
     }
   ]
 }

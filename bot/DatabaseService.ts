@@ -32,6 +32,7 @@ import {
   RemindersRepository,
   PollTemplateRepository,
   PollRepository,
+  MusicRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -68,6 +69,7 @@ export class DatabaseService {
   public readonly reminders: RemindersRepository;
   public readonly pollTemplates: PollTemplateRepository;
   public readonly polls: PollRepository;
+  public readonly music: MusicRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -123,6 +125,7 @@ export class DatabaseService {
     this.reminders = new RemindersRepository(db);
     this.pollTemplates = new PollTemplateRepository(db);
     this.polls = new PollRepository(db);
+    this.music = new MusicRepository(db);
 
     // Periodic log flush. unref() so a pending timer never holds the
     // process open during shutdown — gracefulShutdown calls flushLogs().
