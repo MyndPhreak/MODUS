@@ -1864,11 +1864,13 @@ function loadElementImage(el: TemplateElement) {
     if (
       currentElement?.type !== "image" ||
       !currentElement.src ||
-      getWelcomeImageRenderCacheKey(
-        currentElement.id,
-        currentElement.src,
-        currentElement.fill,
-      ) !== renderKey
+        getWelcomeImageRenderCacheKey(
+          currentElement.id,
+          currentElement.src,
+          currentElement.fill,
+          currentElement.width,
+          currentElement.height,
+        ) !== renderKey
     ) {
       return;
     }

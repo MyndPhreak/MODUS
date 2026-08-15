@@ -11,6 +11,10 @@
 import { randomBytes } from "crypto";
 import { getR2, putR2Object } from "../../utils/r2";
 import { requireAuthedUserId } from "../../utils/session";
+import {
+  parseMultipartFormData,
+  readBoundedRequestBody,
+} from "../../utils/bounded-request-body";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_MULTIPART_OVERHEAD = 64 * 1024;
@@ -48,8 +52,26 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const formData = await readMultipartFormData(event);
-  if (!formData || formData.length === 0) {
+  const multipartContentType = getHeader(event, "content-type") || "";
+  const boundary = multipartContentType.match(/boundary=([^;]*)(?:;|$)/i)?.[1];
+  if (!boundary) {
+    throw createError({ statusCode: 400, statusMessage: "Expected multipart form data." });
+  }
+
+  let formData;
+  try {
+    const body = await readBoundedRequestBody(event.node.req, MAX_REQUEST_SIZE);
+    formData = parseMultipartFormData(body, boundary);
+  } catch (error: any) {
+    if (error?.message === "Request body too large.") {
+      throw createError({
+        statusCode: 413,
+        statusMessage: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)} MB.`,
+      });
+    }
+    throw error;
+  }
+  if (formData.length === 0) {
     throw createError({ statusCode: 400, statusMessage: "No image uploaded." });
   }
 
