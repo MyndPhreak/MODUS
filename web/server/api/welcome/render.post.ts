@@ -23,6 +23,10 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { ensureTemplateFonts } from "../../utils/font-manager";
 import { getRepos } from "../../utils/db";
 import { getR2, getR2Object } from "../../utils/r2";
+import {
+  getCachedWelcomeImage,
+  type WelcomeImageRenderCache,
+} from "../../utils/welcome-image-renderer";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -256,6 +260,8 @@ async function renderWelcomeImage(
       console.warn("[Welcome Render] Failed to load avatar:", err);
     }
   }
+
+  const imageRenderCache: WelcomeImageRenderCache = new Map();
 
   // Render elements in order
   for (const el of template.elements) {
@@ -538,7 +544,11 @@ async function renderWelcomeImage(
 
       case "image": {
         if (!el.src) break;
-        const img = await loadWelcomeImageLayer(el.src);
+        const img = await getCachedWelcomeImage(
+          { id: el.id, src: el.src, fill: el.fill },
+          imageRenderCache,
+          loadWelcomeImageLayer,
+        );
         if (!img) {
           console.warn("[Welcome Render] Failed to load element image:", el.src);
           break;

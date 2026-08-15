@@ -618,7 +618,8 @@
                         : selectedElementIds.size > 1
                           ? true
                           : selectedElement?.type !== 'circle',
-                    shiftBehavior: 'default',
+                    shiftBehavior:
+                      selectedElement?.type === 'image' ? 'inverted' : 'default',
                     rotateEnabled: true,
                     rotationSnaps: isShiftHeld
                       ? [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345]
@@ -1027,7 +1028,8 @@
           <div
             v-if="
               selectedElement.type !== 'avatar' &&
-              selectedElement.type !== 'image' &&
+              (selectedElement.type !== 'image' ||
+                isTintableWelcomeSvgSource(selectedElement.src)) &&
               selectedElement.type !== 'line'
             "
             class="we-prop-section"
@@ -1042,7 +1044,10 @@
               <template #content>
                 <GradientPicker
                   :model-value="selectedElement.fill"
-                  :allow-gradient="selectedElement.type !== 'text'"
+                  :allow-gradient="
+                    selectedElement.type !== 'text' &&
+                    selectedElement.type !== 'image'
+                  "
                   @update:model-value="
                     (v: string) => {
                       if (selectedElement) selectedElement.fill = v;
@@ -1386,6 +1391,10 @@
 </template>
 
 <script setup lang="ts">
+import {
+  getWelcomeImageRenderCacheKey,
+  isTintableWelcomeSvgSource,
+} from "~/utils/welcome-images";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useGoogleFonts } from "~/composables/useGoogleFonts";
 
@@ -1627,7 +1636,15 @@ const MAX_IMAGE_LAYERS = 10;
 const imageUploadInput = ref<HTMLInputElement | null>(null);
 const replacingImageId = ref<string | null>(null);
 const imageUploading = ref(false);
-const imageObjects = ref<Record<string, HTMLImageElement>>({});
+type BrowserWelcomeImage = HTMLImageElement | HTMLCanvasElement;
+interface BrowserWelcomeImageCacheEntry {
+  source: string;
+  renderKey: string;
+  original: HTMLImageElement;
+  rendered: BrowserWelcomeImage;
+}
+const imageObjects = ref<Record<string, BrowserWelcomeImage>>({});
+const imageCache = new Map<string, BrowserWelcomeImageCacheEntry>();
 
 function imageLayerCount(elements: TemplateElement[]) {
   return elements.filter((el) => el.type === "image").length;
@@ -1767,11 +1784,55 @@ watch(bgImageFile, (file) => {
   if (file) uploadBgImage(file);
 });
 
+function createTintedBrowserWelcomeImage(
+  image: HTMLImageElement,
+  source: string,
+  fill?: string,
+): BrowserWelcomeImage {
+  if (!fill || !isTintableWelcomeSvgSource(source)) return image;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, image.naturalWidth || image.width);
+  canvas.height = Math.max(1, image.naturalHeight || image.height);
+  const context = canvas.getContext("2d");
+  if (!context) return image;
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.globalCompositeOperation = "source-in";
+  context.fillStyle = fill;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.globalCompositeOperation = "source-over";
+  return canvas;
+}
+
+function cacheElementImage(
+  el: TemplateElement,
+  original: HTMLImageElement,
+  renderKey: string,
+) {
+  if (!el.src) return;
+  const rendered = createTintedBrowserWelcomeImage(original, el.src, el.fill);
+  imageCache.set(el.id, {
+    source: el.src,
+    renderKey,
+    original,
+    rendered,
+  });
+  imageObjects.value = { ...imageObjects.value, [el.id]: rendered };
+  stageRef.value?.getNode()?.batchDraw();
+  void rebindTransformer();
+}
+
 function loadElementImage(el: TemplateElement) {
   if (el.type !== "image" || !el.src) return;
   const source = el.src;
-  const existingImage = imageObjects.value[el.id];
-  if (existingImage?.src.endsWith(source)) return;
+  const renderKey = getWelcomeImageRenderCacheKey(el.id, source, el.fill);
+  const cached = imageCache.get(el.id);
+  if (cached?.renderKey === renderKey) return;
+  if (cached?.source === source) {
+    cacheElementImage(el, cached.original, renderKey);
+    return;
+  }
 
   const image = new Image();
   image.crossOrigin = "anonymous";
@@ -1779,10 +1840,18 @@ function loadElementImage(el: TemplateElement) {
     const currentElement = template.value.elements.find(
       (current) => current.id === el.id,
     );
-    if (currentElement?.type !== "image" || currentElement.src !== source) return;
-    imageObjects.value = { ...imageObjects.value, [el.id]: image };
-    stageRef.value?.getNode()?.batchDraw();
-    void rebindTransformer();
+    if (
+      currentElement?.type !== "image" ||
+      !currentElement.src ||
+      getWelcomeImageRenderCacheKey(
+        currentElement.id,
+        currentElement.src,
+        currentElement.fill,
+      ) !== renderKey
+    ) {
+      return;
+    }
+    cacheElementImage(currentElement, image, renderKey);
   };
   image.onerror = () => {
     console.warn("[WelcomeEditor] Failed to load image layer", source);
@@ -1790,9 +1859,30 @@ function loadElementImage(el: TemplateElement) {
   image.src = source;
 }
 
+function syncElementImages(elements: TemplateElement[]) {
+  const liveImageIds = new Set(
+    elements.filter((el) => el.type === "image").map((el) => el.id),
+  );
+  const nextImageObjects = { ...imageObjects.value };
+  let objectsChanged = false;
+
+  for (const id of imageCache.keys()) {
+    if (!liveImageIds.has(id)) imageCache.delete(id);
+  }
+  for (const id of Object.keys(nextImageObjects)) {
+    if (!liveImageIds.has(id)) {
+      delete nextImageObjects[id];
+      objectsChanged = true;
+    }
+  }
+  if (objectsChanged) imageObjects.value = nextImageObjects;
+
+  elements.forEach(loadElementImage);
+}
+
 watch(
   () => template.value.elements,
-  (elements) => elements.forEach(loadElementImage),
+  syncElementImages,
   { deep: true, immediate: true },
 );
 
@@ -1888,6 +1978,7 @@ async function uploadImageLayer(file: File, replaceElement?: TemplateElement): P
       const nextImageObjects = { ...imageObjects.value };
       delete nextImageObjects[replaceElement.id];
       imageObjects.value = nextImageObjects;
+      imageCache.delete(replaceElement.id);
       loadElementImage(replaceElement);
       toast.add({
         title: "Image layer replaced",
@@ -2698,7 +2789,10 @@ function deleteSelectedElement() {
     (el) => !deletedIds.has(el.id),
   );
   const nextImageObjects = { ...imageObjects.value };
-  for (const id of deletedIds) delete nextImageObjects[id];
+  for (const id of deletedIds) {
+    delete nextImageObjects[id];
+    imageCache.delete(id);
+  }
   imageObjects.value = nextImageObjects;
   selectedElementIds.value = new Set();
 }

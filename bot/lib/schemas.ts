@@ -10,6 +10,12 @@
  */
 
 import * as z from "zod";
+import {
+  isWelcomeImageProxySource,
+  MAX_WELCOME_IMAGE_LAYERS,
+  WELCOME_IMAGE_COUNT_ERROR,
+  WELCOME_IMAGE_SOURCE_ERROR,
+} from "@modus/db/welcome-images";
 
 // ── Recording ──────────────────────────────────────────────────────
 
@@ -33,9 +39,6 @@ export const RecordingSettingsSchema = z.object({
 export type RecordingSettings = z.infer<typeof RecordingSettingsSchema>;
 
 // ── Welcome ────────────────────────────────────────────────────────
-
-const WELCOME_IMAGE_PROXY_PREFIX = "/api/welcome/bg/welcome/";
-const MAX_WELCOME_IMAGE_LAYERS = 10;
 
 const TemplateElementSchema = z
   .object({
@@ -97,12 +100,12 @@ const TemplateElementSchema = z
   .superRefine((element, ctx) => {
     if (
       element.type === "image" &&
-      (!element.src || !element.src.startsWith(WELCOME_IMAGE_PROXY_PREFIX))
+      !isWelcomeImageProxySource(element.src)
     ) {
       ctx.addIssue({
         code: "custom",
         path: ["src"],
-        message: "Image elements must use an uploaded welcome image.",
+        message: WELCOME_IMAGE_SOURCE_ERROR,
       });
     }
   });
@@ -119,7 +122,7 @@ export const WelcomeTemplateSchema = z.object({
       (elements) =>
         elements.filter((element) => element.type === "image").length <=
         MAX_WELCOME_IMAGE_LAYERS,
-      { message: "A welcome template can contain up to 10 images." },
+      { message: WELCOME_IMAGE_COUNT_ERROR },
     ),
   channelId: z.string().optional(),
 });

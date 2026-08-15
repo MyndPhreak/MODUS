@@ -32,6 +32,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const contentLength = Number(getHeader(event, "content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_FILE_SIZE) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)} MB.`,
+    });
+  }
+
   const formData = await readMultipartFormData(event);
   if (!formData || formData.length === 0) {
     throw createError({ statusCode: 400, statusMessage: "No image uploaded." });
@@ -68,7 +76,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const ext = (mimeType.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+  const ext =
+    mimeType === "image/svg+xml"
+      ? "svg"
+      : (mimeType.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
   const rand = randomBytes(8).toString("hex");
   const key = `welcome/${guildId}/layers/${rand}.${ext}`;
 

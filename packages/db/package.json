@@ -18,6 +18,10 @@
       "types": "./src/client.ts",
       "default": "./dist/client.js"
     },
+    "./welcome-images": {
+      "types": "./src/welcome-images.ts",
+      "default": "./dist/welcome-images.js"
+    },
     "./repositories/recordings": {
       "types": "./src/repositories/recordings.ts",
       "default": "./dist/repositories/recordings.js"

@@ -8,11 +8,10 @@
  *   - Either field is optional; omit what you don't want to change.
  *   - Unknown fields are ignored.
  */
+import { validateWelcomeImageElements } from "@modus/db/welcome-images";
 import { getRepos } from "../../../utils/db";
 import { requireGuildManager } from "../../../utils/session";
 import { deleteR2Object, extractWelcomeBgKey } from "../../../utils/r2";
-
-const MAX_WELCOME_IMAGE_LAYERS = 10;
 
 export default defineEventHandler(async (event) => {
   const guildId = getRouterParam(event, "guild_id");
@@ -42,25 +41,22 @@ export default defineEventHandler(async (event) => {
     settings?: Record<string, any>;
   }>(event);
 
+  const isWelcome = moduleName.toLowerCase() === "welcome";
+  if (isWelcome && body?.settings?.elements !== undefined) {
+    const validationError = validateWelcomeImageElements(
+      body.settings.elements,
+    );
+    if (validationError) {
+      throw createError({ statusCode: 400, statusMessage: validationError });
+    }
+  }
+
   const repos = getRepos();
   if (!repos) {
     throw createError({
       statusCode: 503,
       statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
     });
-  }
-
-  const isWelcome = moduleName.toLowerCase() === "welcome";
-  if (isWelcome && Array.isArray(body?.settings?.elements)) {
-    const imageLayerCount = body.settings.elements.filter(
-      (element) => element?.type === "image",
-    ).length;
-    if (imageLayerCount > MAX_WELCOME_IMAGE_LAYERS) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: "A welcome template can contain up to 10 images.",
-      });
-    }
   }
 
   let previousBackgroundImage: string | undefined;
