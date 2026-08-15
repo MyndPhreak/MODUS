@@ -1841,7 +1841,13 @@ function cacheElementImage(
 function loadElementImage(el: TemplateElement) {
   if (el.type !== "image" || !el.src) return;
   const source = el.src;
-  const renderKey = getWelcomeImageRenderCacheKey(el.id, source, el.fill);
+  const renderKey = getWelcomeImageRenderCacheKey(
+    el.id,
+    source,
+    el.fill,
+    el.width,
+    el.height,
+  );
   const cached = imageCache.get(el.id);
   if (cached?.renderKey === renderKey) return;
   if (cached?.source === source) {

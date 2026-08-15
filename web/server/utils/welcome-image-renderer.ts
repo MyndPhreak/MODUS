@@ -54,6 +54,8 @@ export async function getCachedWelcomeImage(
     element.id,
     element.src,
     element.fill,
+    element.width,
+    element.height,
   );
   const cached = cache.get(element.id);
   if (cached?.key === key) return cached.image;

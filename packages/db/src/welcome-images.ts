@@ -1,6 +1,9 @@
 export const WELCOME_IMAGE_PROXY_PREFIX = "/api/welcome/bg/welcome/";
 export const MAX_WELCOME_IMAGE_LAYERS = 10;
 export const MAX_WELCOME_IMAGE_TINT_PIXELS = 4_194_304;
+export const MAX_WELCOME_IMAGE_TINT_DIMENSION = Math.floor(
+  Math.sqrt(MAX_WELCOME_IMAGE_TINT_PIXELS),
+);
 
 export const WELCOME_IMAGE_SOURCE_ERROR =
   "Image elements must use an uploaded welcome image.";
@@ -31,18 +34,18 @@ export function getWelcomeImageTintRasterSize(
   renderedWidth: number,
   renderedHeight: number,
 ): { width: number; height: number } {
-  const width = Math.max(
+  const width = Math.min(MAX_WELCOME_IMAGE_TINT_DIMENSION, Math.max(
     1,
     Math.ceil(Number.isFinite(renderedWidth) && renderedWidth > 0
       ? renderedWidth
       : intrinsicWidth || 1),
-  );
-  const height = Math.max(
+  ));
+  const height = Math.min(MAX_WELCOME_IMAGE_TINT_DIMENSION, Math.max(
     1,
     Math.ceil(Number.isFinite(renderedHeight) && renderedHeight > 0
       ? renderedHeight
       : intrinsicHeight || 1),
-  );
+  ));
   const scale = Math.min(1, Math.sqrt(MAX_WELCOME_IMAGE_TINT_PIXELS / (width * height)));
 
   return {
@@ -72,6 +75,8 @@ export function getWelcomeImageRenderCacheKey(
   id: string,
   source: string,
   fill?: string,
+  width?: number,
+  height?: number,
 ): string {
-  return JSON.stringify([id, source, fill ?? ""]);
+  return JSON.stringify([id, source, fill ?? "", width ?? "", height ?? ""]);
 }

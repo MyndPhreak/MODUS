@@ -13,6 +13,8 @@ import { getR2, putR2Object } from "../../utils/r2";
 import { requireAuthedUserId } from "../../utils/session";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_MULTIPART_OVERHEAD = 64 * 1024;
+const MAX_REQUEST_SIZE = MAX_FILE_SIZE + MAX_MULTIPART_OVERHEAD;
 const ALLOWED_MIME_PREFIXES = ["image/"];
 
 function guildIdFromParts(parts: any[] | null): string | null {
@@ -33,7 +35,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const contentLength = Number(getHeader(event, "content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_FILE_SIZE) {
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    throw createError({
+      statusCode: 411,
+      statusMessage: "A valid Content-Length header is required for image uploads.",
+    });
+  }
+  if (contentLength > MAX_REQUEST_SIZE) {
     throw createError({
       statusCode: 413,
       statusMessage: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)} MB.`,

@@ -32,7 +32,16 @@ export default defineEventHandler(async (event) => {
     if (!object) {
       throw createError({ statusCode: 404, statusMessage: "Not Found" });
     }
-    setResponseHeader(event, "Content-Type", object.contentType);
+    const contentType = object.contentType || "application/octet-stream";
+    setResponseHeader(event, "Content-Type", contentType);
+    setResponseHeader(event, "X-Content-Type-Options", "nosniff");
+    if (contentType.toLowerCase().startsWith("image/svg+xml")) {
+      setResponseHeader(
+        event,
+        "Content-Security-Policy",
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+      );
+    }
     setResponseHeader(
       event,
       "Cache-Control",
