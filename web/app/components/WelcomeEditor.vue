@@ -155,9 +155,31 @@
       <div class="flex-1" />
 
       <div class="we-toolbar-group">
-        <UTooltip text="Reset">
+        <UTooltip text="Undo (Ctrl+Z)">
           <UButton
             icon="i-heroicons-arrow-uturn-left"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Undo"
+            :disabled="!canUndo"
+            @click="undo"
+          />
+        </UTooltip>
+        <UTooltip text="Redo (Ctrl+Shift+Z)">
+          <UButton
+            icon="i-heroicons-arrow-uturn-right"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Redo"
+            :disabled="!canRedo"
+            @click="redo"
+          />
+        </UTooltip>
+        <UTooltip text="Reset">
+          <UButton
+            icon="i-heroicons-arrow-path"
             color="neutral"
             variant="ghost"
             size="xs"
@@ -2471,6 +2493,14 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     isSpaceHeld.value = true;
     stageRef.value?.getNode()?.listening(false);
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    redo();
   }
 }
 
