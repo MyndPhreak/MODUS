@@ -237,12 +237,20 @@
               v-for="t in toolTypes"
               :key="t.type"
               class="we-tool-row"
-              @click="addElement(t.type)"
+              @click="t.type === 'image' ? imageUploadInput?.click() : addElement(t.type)"
             >
               <UIcon :name="t.icon" class="text-lg shrink-0" :class="t.color" />
               <span class="text-sm font-medium">{{ t.label }}</span>
             </button>
           </div>
+          <input
+            ref="imageUploadInput"
+            type="file"
+            accept="image/*"
+            class="sr-only"
+            @change="handleImageFileSelection"
+            @cancel="replacingImageId = null"
+          />
         </div>
 
         <!-- Layers -->
@@ -492,6 +500,15 @@
                       />
                     </template>
                   </template>
+                  <v-image
+                    v-if="el.type === 'image' && imageObjects[el.id]"
+                    :config="imageConfig(el)"
+                    @dragstart="(e: any) => handleDragStart(e, el)"
+                    @dragend="(e: any) => handleDragEnd(e, el)"
+                    @click="(e: any) => selectElement(el.id, e.evt)"
+                    @tap="(e: any) => selectElement(el.id, e.evt)"
+                    @transformend="(e: any) => handleTransformEnd(e, el)"
+                  />
                   <v-text
                     v-if="el.type === 'text'"
                     :config="textConfig(el)"
@@ -596,7 +613,7 @@
                               'bottom-center',
                             ],
                     keepRatio:
-                      selectedElement?.type === 'avatar'
+                      selectedElement?.type === 'avatar' || selectedElement?.type === 'image'
                         ? true
                         : selectedElementIds.size > 1
                           ? true
@@ -950,6 +967,59 @@
                   "
                 />
               </button>
+            </div>
+          </div>
+
+          <!-- Image -->
+          <div v-if="selectedElement.type === 'image'" class="we-prop-section">
+            <p class="we-prop-title">Image</p>
+            <UButton
+              label="Replace image"
+              color="neutral"
+              variant="outline"
+              block
+              @click="replacingImageId = selectedElement!.id; imageUploadInput?.click()"
+            />
+          </div>
+
+          <!-- Image Shadow -->
+          <div v-if="selectedElement.type === 'image'" class="we-prop-section">
+            <p class="we-prop-title">Shadow</p>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div class="we-prop-row">
+                <span class="we-prop-label">Color</span>
+                <input
+                  :value="selectedElement.shadowColor || '#000000'"
+                  type="color"
+                  class="we-color-chip-lg cursor-pointer"
+                  @input="selectedElement.shadowColor = ($event.target as HTMLInputElement).value"
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">Blur</span>
+                <input
+                  v-model.number="selectedElement.shadowBlur"
+                  type="number"
+                  class="we-num-input w-full"
+                  min="0"
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">X offset</span>
+                <input
+                  v-model.number="selectedElement.shadowOffsetX"
+                  type="number"
+                  class="we-num-input w-full"
+                />
+              </div>
+              <div class="we-prop-row">
+                <span class="we-prop-label">Y offset</span>
+                <input
+                  v-model.number="selectedElement.shadowOffsetY"
+                  type="number"
+                  class="we-num-input w-full"
+                />
+              </div>
             </div>
           </div>
 
@@ -1551,6 +1621,12 @@ const isPanning = ref(false);
 const bgUploading = ref(false);
 const bgImageObj = ref<HTMLImageElement | null>(null);
 const bgImageFile = ref<File | null>(null);
+const MAX_IMAGE_LAYER_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_LAYERS = 10;
+const imageUploadInput = ref<HTMLInputElement | null>(null);
+const replacingImageId = ref<string | null>(null);
+const imageUploading = ref(false);
+const imageObjects = ref<Record<string, HTMLImageElement>>({});
 
 // ── Undo/Redo History ──
 
@@ -1686,6 +1762,167 @@ watch(bgImageFile, (file) => {
   if (file) uploadBgImage(file);
 });
 
+function loadElementImage(el: TemplateElement) {
+  if (el.type !== "image" || !el.src) return;
+  const source = el.src;
+  const existingImage = imageObjects.value[el.id];
+  if (existingImage?.src.endsWith(source)) return;
+
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.onload = () => {
+    const currentElement = template.value.elements.find(
+      (current) => current.id === el.id,
+    );
+    if (currentElement?.type !== "image" || currentElement.src !== source) return;
+    imageObjects.value = { ...imageObjects.value, [el.id]: image };
+    stageRef.value?.getNode()?.batchDraw();
+  };
+  image.onerror = () => {
+    console.warn("[WelcomeEditor] Failed to load image layer", source);
+  };
+  image.src = source;
+}
+
+watch(
+  () => template.value.elements,
+  (elements) => elements.forEach(loadElementImage),
+  { deep: true, immediate: true },
+);
+
+function loadLocalImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not read image."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function handleImageFileSelection(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+
+  const replaceId = replacingImageId.value;
+  replacingImageId.value = null;
+  const replaceElement = replaceId
+    ? template.value.elements.find((el) => el.id === replaceId)
+    : undefined;
+
+  if (replaceElement?.type === "image") {
+    void uploadImageLayer(file, replaceElement);
+  } else {
+    void uploadImageLayer(file);
+  }
+}
+
+async function uploadImageLayer(file: File, replaceElement?: TemplateElement): Promise<void> {
+  if (file.size > MAX_IMAGE_LAYER_SIZE) {
+    toast.add({
+      title: "Image too large",
+      description: "Choose an image no larger than 5 MB.",
+      color: "error",
+    });
+    return;
+  }
+  if (
+    !replaceElement &&
+    template.value.elements.filter((el) => el.type === "image").length >= MAX_IMAGE_LAYERS
+  ) {
+    toast.add({
+      title: "Image layer limit reached",
+      description: "A welcome template can contain up to 10 images.",
+      color: "error",
+    });
+    return;
+  }
+  if (imageUploading.value) return;
+
+  imageUploading.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("guild_id", props.guildId);
+    const uploadPromise = fetch("/api/welcome/upload-image", {
+      method: "POST",
+      body: formData,
+    });
+    const localImagePromise = loadLocalImage(file);
+    const response = await uploadPromise;
+    if (!response.ok) {
+      void localImagePromise.catch(() => undefined);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.statusMessage || "Could not upload image layer.");
+    }
+
+    const { url } = (await response.json()) as { url: string };
+    const localImage = await localImagePromise;
+    const naturalWidth = localImage.naturalWidth;
+    const naturalHeight = localImage.naturalHeight;
+    if (!naturalWidth || !naturalHeight) {
+      throw new Error("Could not read image.");
+    }
+    const scale = Math.min(1, 200 / naturalWidth, 200 / naturalHeight);
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+
+    if (replaceElement) {
+      replaceElement.src = url;
+      replaceElement.width = width;
+      replaceElement.height = height;
+      const nextImageObjects = { ...imageObjects.value };
+      delete nextImageObjects[replaceElement.id];
+      imageObjects.value = nextImageObjects;
+      loadElementImage(replaceElement);
+      toast.add({
+        title: "Image layer replaced",
+        description: "Remember to save your changes.",
+        color: "success",
+      });
+      return;
+    }
+
+    const element: TemplateElement = {
+      id: `image-${Date.now()}-${++elementCounter}`,
+      type: "image",
+      x: Math.round((template.value.canvasWidth - width) / 2),
+      y: Math.round((template.value.canvasHeight - height) / 2),
+      width,
+      height,
+      src: url,
+      opacity: 1,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+    };
+    template.value.elements.push(element);
+    selectedElementIds.value = new Set([element.id]);
+    loadElementImage(element);
+    toast.add({
+      title: "Image layer added",
+      description: "Remember to save your changes.",
+      color: "success",
+    });
+  } catch (err: any) {
+    toast.add({
+      title: "Upload failed",
+      description: err?.message || "Could not upload image layer.",
+      color: "error",
+    });
+  } finally {
+    imageUploading.value = false;
+  }
+}
+
 function removeBgImage() {
   template.value.backgroundImage = undefined;
   bgImageObj.value = null;
@@ -1745,6 +1982,12 @@ const toolTypes = [
     icon: "i-heroicons-minus",
     label: "Line / Arrow",
     color: "text-lime-400",
+  },
+  {
+    type: "image" as const,
+    icon: "i-heroicons-photo",
+    label: "Image",
+    color: "text-sky-400",
   },
   {
     type: "avatar" as const,
@@ -2092,6 +2335,26 @@ function rectConfig(el: TemplateElement) {
     ...gradientStrokeProps(el.stroke, 0, 0, w, h),
     strokeWidth: el.strokeWidth || 0,
     rotation: el.rotation || 0,
+    draggable: true,
+    name: el.id,
+  };
+}
+
+function imageConfig(el: TemplateElement) {
+  return {
+    x: el.x,
+    y: el.y,
+    width: el.width || 100,
+    height: el.height || 100,
+    image: imageObjects.value[el.id],
+    opacity: el.opacity ?? 1,
+    rotation: el.rotation ?? 0,
+    scaleX: el.scaleX ?? 1,
+    scaleY: el.scaleY ?? 1,
+    shadowColor: el.shadowColor,
+    shadowBlur: el.shadowBlur,
+    shadowOffsetX: el.shadowOffsetX,
+    shadowOffsetY: el.shadowOffsetY,
     draggable: true,
     name: el.id,
   };
