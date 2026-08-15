@@ -35,6 +35,7 @@ export type RecordingSettings = z.infer<typeof RecordingSettingsSchema>;
 // ── Welcome ────────────────────────────────────────────────────────
 
 const WELCOME_IMAGE_PROXY_PREFIX = "/api/welcome/bg/welcome/";
+const MAX_WELCOME_IMAGE_LAYERS = 10;
 
 const TemplateElementSchema = z
   .object({
@@ -111,7 +112,15 @@ export const WelcomeTemplateSchema = z.object({
   canvasHeight: z.number().default(500),
   backgroundColor: z.string().default("#1a1a2e"),
   backgroundImage: z.string().optional(),
-  elements: z.array(TemplateElementSchema).default([]),
+  elements: z
+    .array(TemplateElementSchema)
+    .default([])
+    .refine(
+      (elements) =>
+        elements.filter((element) => element.type === "image").length <=
+        MAX_WELCOME_IMAGE_LAYERS,
+      { message: "A welcome template can contain up to 10 images." },
+    ),
   channelId: z.string().optional(),
 });
 

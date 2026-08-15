@@ -12,6 +12,8 @@ import { getRepos } from "../../../utils/db";
 import { requireGuildManager } from "../../../utils/session";
 import { deleteR2Object, extractWelcomeBgKey } from "../../../utils/r2";
 
+const MAX_WELCOME_IMAGE_LAYERS = 10;
+
 export default defineEventHandler(async (event) => {
   const guildId = getRouterParam(event, "guild_id");
   const moduleName = getRouterParam(event, "module");
@@ -49,6 +51,18 @@ export default defineEventHandler(async (event) => {
   }
 
   const isWelcome = moduleName.toLowerCase() === "welcome";
+  if (isWelcome && Array.isArray(body?.settings?.elements)) {
+    const imageLayerCount = body.settings.elements.filter(
+      (element) => element?.type === "image",
+    ).length;
+    if (imageLayerCount > MAX_WELCOME_IMAGE_LAYERS) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "A welcome template can contain up to 10 images.",
+      });
+    }
+  }
+
   let previousBackgroundImage: string | undefined;
   if (isWelcome && body?.settings !== undefined) {
     const current = await repos.guildConfigs.getModuleSettings(guildId, "welcome");

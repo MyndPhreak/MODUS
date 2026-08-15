@@ -1613,6 +1613,7 @@ const saving = ref(false);
 const stageRef = ref<any>(null);
 const textFieldRef = ref<HTMLTextAreaElement | null>(null);
 const transformerRef = ref<any>(null);
+const transformerRevision = ref(0);
 const canvasWrap = ref<HTMLElement | null>(null);
 const zoomMultiplier = ref(1);
 const isSpaceHeld = ref(false);
@@ -1627,6 +1628,10 @@ const imageUploadInput = ref<HTMLInputElement | null>(null);
 const replacingImageId = ref<string | null>(null);
 const imageUploading = ref(false);
 const imageObjects = ref<Record<string, HTMLImageElement>>({});
+
+function imageLayerCount(elements: TemplateElement[]) {
+  return elements.filter((el) => el.type === "image").length;
+}
 
 // ── Undo/Redo History ──
 
@@ -1777,6 +1782,7 @@ function loadElementImage(el: TemplateElement) {
     if (currentElement?.type !== "image" || currentElement.src !== source) return;
     imageObjects.value = { ...imageObjects.value, [el.id]: image };
     stageRef.value?.getNode()?.batchDraw();
+    void rebindTransformer();
   };
   image.onerror = () => {
     console.warn("[WelcomeEditor] Failed to load image layer", source);
@@ -1807,13 +1813,13 @@ function loadLocalImage(file: File): Promise<HTMLImageElement> {
 }
 
 function handleImageFileSelection(event: Event) {
+  const replaceId = replacingImageId.value;
+  replacingImageId.value = null;
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = "";
   if (!file) return;
 
-  const replaceId = replacingImageId.value;
-  replacingImageId.value = null;
   const replaceElement = replaceId
     ? template.value.elements.find((el) => el.id === replaceId)
     : undefined;
@@ -1836,7 +1842,7 @@ async function uploadImageLayer(file: File, replaceElement?: TemplateElement): P
   }
   if (
     !replaceElement &&
-    template.value.elements.filter((el) => el.type === "image").length >= MAX_IMAGE_LAYERS
+    imageLayerCount(template.value.elements) >= MAX_IMAGE_LAYERS
   ) {
     toast.add({
       title: "Image layer limit reached",
@@ -2036,6 +2042,7 @@ const selectedElementOpacityPct = computed({
 // ── Transformer ──
 
 const transformerNodes = computed(() => {
+  transformerRevision.value;
   if (!stageRef.value || selectedElementIds.value.size === 0) return [];
   try {
     const stage = stageRef.value.getNode();
@@ -2304,7 +2311,9 @@ function applyGroupScale(newWidth: number, newHeight: number) {
   }
 }
 
-watch(selectedElementIds, async () => {
+async function rebindTransformer() {
+  await nextTick();
+  transformerRevision.value++;
   await nextTick();
   if (transformerRef.value) {
     try {
@@ -2317,6 +2326,10 @@ watch(selectedElementIds, async () => {
       /* ignore */
     }
   }
+}
+
+watch(selectedElementIds, () => {
+  void rebindTransformer();
 });
 
 // ── Config builders ──
@@ -2680,14 +2693,29 @@ function insertPlaceholder(ph: string) {
 
 function deleteSelectedElement() {
   if (selectedElementIds.value.size === 0) return;
+  const deletedIds = new Set(selectedElementIds.value);
   template.value.elements = template.value.elements.filter(
-    (el) => !selectedElementIds.value.has(el.id),
+    (el) => !deletedIds.has(el.id),
   );
+  const nextImageObjects = { ...imageObjects.value };
+  for (const id of deletedIds) delete nextImageObjects[id];
+  imageObjects.value = nextImageObjects;
   selectedElementIds.value = new Set();
 }
 
 function duplicateSelectedElement() {
   if (selectedElementIds.value.size === 0) return;
+  const imageDuplicates = [...selectedElementIds.value].filter(
+    (id) => template.value.elements.find((el) => el.id === id)?.type === "image",
+  ).length;
+  if (imageLayerCount(template.value.elements) + imageDuplicates > MAX_IMAGE_LAYERS) {
+    toast.add({
+      title: "Image layer limit reached",
+      description: "A welcome template can contain up to 10 images.",
+      color: "error",
+    });
+    return;
+  }
   const newIds = new Set<string>();
   for (const id of selectedElementIds.value) {
     const src = template.value.elements.find((el) => el.id === id);
@@ -2969,6 +2997,14 @@ async function loadTemplate() {
 }
 
 async function saveTemplate() {
+  if (imageLayerCount(template.value.elements) > MAX_IMAGE_LAYERS) {
+    toast.add({
+      title: "Image layer limit reached",
+      description: "A welcome template can contain up to 10 images.",
+      color: "error",
+    });
+    return;
+  }
   saving.value = true;
   try {
     await $fetch(
