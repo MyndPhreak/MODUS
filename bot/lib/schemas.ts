@@ -34,6 +34,8 @@ export type RecordingSettings = z.infer<typeof RecordingSettingsSchema>;
 
 // ── Welcome ────────────────────────────────────────────────────────
 
+const WELCOME_IMAGE_PROXY_PREFIX = "/api/welcome/bg/welcome/";
+
 const TemplateElementSchema = z
   .object({
     id: z.string(),
@@ -90,7 +92,19 @@ const TemplateElementSchema = z
     avatarShape: z.enum(["circle", "square"]).optional(),
     avatarCornerRadius: z.number().optional(),
   })
-  .loose();
+  .loose()
+  .superRefine((element, ctx) => {
+    if (
+      element.type === "image" &&
+      (!element.src || !element.src.startsWith(WELCOME_IMAGE_PROXY_PREFIX))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["src"],
+        message: "Image elements must use an uploaded welcome image.",
+      });
+    }
+  });
 
 export const WelcomeTemplateSchema = z.object({
   canvasWidth: z.number().default(1024),
