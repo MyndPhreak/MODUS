@@ -1576,6 +1576,16 @@ watch(
   { deep: true },
 );
 
+// Forces any not-yet-captured edit onto undoStack before undo/redo reads it.
+// Reuses captureSnapshot's own dedup guard rather than a restoration flag.
+function flushPendingSnapshot() {
+  if (historyTimer) {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    captureSnapshot();
+  }
+}
+
 function pruneSelectionToExisting() {
   selectedElementIds.value = new Set(
     [...selectedElementIds.value].filter((id) =>
@@ -1585,6 +1595,7 @@ function pruneSelectionToExisting() {
 }
 
 function undo() {
+  flushPendingSnapshot();
   if (undoStack.value.length <= 1) return;
   const current = undoStack.value.pop()!;
   redoStack.value.push(current);
@@ -1594,6 +1605,7 @@ function undo() {
 }
 
 function redo() {
+  flushPendingSnapshot();
   if (redoStack.value.length === 0) return;
   const next = redoStack.value.pop()!;
   undoStack.value.push(next);
@@ -2472,16 +2484,34 @@ function handleKeyDown(e: KeyboardEvent) {
     isShiftHeld.value = true;
   }
 
-  // Don't intercept when typing in an input, or when a focused control
-  // needs Space for its own native activation (buttons, contenteditable)
+  // Don't intercept native text-editing (including the browser's own
+  // undo/redo) while the user is typing in a field.
   const target = e.target as HTMLElement;
-  if (
+  const isTextEntry =
     target.tagName === 'INPUT' ||
     target.tagName === 'TEXTAREA' ||
     target.tagName === 'SELECT' ||
-    target.isContentEditable ||
-    target.closest('button, [role="button"]')
-  ) {
+    target.isContentEditable;
+  if (isTextEntry) {
+    return;
+  }
+
+  // Undo/redo should fire even when a toolbar button (e.g. the Undo/Redo
+  // buttons themselves) holds focus, so check it before the button-focus
+  // guard below — only text entry should suppress it.
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+    return;
+  }
+
+  // Don't intercept when a focused control needs Space for its own native
+  // activation (buttons, [role="button"])
+  if (target.closest('button, [role="button"]')) {
     return;
   }
 
@@ -2493,14 +2523,6 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     isSpaceHeld.value = true;
     stageRef.value?.getNode()?.listening(false);
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-    e.preventDefault();
-    undo();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
-    e.preventDefault();
-    redo();
   }
 }
 
