@@ -17,6 +17,11 @@ export async function readBoundedRequestBody(
   return Buffer.concat(chunks, totalBytes);
 }
 
+export function getMultipartBoundary(contentType: string): string | null {
+  const boundary = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
+  return boundary?.[1] || boundary?.[2] || null;
+}
+
 export interface MultipartPart {
   name?: string;
   filename?: string;

@@ -12,6 +12,7 @@ import { randomBytes } from "crypto";
 import { getR2, putR2Object } from "../../utils/r2";
 import { requireAuthedUserId } from "../../utils/session";
 import {
+  getMultipartBoundary,
   parseMultipartFormData,
   readBoundedRequestBody,
 } from "../../utils/bounded-request-body";
@@ -53,7 +54,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const multipartContentType = getHeader(event, "content-type") || "";
-  const boundary = multipartContentType.match(/boundary=([^;]*)(?:;|$)/i)?.[1];
+  const boundary = getMultipartBoundary(multipartContentType);
   if (!boundary) {
     throw createError({ statusCode: 400, statusMessage: "Expected multipart form data." });
   }
