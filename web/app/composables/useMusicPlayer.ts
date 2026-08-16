@@ -469,7 +469,6 @@ export function useMusicPlayer(guildId: string) {
     stop,
     shuffle,
     setAutoplay,
-    toggleAutoplay,
     setVolume,
     removeTrack,
     reorderTrack,

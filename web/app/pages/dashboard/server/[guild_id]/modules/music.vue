@@ -940,7 +940,7 @@ const onVolumeChange = (val: number | undefined) => {
   volumeLocal.value = val;
   if (volumeDebounce) clearTimeout(volumeDebounce);
   volumeDebounce = setTimeout(() => {
-    setVolume(val);
+    setVolumeFn(val);
     volumeDebounce = null;
   }, 300);
 };
