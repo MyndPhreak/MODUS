@@ -19,17 +19,24 @@ const { data, error } = await useFetch(
   { server: true },
 );
 
-const unavailable = computed(
-  () => !!error.value || !data.value?.transcript,
+// The URL is a function, so its type is `/api/tickets/transcripts/${string}`,
+// which matches this route AND the sibling `list` route. Nuxt unions the return
+// types of every match, and the `list` shape has no `transcript`, so `data` has
+// to be narrowed before any field is read. Nitro only ever dispatches a real
+// request to one handler; the ambiguity is purely in the types.
+const payload = computed(() =>
+  data.value && "transcript" in data.value ? data.value : null,
 );
+
+const unavailable = computed(() => !!error.value || !payload.value);
 
 // Group consecutive same-author messages (≤ 5 min apart).
 const groups = computed(() => {
-  if (!data.value?.messages) return [];
+  if (!payload.value) return [];
   const out: any[][] = [];
   let current: any[] = [];
   const FIVE_MIN = 5 * 60 * 1000;
-  for (const m of data.value.messages) {
+  for (const m of payload.value.messages) {
     const last = current[current.length - 1];
     if (
       !last ||
@@ -49,14 +56,14 @@ const groups = computed(() => {
 });
 
 useHead(() => ({
-  title: data.value?.transcript
-    ? `Ticket #${String(data.value.transcript.ticket_id).padStart(4, "0")}`
+  title: payload.value
+    ? `Ticket #${String(payload.value.transcript.ticket_id).padStart(4, "0")}`
     : "Transcript",
   meta: [
     {
       property: "og:title",
-      content: data.value?.transcript
-        ? `Ticket #${String(data.value.transcript.ticket_id).padStart(4, "0")} — MODUS`
+      content: payload.value
+        ? `Ticket #${String(payload.value.transcript.ticket_id).padStart(4, "0")} — MODUS`
         : "MODUS Transcript",
     },
   ],
@@ -66,23 +73,23 @@ useHead(() => ({
 <template>
   <div class="min-h-screen bg-gray-950 text-gray-100">
     <TranscriptUnavailable v-if="unavailable" />
-    <template v-else-if="data">
+    <template v-else-if="payload">
       <TranscriptHeader
-        :transcript="data.transcript"
-        :mentions="data.transcript.mentions"
+        :transcript="payload.transcript"
+        :mentions="payload.transcript.mentions"
       />
       <div class="divide-y divide-white/5">
         <TranscriptMessageGroup
           v-for="(group, i) in groups"
           :key="i"
           :messages="group"
-          :signed-urls="data.signed_urls"
-          :mentions="data.transcript.mentions"
+          :signed-urls="payload.signed_urls"
+          :mentions="payload.transcript.mentions"
         />
       </div>
       <div class="p-6 text-center text-xs text-gray-500">
-        {{ data.transcript.message_count }} messages
-        <template v-if="data.transcript.has_skipped_attachments">
+        {{ payload.transcript.message_count }} messages
+        <template v-if="payload.transcript.has_skipped_attachments">
           · some attachments were skipped at close time
         </template>
       </div>
