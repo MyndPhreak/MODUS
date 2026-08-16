@@ -273,7 +273,7 @@ export class LavalinkAdapter extends EventEmitter {
         this.#heartbeatTimer = setInterval(async () => {
           if (!this.#manager || !this.#client.isReady()) return;
           for (const node of this.#manager.nodes.values()) {
-            if (node.state !== 1 /* CONNECTED */) {
+            if (node.state === 3 /* DISCONNECTED */) {
               const config = this.#registry.snapshots().find((s) => s.id === node.name);
               const nodeConfig = config ? this.#registry.getConfig(config.id) : undefined;
               if (nodeConfig) {
@@ -283,7 +283,7 @@ export class LavalinkAdapter extends EventEmitter {
                     headers: { Authorization: nodeConfig.password },
                     signal: AbortSignal.timeout(2000),
                   });
-                  if (res.ok) {
+                  if (res.ok && node.state === 3) {
                     console.log(`[Music] Lavalink node "${node.name}" REST endpoint is reachable, initiating WebSocket connect...`);
                     node.connect().catch(() => {});
                   }
