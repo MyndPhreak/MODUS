@@ -217,8 +217,12 @@ describe("LavalinkAdapter", () => {
       addNode("primary");
       expect(manager().nodes.has("primary")).toBe(true);
 
-      manager().emit("disconnect", "primary", 0);
-      manager().nodes.delete("primary"); // what Shoukaku's own once() listener does
+      // The real sequence: Node.connect() emits a disconnect that Shoukaku
+      // never re-emits at the manager level, its once() listener deletes the
+      // node, then connect() rethrows into addNode's .catch, which DOES
+      // re-emit as "error". So the eviction is only observable via "error".
+      manager().nodes.delete("primary");
+      manager().emit("error", "primary", new Error("Websocket closed before a connection was established"));
       expect(registry.snapshot("primary").available).toBe(false);
 
       await vi.advanceTimersByTimeAsync(5_000);
@@ -249,8 +253,8 @@ describe("LavalinkAdapter", () => {
       const player = new FakePlayer("guild-1", evicted as unknown as { name: string });
       manager().players.set("guild-1", player);
 
-      manager().emit("disconnect", "primary", 0);
       manager().nodes.delete("primary");
+      manager().emit("error", "primary", new Error("Websocket closed before a connection was established"));
       await vi.advanceTimersByTimeAsync(5_000);
 
       const readded = manager().nodes.get("primary");
@@ -269,8 +273,10 @@ describe("LavalinkAdapter", () => {
       await adapter.connect();
       addNode("primary");
 
-      manager().emit("disconnect", "primary", 0);
-      // Node never left the pool (or Shoukaku restored it first).
+      // A node that is merely reconnecting emits close/error while staying in
+      // the pool; those must not spawn duplicate nodes.
+      manager().emit("close", "primary", 1006, "socket hang up");
+      manager().emit("error", "primary", new Error("ECONNREFUSED"));
       await vi.advanceTimersByTimeAsync(5_000);
 
       expect(manager().addNode).not.toHaveBeenCalled();

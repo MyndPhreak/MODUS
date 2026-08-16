@@ -229,6 +229,7 @@ export class LavalinkAdapter extends EventEmitter {
   #manager: Shoukaku | null = null;
   readonly #requestedNodes = new Map<string, string>();
   readonly #boundPlayers = new WeakSet<object>();
+  readonly #pendingRechecks = new Map<string, NodeJS.Timeout>();
   #destroyed = false;
 
   constructor(client: Client, registry: NodeRegistry) {
@@ -305,6 +306,8 @@ export class LavalinkAdapter extends EventEmitter {
    */
   destroy(): void {
     this.#destroyed = true;
+    for (const timer of this.#pendingRechecks.values()) clearTimeout(timer);
+    this.#pendingRechecks.clear();
   }
 
   async loadTracks(request: LavalinkLoadRequest): Promise<MusicResult<LavalinkLoadResult>> {
@@ -589,22 +592,16 @@ export class LavalinkAdapter extends EventEmitter {
     manager.on("close", (name, code, reason) => {
       console.warn(`[Music] Lavalink node "${name}" connection closed (code: ${code}, reason: ${reason})`);
       this.#safeRegistryUnavailable(name);
+      this.#scheduleNodeRecheck(name);
     });
+    // Never fires: Shoukaku declares this event but addNode() only registers
+    // `node.once("disconnect", () => this.nodes.delete(node.name))` — it wires
+    // a manager re-emit for debug/reconnecting/error/close/ready/raw and omits
+    // disconnect. Kept so the eviction is still reported if upstream wires it.
     manager.on("disconnect", (name, count) => {
       console.warn(`[Music] Lavalink node "${name}" disconnected (moved players: ${count})`);
       this.#safeRegistryUnavailable(name);
-      // Shoukaku evicts the node from its pool here — addNode() registers
-      // `node.once("disconnect", () => this.nodes.delete(node.name))`. Worse,
-      // Node.connect() reaches this path even on a SUCCESSFUL reconnect: its
-      // retry loop never clears `connectError`, so a socket that comes back
-      // after a single failed attempt is torn down and evicted anyway. That is
-      // the normal case whenever the node restarts.
-      //
-      // Re-adding is the only way back: reconnecting the orphaned Node object
-      // does not restore it to manager.nodes, so placement would never see the
-      // node again for the life of the process. Deferred because Shoukaku's own
-      // delete listener runs immediately after this one.
-      setTimeout(() => this.#readdNode(name), NODE_READD_DELAY_MS).unref();
+      this.#scheduleNodeRecheck(name);
     });
     manager.on("error", (name, error: any) => {
       const msg = error?.message || String(error);
@@ -615,6 +612,12 @@ export class LavalinkAdapter extends EventEmitter {
         console.error(`[Music] Lavalink node "${name}" error:`, error);
       }
       this.#safeRegistryUnavailable(name);
+      // The eviction surfaces here, not on "disconnect": Node.connect() emits
+      // the (un-re-emitted) disconnect, Shoukaku's once() listener deletes the
+      // node, and then connect() rethrows into addNode's
+      // `.catch(error => this.emit("error", ...))`. By the time this runs the
+      // node is already gone from the pool.
+      this.#scheduleNodeRecheck(name);
       this.emit("playback", {
         type: "node.unavailable",
         nodeId: name,
@@ -626,7 +629,22 @@ export class LavalinkAdapter extends EventEmitter {
     });
   }
 
-  /** Returns an evicted node to the Shoukaku pool. See the disconnect handler. */
+  /**
+   * Queues a check for whether `name` is still in the Shoukaku pool. Debounced
+   * per node: a node that is merely reconnecting emits close/error repeatedly,
+   * and each of those is a candidate eviction point.
+   */
+  #scheduleNodeRecheck(name: string): void {
+    if (this.#destroyed || this.#pendingRechecks.has(name)) return;
+    const timer = setTimeout(() => {
+      this.#pendingRechecks.delete(name);
+      this.#readdNode(name);
+    }, NODE_READD_DELAY_MS);
+    timer.unref();
+    this.#pendingRechecks.set(name, timer);
+  }
+
+  /** Returns an evicted node to the Shoukaku pool. No-op while it is present. */
   #readdNode(name: string): void {
     const manager = this.#manager;
     if (!manager || this.#destroyed || manager.nodes.has(name)) return;
