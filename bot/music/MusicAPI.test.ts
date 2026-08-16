@@ -420,6 +420,55 @@ describe("music API mutations", () => {
     });
   });
 
+  // A finished track is marked "failed" and left in place as a tombstone, so
+  // the stored position column runs ahead of any index into the filtered
+  // upcoming list. Counting positions in that list would move a track short by
+  // one slot per tombstone — moving "down" would actually shove it above the
+  // currently-playing entry.
+  it("maps a reorder past tombstoned entries in both directions", async () => {
+    const tombstoned = snapshot({
+      entries: [
+        entry("entry-done-1", 0, "failed"),
+        entry("entry-done-2", 1, "failed"),
+        entry("entry-current", 2, "playing"),
+        entry("entry-a", 3),
+        entry("entry-b", 4),
+      ],
+      currentEntryId: "entry-current",
+    });
+
+    const down = await start({ queue: tombstoned });
+    expect(
+      (await post(down.base, `/music/reorder/${GUILD}`, {
+        from: 0,
+        to: 1,
+        expectedRevision: 7,
+      })).status,
+    ).toBe(200);
+    // entry-a moves to where entry-b sits today: stored position 4, not the
+    // filtered-list index 2.
+    expect(down.service.commands[0]).toMatchObject({
+      type: "queue.move",
+      entryId: "entry-a",
+      position: 4,
+    });
+    await down.close();
+
+    active = await harness({ queue: tombstoned });
+    expect(
+      (await post(active.base, `/music/reorder/${GUILD}`, {
+        from: 1,
+        to: 0,
+        expectedRevision: 7,
+      })).status,
+    ).toBe(200);
+    expect(active.service.commands[0]).toMatchObject({
+      type: "queue.move",
+      entryId: "entry-b",
+      position: 3,
+    });
+  });
+
   it("generates an operation id when the caller omits one", async () => {
     const { base, service } = await start();
 

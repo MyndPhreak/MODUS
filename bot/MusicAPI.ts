@@ -893,7 +893,6 @@ export function registerMusicAPI(
           const fromIndex = Number(body.from);
           const toIndex = Number(body.to);
           const snapshot = await musicRuntime.musicService.getQueue(guildId);
-          const ordered = playableEntries(snapshot);
           const upcoming = upcomingEntries(snapshot);
           if (
             !Number.isInteger(fromIndex) ||
@@ -906,13 +905,17 @@ export function registerMusicAPI(
             return sendJson(res, 400, { error: "Invalid indices" });
           }
 
-          // The dashboard indexes the upcoming list; the durable queue also
-          // holds the current entry, so the destination is translated into the
-          // absolute position the target track occupies today.
+          // The dashboard indexes the upcoming list, but `queue.move` addresses
+          // the stored position column — which stays contiguous across *every*
+          // row, including the current entry and the "failed" tombstones a
+          // finished track leaves behind. Counting positions in the filtered
+          // list would land the track short by one slot per preceding tombstone
+          // (and, moving down, ahead of the track that is playing), so the
+          // destination entry's own stored position is used verbatim. That
+          // reproduces `splice(from, 1); splice(to, 0, track)` in both
+          // directions: the mover ends up exactly where the target sits today.
           const moved = upcoming[fromIndex];
-          const position = ordered.findIndex(
-            (entry) => entry.id === upcoming[toIndex].id,
-          );
+          const position = upcoming[toIndex].position;
           const operationId = operationIdFrom(body);
           const result = await runMutation(
             musicRuntime,
