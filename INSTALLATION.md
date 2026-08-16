@@ -37,7 +37,7 @@ Music playback needs one extra secret shared between the bot and its Lavalink no
 
 ## Music Relay (Lavalink)
 
-Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` `1.18.1` plugin) configured by [lavalink/application.yml](lavalink/application.yml).
+Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` `1.18.2` plugin) configured by [lavalink/application.yml](lavalink/application.yml).
 
 ### 1. Set the node password
 

@@ -97,15 +97,16 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     oauth:
-      enabled: true
-      skipInitialization: false
-    remoteCipher:
-      url: "https://cipher.kikkia.dev/"
+      enabled: false
+    pot:
+      token: "Igj6F_oWkJahjg=="
+      visitorData: "CgtkT1dTNGpGV0tkVSiVt4XUBjIKCgJVUxIEGgAgKmLfAgrcAjIxLllUPVpmTnJSSWpNUnhVbTVLdVNtRlY4eTZLLUpFMF9PbG9qa0hmdGNaTGxKYktZM2xuRUl2eVZhb0lMLVFsV2dXY05WZ2JUWm9SNndSMGxPS3ZFVVJTWWwxTENFZWota0JKQUdfcHowUUlpZ2hiYUFpQ0ZPT3N4MXhXSDMtY3k1VkhZQVNRWFJrazV5TjNhWHJLeEtpN2tVWE5aY0d1VUhHX2ZnZXVvOFprMExXeUJETkwxdVQ2b2F1YjZsV0laXzFQUENrbDdSczY5T3hVdVJrb2VyWVF1MjAzbUF6U2dHTGFEVU1uTWVnLWFIT3VxcUcwNEVjUlVQUEgtOUpjNDU1Q09BTW5HUmVFSWtDM0NJei1WMll6TmFNU3lJRmtvLXVpR0RiY0JzU0NZSm03RlVZRno5QWs0UlZ4bzZtSXE0eml1TTVhTk5UNmR4dHJaUUZxYWYwbmQ4Zw%3D%3D"
     clients:
-      - TVHTML5
-      - WEB
-      - ANDROID_VR
       - MUSIC
+      - ANDROID_TESTSUITE
+      - WEBEMBEDDED
+      - TVHTML5EMBEDDED
+      - WEB
 
   lavalyrics:
     sources:

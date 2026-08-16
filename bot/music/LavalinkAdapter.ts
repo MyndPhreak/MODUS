@@ -608,8 +608,14 @@ export class LavalinkAdapter extends EventEmitter {
         }, 3000);
       }
     });
-    manager.on("error", (name, error) => {
-      console.error(`[Music] Lavalink node "${name}" error:`, error);
+    manager.on("error", (name, error: any) => {
+      const msg = error?.message || String(error);
+      const isTransient = msg.includes("ECONNREFUSED") || msg.includes("Websocket closed before a connection was established");
+      if (isTransient) {
+        console.warn(`[Music] Lavalink node "${name}" connection retry pending (${msg})`);
+      } else {
+        console.error(`[Music] Lavalink node "${name}" error:`, error);
+      }
       this.#safeRegistryUnavailable(name);
       this.emit("playback", {
         type: "node.unavailable",
