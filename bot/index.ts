@@ -28,6 +28,7 @@ import {
   createSpotifyBridgeStreamFunction,
 } from "./lib/ytdlp-stream";
 import { registerMusicAPI } from "./MusicAPI";
+import { createMusicService } from "./music";
 import { registerWebhookRoutes } from "./WebhookRouter";
 import { registerDocsAPI } from "./DocsAPI";
 
@@ -127,6 +128,23 @@ const logger = new Logger(databaseService, shardId);
 const moduleManager = new ModuleManager(client, logger, player);
 const serverStatusService = new ServerStatusService(client, databaseService);
 
+// Lavalink music control plane. Built after the client, Redis, database, and
+// event bus exist; it connects and recovers dormant sessions once the gateway
+// is ready. Null when LAVALINK_NODES_JSON is unset.
+const musicRuntime = createMusicService({
+  client,
+  repository: databaseService.music,
+  redisClients,
+  eventBus,
+  shardId: typeof shardId === "number" ? shardId : 0,
+  logger: {
+    info: (message) => logger.info(message, undefined, "music"),
+    warn: (message) => logger.warn(message, undefined, "music"),
+    error: (message, error) => logger.error(message, undefined, error, "music"),
+  },
+});
+moduleManager.music = musicRuntime;
+
 client.once("ready", async () => {
   const shardIdStr = client.shard?.ids[0] ?? "N/A";
   logger.info(`Logged in as ${client.user?.tag}!`);
@@ -194,6 +212,18 @@ client.once("ready", async () => {
   }
 
   await loadExtractors();
+
+  // Connect Lavalink and restore any session this shard owned before it
+  // stopped, so modules register their playback listeners against a live
+  // control plane.
+  if (musicRuntime) {
+    try {
+      await musicRuntime.start();
+    } catch (err) {
+      logger.error("Failed to start the music service", undefined, err, "music");
+    }
+  }
+
   // loadModules() also runs each module's registerEvents hook (client
   // listeners, timers) — no per-module wiring needed here.
   await moduleManager.loadModules();
@@ -461,13 +491,20 @@ client.on(Events.GuildDelete, async (guild) => {
 client.login(process.env.DISCORD_TOKEN);
 
 // ─── Graceful Shutdown (prevents "port in use" on nodemon restart) ────────
-function gracefulShutdown(signal: string) {
+async function gracefulShutdown(signal: string) {
   console.log(`[Bot] Received ${signal}, shutting down gracefully...`);
+
+  // Armed first so a hung shutdown step can never hold the process open.
+  setTimeout(() => process.exit(0), 2000);
 
   // Close the HTTP server first to free the port immediately
   server.close(() => {
     console.log("[Bot] HTTP server closed.");
   });
+
+  // Release guild playback leases while Redis is still open, so another
+  // process can take the sessions over instead of waiting out the lease TTL.
+  await musicRuntime?.shutdown().catch(() => {});
 
   // Destroy the Discord client connection
   client.destroy();
@@ -480,13 +517,14 @@ function gracefulShutdown(signal: string) {
   // lets the lease release via Lua CAS (inside LeaderElection.stop); without
   // this, the next leader waits the full TTL before picking up.
   closeRedisClients(redisClients).catch(() => {});
-
-  // Force exit after a short grace period
-  setTimeout(() => process.exit(0), 2000);
 }
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => {
+  void gracefulShutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  void gracefulShutdown("SIGINT");
+});
 
 // Global Error Handlers to prevent bot crashes
 process.on("unhandledRejection", (reason, promise) => {

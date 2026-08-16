@@ -182,6 +182,50 @@ export class LavalinkMusicService implements MusicService {
     });
   }
 
+  /**
+   * Rebuilds players for guilds that were mid-playback when their previous
+   * owner stopped. Callers must pass only guilds this process owns, otherwise
+   * a healthy remote owner would be fenced out of its own session.
+   */
+  async recoverOnStartup(sessions: readonly RecoverGuildInput[]): Promise<void> {
+    for (const session of sessions) {
+      if (this.closed) return;
+      const result = await this.recovery.recoverGuild(session).catch(() => null);
+      if (!result || !result.ok || !result.value.nodeId || !result.value.fencingToken) continue;
+      this.active.set(session.guildId, {
+        nodeId: result.value.nodeId,
+        fencingToken: result.value.fencingToken,
+        queueRevision: result.value.queue.revision,
+        currentEntryId: result.value.queue.currentEntryId,
+        trackIdentifier: result.value.trackIdentifier,
+        ...(session.voiceChannelId ? { voiceChannelId: session.voiceChannelId } : {}),
+        ...(session.shardId !== undefined ? { shardId: session.shardId } : {}),
+        paused: session.paused ?? false,
+      });
+    }
+  }
+
+  /**
+   * Advances the durable queue after a track ends by itself. The repeat mode
+   * decides whether the finished entry replays, requeues, or is retired.
+   */
+  async advanceQueue(guildId: string, operationId: string): Promise<MusicResult<MusicQueueSnapshot>> {
+    if (!guildId.trim() || !operationId.trim()) {
+      return { ok: false, error: new MusicError("MUSIC_CONFLICT", "The music command is invalid.") };
+    }
+    if (this.closed) {
+      return { ok: false, error: new MusicError("MUSIC_RELAY_OFFLINE", "The music service is shut down.") };
+    }
+
+    return this.runExclusive(guildId, async () => {
+      try {
+        return await this.executeAdvance(guildId, operationId);
+      } catch (error) {
+        return { ok: false, error: normalizeCoordinatorError(error) };
+      }
+    });
+  }
+
   async getState(guildId: string): Promise<MusicPlayerState> {
     validateGuildId(guildId);
     const durable = await this.repository.readSnapshot(guildId);
@@ -703,6 +747,43 @@ export class LavalinkMusicService implements MusicService {
     });
   }
 
+  private async executeAdvance(
+    guildId: string,
+    operationId: string,
+  ): Promise<MusicResult<MusicQueueSnapshot>> {
+    const durable = await this.repository.readSnapshot(guildId);
+    const finished = durable.entries.find((entry) => entry.id === durable.currentEntryId)
+      ?? durable.entries.find((entry) => entry.status === "playing")
+      ?? null;
+
+    if (durable.repeatMode === "track" && finished) {
+      return this.dispatchEntry({ durable, entry: finished, operationId });
+    }
+
+    let revision = durable.revision;
+    if (finished) {
+      const retired = await this.repository.applyMutation({
+        guildId,
+        operationId,
+        expectedRevision: revision,
+        mutation: {
+          type: "setStatus",
+          entryId: finished.id,
+          // A requeued entry stays playable; a retired one must not be replayed.
+          status: durable.repeatMode === "queue" ? "ready" : "failed",
+        },
+      });
+      revision = retired.revision;
+    }
+
+    const after = await this.repository.readSnapshot(guildId);
+    if (after.revision !== revision) return { ok: true, value: toQueueSnapshot(after) };
+
+    const next = nextPlayableEntry(after, finished?.id ?? null);
+    if (!next) return this.destroyCommittedPlayer(guildId, revision, operationId);
+    return this.dispatchEntry({ durable: { ...after, revision }, entry: next, operationId });
+  }
+
   private async executeClear(
     command: Extract<MusicCommand, { type: "stop" | "queue.clear" }>,
   ): Promise<MusicResult<MusicQueueSnapshot>> {
@@ -997,6 +1078,25 @@ function selectCandidate(requested: CanonicalTrack, result: LavalinkLoadResult) 
     .map((candidate) => ({ candidate, score: scoreTrackMatch(requested, candidate.track) }))
     .filter(({ score }) => score >= MIN_MATCH_SCORE)
     .sort((left, right) => right.score - left.score)[0]?.candidate ?? null;
+}
+
+/**
+ * Picks the entry that follows the finished one. `queue` repeat wraps to the
+ * front once the tail is reached; every other mode stops at the last entry.
+ */
+function nextPlayableEntry(
+  snapshot: DurableMusicQueueSnapshot,
+  finishedEntryId: string | null,
+): DurableMusicQueueSnapshot["entries"][number] | null {
+  const ordered = [...snapshot.entries].sort((left, right) => left.position - right.position);
+  const playable = ordered.filter((entry) => entry.status !== "failed");
+  const finished = ordered.find((entry) => entry.id === finishedEntryId) ?? null;
+  const following = playable.find((entry) => (
+    entry.id !== finishedEntryId && (!finished || entry.position > finished.position)
+  ));
+  if (following) return following;
+  if (snapshot.repeatMode === "queue") return playable[0] ?? null;
+  return playable.find((entry) => entry.id !== finishedEntryId) ?? null;
 }
 
 function isTrackPlaybackEvent(

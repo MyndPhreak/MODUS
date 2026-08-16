@@ -4,6 +4,7 @@ import {
   eq,
   gt,
   gte,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -95,6 +96,19 @@ export interface MusicNodeAssignmentInput {
   nodeId: string | null;
 }
 
+/**
+ * A session that still had a checkpointed entry on a specific node when the
+ * owning process stopped. Startup recovery uses it to rebuild the player.
+ */
+export interface RecoverableMusicSession {
+  guildId: string;
+  revision: number;
+  currentEntryId: string;
+  assignedNodeId: string;
+  checkpointPositionMs: number;
+  checkpointedAt: Date | null;
+}
+
 export class MusicRevisionConflictError extends Error {
   constructor(
     public readonly expectedRevision: number,
@@ -145,6 +159,34 @@ export class MusicRepository {
         filters: session.filters,
         assignedNodeId: session.assignedNodeId,
       };
+    });
+  }
+
+  /**
+   * Sessions that were mid-playback on a known node when their owner stopped.
+   * Only durable canonical state is returned; encoded tracks never persist.
+   */
+  async listRecoverableSessions(): Promise<RecoverableMusicSession[]> {
+    const rows = await this.db
+      .select({
+        guildId: musicSessions.guildId,
+        revision: musicSessions.revision,
+        currentEntryId: musicSessions.currentEntryId,
+        assignedNodeId: musicSessions.assignedNodeId,
+        checkpointPositionMs: musicSessions.checkpointPositionMs,
+        checkpointedAt: musicSessions.checkpointedAt,
+      })
+      .from(musicSessions)
+      .where(and(
+        isNotNull(musicSessions.currentEntryId),
+        isNotNull(musicSessions.assignedNodeId),
+      ))
+      .orderBy(asc(musicSessions.guildId));
+
+    return rows.flatMap((row) => {
+      const { currentEntryId, assignedNodeId } = row;
+      if (!currentEntryId || !assignedNodeId) return [];
+      return [{ ...row, currentEntryId, assignedNodeId }];
     });
   }
 

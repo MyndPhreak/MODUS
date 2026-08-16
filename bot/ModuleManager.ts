@@ -18,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { DatabaseService } from "./DatabaseService";
 import { Logger } from "./Logger";
+import type { MusicRuntime } from "./music";
 import type { AiTool } from "./lib/aiTools";
 import type { ModuleCategoryKey, ModuleColorToken } from "@modus/db";
 
@@ -142,6 +143,11 @@ export class ModuleManager {
   private modulesSubscribed = false;
   public logger: Logger;
   public player: Player;
+  /**
+   * Lavalink music control plane. Null when no node is configured — music
+   * commands report that playback is unavailable instead of failing.
+   */
+  public music: MusicRuntime | null = null;
 
   constructor(client: Client, logger: Logger, player: Player) {
     this.client = client;

@@ -21,7 +21,6 @@ import {
   AudioPlayerStatus,
   StreamType,
 } from "@discordjs/voice";
-import { useMainPlayer } from "discord-player";
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -921,9 +920,8 @@ async function handleStart(
 
   // Check if music is currently playing in this guild
   try {
-    const musicPlayer = useMainPlayer();
-    const musicQueue = musicPlayer.queues.get(guildId);
-    if (musicQueue && (musicQueue.isPlaying() || musicQueue.currentTrack)) {
+    const musicService = moduleManager.music?.musicService ?? null;
+    if (musicService && (await musicService.isActive(guildId))) {
       const stopButton = new ButtonBuilder()
         .setCustomId(`rec_stop_music_${guildId}`)
         .setLabel("Stop Music & Start Recording")
@@ -950,15 +948,16 @@ async function handleStart(
           time: 60_000,
         });
 
-        // Stop the music queue
+        // Stop playback through the music service so the durable queue, the
+        // Lavalink player, and the guild lease are released together.
         try {
-          const currentQueue = musicPlayer.queues.get(guildId);
-          if (currentQueue) {
-            currentQueue.delete();
-            try {
-              musicPlayer.queues.delete(guildId);
-            } catch {}
-          }
+          const snapshot = await musicService.getQueue(guildId);
+          await musicService.execute({
+            type: "stop",
+            guildId,
+            operationId: `record-stop:${guildId}:${Date.now()}`,
+            expectedRevision: snapshot.revision,
+          });
         } catch {}
 
         // Wait a moment for the voice connection to fully disconnect
@@ -983,7 +982,7 @@ async function handleStart(
       }
     }
   } catch {
-    // discord-player not initialized or no queues — safe to proceed
+    // Music service unavailable or no durable session — safe to proceed
   }
 
   // Check voice channel
