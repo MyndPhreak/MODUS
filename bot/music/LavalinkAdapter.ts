@@ -210,6 +210,7 @@ export class LavalinkAdapter extends EventEmitter {
   #manager: Shoukaku | null = null;
   readonly #requestedNodes = new Map<string, string>();
   readonly #boundPlayers = new WeakSet<object>();
+  #heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(client: Client, registry: NodeRegistry) {
     super();
@@ -267,9 +268,29 @@ export class LavalinkAdapter extends EventEmitter {
           manager.addNode(node);
         }
       }
+
+      if (!this.#heartbeatTimer) {
+        this.#heartbeatTimer = setInterval(() => {
+          if (!this.#manager || !this.#client.isReady()) return;
+          for (const node of this.#manager.nodes.values()) {
+            if (node.state === 3 /* DISCONNECTED */) {
+              node.connect().catch(() => {});
+            }
+          }
+        }, 5_000);
+        this.#heartbeatTimer.unref();
+      }
+
       return ok(undefined);
     } catch {
       return failure("MUSIC_RELAY_OFFLINE", RELAY_UNAVAILABLE_MESSAGE, true);
+    }
+  }
+
+  destroy(): void {
+    if (this.#heartbeatTimer) {
+      clearInterval(this.#heartbeatTimer);
+      this.#heartbeatTimer = null;
     }
   }
 
@@ -544,19 +565,32 @@ export class LavalinkAdapter extends EventEmitter {
   }
 
   #bindManagerEvents(manager: Shoukaku): void {
-    manager.on("ready", (name) => {
+    manager.on("ready", (name, resumed) => {
+      console.log(`[Music] Lavalink node "${name}" connected and ready (resumed: ${resumed})`);
       this.#safeRegistryUpdate(name, { available: true });
     });
-    manager.on("reconnecting", (name) => {
+    manager.on("reconnecting", (name, triesLeft, reconnectInterval) => {
+      console.warn(`[Music] Lavalink node "${name}" reconnecting in ${reconnectInterval}s (${triesLeft} tries left)...`);
       this.#safeRegistryUnavailable(name);
     });
-    manager.on("close", (name) => {
+    manager.on("close", (name, code, reason) => {
+      console.warn(`[Music] Lavalink node "${name}" connection closed (code: ${code}, reason: ${reason})`);
       this.#safeRegistryUnavailable(name);
     });
-    manager.on("disconnect", (name) => {
+    manager.on("disconnect", (name, count) => {
+      console.warn(`[Music] Lavalink node "${name}" disconnected (moved players: ${count})`);
       this.#safeRegistryUnavailable(name);
+      const node = manager.nodes.get(name);
+      if (node && (node.state === 3 || node.state === 2)) {
+        setTimeout(() => {
+          if (node.state === 3 && this.#manager) {
+            node.connect().catch(() => {});
+          }
+        }, 3000);
+      }
     });
-    manager.on("error", (name) => {
+    manager.on("error", (name, error) => {
+      console.error(`[Music] Lavalink node "${name}" error:`, error);
       this.#safeRegistryUnavailable(name);
       this.emit("playback", {
         type: "node.unavailable",

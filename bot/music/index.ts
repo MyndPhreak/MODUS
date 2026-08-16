@@ -161,6 +161,7 @@ export function createMusicService(options: CreateMusicServiceOptions): MusicRun
     },
 
     async shutdown(): Promise<void> {
+      adapter.destroy();
       await musicService.shutdown();
     },
   };
