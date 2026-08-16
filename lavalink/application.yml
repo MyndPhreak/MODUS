@@ -97,9 +97,10 @@ plugins:
     oauth:
       enabled: true
       skipInitialization: false
+    remoteCipher:
+      url: "https://cipher.kikkia.dev/"
     clients:
-      - TVHTML5EMBEDDED
-      - TV
+      - TVHTML5
       - WEB
       - ANDROID_VR
       - MUSIC
