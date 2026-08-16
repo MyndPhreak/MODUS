@@ -210,6 +210,49 @@ function setup(nodeConfigs = [config("primary"), config("secondary")]) {
 }
 
 describe("MusicRecovery", () => {
+  it("rebuilds the player in place when the only healthy node is the one it already sits on", async () => {
+    // Single-node deployments (what docker-compose.yml ships) recover onto the
+    // same node they failed on. Shoukaku's player.move() returns false when the
+    // target node is the current one, so routing this through transferPlayer
+    // would report MUSIC_RELAY_OFFLINE for a node that is actually healthy.
+    const order: string[] = [];
+    const nodeRegistry = new NodeRegistry([config("primary")]);
+    nodeRegistry.update("primary", { available: true });
+    const repository = new FakeRepository(durableSnapshot(), order);
+    const adapter = new FakeAdapter(order);
+    const recovery = new MusicRecovery({
+      repository,
+      nodeRegistry,
+      lease: new FakeLease(order),
+      adapter,
+      eventBus: new FakeEventBus(),
+      maxAttempts: 3,
+      retryDelayMs: 0,
+    });
+
+    const result = await recovery.recoverGuild({
+      guildId: "guild-1",
+      failedNodeId: "primary",
+      markNodeFailed: false,
+      voiceChannelId: "voice-1",
+      shardId: 0,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(adapter.transfers).toEqual([]);
+    expect(order).not.toContain("transfer");
+    expect(adapter.updates).toHaveLength(1);
+    expect(adapter.updates[0]).toMatchObject({
+      guildId: "guild-1",
+      nodeId: "primary",
+      ephemeralEncodedTrack: "ephemeral-recovery-secret",
+      positionMs: 73_000,
+      volume: 61,
+    });
+    // The player object still exists, so recovery must not re-join voice.
+    expect(adapter.updates[0]?.voiceChannelId).toBeUndefined();
+  });
+
   it("fences failed ownership, selects a compatible node, re-resolves canonical metadata, and restores the existing player", async () => {
     const { adapter, eventBus, lease, order, recovery, repository } = setup([
       config("primary"),

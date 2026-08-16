@@ -241,7 +241,13 @@ export class MusicRecovery {
         );
       }
 
-      if (currentPlayer) {
+      // Only move a surviving player when it is actually landing somewhere new.
+      // Recovering onto the node it already sits on — the normal case for a
+      // single-node deployment restarting — must skip the transfer: Shoukaku's
+      // player.move() returns false when the target is the current node, which
+      // would surface a healthy node as MUSIC_RELAY_OFFLINE. The restore step
+      // below rebuilds the player on that node either way.
+      if (currentPlayer && currentPlayer.nodeId !== selectedNodeId) {
         const transferred = await this.retryTransient(async () => {
           await this.assertCurrentRevision(input.guildId, durable.revision, current.id);
           await this.lease.assertOwner(input.guildId, fencingToken);
@@ -250,7 +256,7 @@ export class MusicRecovery {
         if (!transferred.ok) {
           return await this.failure(input, operationId, queueRevision, selectedNodeId, transferred.error);
         }
-      } else if (!input.voiceChannelId || input.shardId === undefined) {
+      } else if (!currentPlayer && (!input.voiceChannelId || input.shardId === undefined)) {
         return await this.failure(
           input,
           operationId,
