@@ -32,6 +32,13 @@ vi.mock("shoukaku", async () => {
     readonly connections = new Map<string, { guildId: string; disconnect: ReturnType<typeof vi.fn> }>();
     readonly joinVoiceChannel = vi.fn();
     readonly leaveVoiceChannel = vi.fn();
+    readonly addNode = vi.fn((options: { name: string }) => {
+      this.nodes.set(options.name, {
+        name: options.name,
+        penalties: 0,
+        rest: { resolve: vi.fn() },
+      });
+    });
 
     constructor(
       public readonly connector: unknown,
@@ -194,6 +201,82 @@ describe("LavalinkAdapter", () => {
 
     expect(resolved).toBe(secondary);
     expect(resolved).not.toBe(primary);
+  });
+
+  it("re-adds a node that Shoukaku evicted from its pool on disconnect", async () => {
+    // Shoukaku deletes a node from `manager.nodes` when it emits "disconnect",
+    // and Node.connect() reaches that path even on a SUCCESSFUL reconnect —
+    // `connectError` is never cleared after a failed attempt, so a socket that
+    // recovers after one failure is torn down and evicted anyway. Reconnecting
+    // the orphaned Node object does not put it back in the pool, so without
+    // this the node is gone for the life of the process and placement fails.
+    vi.useFakeTimers();
+    try {
+      const { adapter, registry } = setup();
+      await adapter.connect();
+      addNode("primary");
+      expect(manager().nodes.has("primary")).toBe(true);
+
+      manager().emit("disconnect", "primary", 0);
+      manager().nodes.delete("primary"); // what Shoukaku's own once() listener does
+      expect(registry.snapshot("primary").available).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(manager().addNode).toHaveBeenCalledTimes(1);
+      expect(manager().addNode.mock.calls[0]?.[0]).toMatchObject({
+        name: "primary",
+        url: "primary.lavalink.internal:2333",
+        auth: "primary-password-secret",
+        secure: true,
+        group: "us-east",
+      });
+      expect(manager().nodes.has("primary")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("repoints live players at the re-added node so library resume uses the new session", async () => {
+    // Shoukaku's resumePlayers() selects players by node NAME but resumes them
+    // through player.node.rest. Left pointing at the evicted Node, every resume
+    // would PATCH the dead node's stale sessionId instead of the new one.
+    vi.useFakeTimers();
+    try {
+      const { adapter } = setup();
+      await adapter.connect();
+      const evicted = addNode("primary");
+      const player = new FakePlayer("guild-1", evicted as unknown as { name: string });
+      manager().players.set("guild-1", player);
+
+      manager().emit("disconnect", "primary", 0);
+      manager().nodes.delete("primary");
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      const readded = manager().nodes.get("primary");
+      expect(readded).toBeDefined();
+      expect(readded).not.toBe(evicted);
+      expect(player.node).toBe(readded);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not re-add a node that is already back in the pool", async () => {
+    vi.useFakeTimers();
+    try {
+      const { adapter } = setup();
+      await adapter.connect();
+      addNode("primary");
+
+      manager().emit("disconnect", "primary", 0);
+      // Node never left the pool (or Shoukaku restored it first).
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(manager().addNode).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refuses to reconnect after destroy instead of returning a manager with no reconnect probe armed", async () => {

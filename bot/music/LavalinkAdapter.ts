@@ -13,7 +13,7 @@ import {
 } from "shoukaku";
 import { MusicError, type MusicErrorCode } from "./errors";
 import type { LavalinkAdapterEventMap, MusicPlaybackEvent, MusicPlaybackTrack } from "./LavalinkEvents";
-import { NodeRegistry, type NodeSelectionRequest } from "./NodeRegistry";
+import { NodeRegistry, type LavalinkNodeConfig, type NodeSelectionRequest } from "./NodeRegistry";
 import type { CanonicalTrack, LyricsData, MusicFilters, MusicResult, MusicSource } from "./types";
 import { fetchLrclibLyrics, normalizeLavaLyrics } from "./lyrics";
 
@@ -63,6 +63,25 @@ export interface LavalinkPlayerUpdate {
   volume?: number;
   paused?: boolean;
   filters?: MusicFilters;
+}
+
+/**
+ * Delay before returning an evicted node to the pool. Long enough for
+ * Shoukaku's own delete listener — which runs immediately after ours on the
+ * same emit — to finish, so the re-added node is not deleted straight back out.
+ */
+const NODE_READD_DELAY_MS = 3_000;
+
+function nodeOptions(config: LavalinkNodeConfig) {
+  const parsed = new URL(config.url);
+  const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+  return {
+    name: config.id,
+    url: `${parsed.host}${path}`,
+    auth: config.password,
+    secure: parsed.protocol === "https:",
+    group: config.region,
+  };
 }
 
 const SEARCH_PREFIX: Record<LavalinkSearchSource, string> = {
@@ -210,7 +229,6 @@ export class LavalinkAdapter extends EventEmitter {
   #manager: Shoukaku | null = null;
   readonly #requestedNodes = new Map<string, string>();
   readonly #boundPlayers = new WeakSet<object>();
-  #heartbeatTimer: NodeJS.Timeout | null = null;
   #destroyed = false;
 
   constructor(client: Client, registry: NodeRegistry) {
@@ -238,18 +256,9 @@ export class LavalinkAdapter extends EventEmitter {
     if (this.#manager) return ok(undefined);
 
     try {
-      const nodes = this.#registry.snapshots().map((snapshot) => {
-        const config = this.#registry.getConfig(snapshot.id);
-        const parsed = new URL(config.url);
-        const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
-        return {
-          name: config.id,
-          url: `${parsed.host}${path}`,
-          auth: config.password,
-          secure: parsed.protocol === "https:",
-          group: config.region,
-        };
-      });
+      const nodes = this.#registry
+        .snapshots()
+        .map((snapshot) => nodeOptions(this.#registry.getConfig(snapshot.id)));
 
       const manager = new Shoukaku(new Connectors.DiscordJS(this.#client), nodes, {
         // Server-side resume stays off: a resumed socket was being rejected by
@@ -280,50 +289,6 @@ export class LavalinkAdapter extends EventEmitter {
         }
       }
 
-      if (!this.#heartbeatTimer) {
-        this.#heartbeatTimer = setInterval(async () => {
-          if (!this.#manager || !this.#client.isReady()) return;
-          for (const snapshot of this.#registry.snapshots()) {
-            const node = this.#manager.nodes.get(snapshot.id);
-            if (!node || (node.state as number) !== 1 /* CONNECTED */) {
-              const nodeConfig = this.#registry.getConfig(snapshot.id);
-              if (nodeConfig) {
-                try {
-                  const checkUrl = `${nodeConfig.url.replace(/\/$/, "")}/version`;
-                  const res = await fetch(checkUrl, {
-                    headers: { Authorization: nodeConfig.password },
-                    signal: AbortSignal.timeout(2000),
-                  });
-                  if (res.ok) {
-                    if (!this.#manager.nodes.has(snapshot.id)) {
-                      console.log(`[Music] Lavalink node "${snapshot.id}" REST is healthy — re-adding to connection pool...`);
-                      const parsed = new URL(nodeConfig.url);
-                      const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
-                      this.#manager.addNode({
-                        name: nodeConfig.id,
-                        url: `${parsed.host}${path}`,
-                        auth: nodeConfig.password,
-                        secure: parsed.protocol === "https:",
-                        group: nodeConfig.region,
-                      });
-                    } else if ((node!.state as number) !== 1) {
-                      console.log(`[Music] Lavalink node "${snapshot.id}" REST is healthy — reconnecting WebSocket...`);
-                      const nodeAny = node as any;
-                      nodeAny.cleanupWebsocket();
-                      nodeAny.state = 3 /* DISCONNECTED */;
-                      node!.connect().catch(() => {});
-                    }
-                  }
-                } catch {
-                  // Node host is still starting up or unreachable
-                }
-              }
-            }
-          }
-        }, 5_000);
-        this.#heartbeatTimer.unref();
-      }
-
       return ok(undefined);
     } catch {
       return failure("MUSIC_RELAY_OFFLINE", RELAY_UNAVAILABLE_MESSAGE, true);
@@ -331,19 +296,14 @@ export class LavalinkAdapter extends EventEmitter {
   }
 
   /**
-   * Stops the reconnect probe and retires this adapter. The Shoukaku sockets
-   * are deliberately left for process exit to reap: Shoukaku's own close
-   * handler reconnects unconditionally — it does not honour the DISCONNECTING
-   * state — so an explicit node.disconnect() paired with our unbounded
-   * reconnectTries would start a reconnect storm inside the shutdown window.
-   * The destroyed flag exists so a connect() after this cannot hand back a
-   * manager whose heartbeat is no longer armed.
+   * Retires this adapter, so any pending node re-add is dropped and connect()
+   * cannot revive it. The Shoukaku sockets are deliberately left for process
+   * exit to reap: Shoukaku's own close handler reconnects unconditionally — it
+   * does not honour the DISCONNECTING state — so an explicit node.disconnect()
+   * paired with our unbounded reconnectTries would start a reconnect storm
+   * inside the shutdown window.
    */
   destroy(): void {
-    if (this.#heartbeatTimer) {
-      clearInterval(this.#heartbeatTimer);
-      this.#heartbeatTimer = null;
-    }
     this.#destroyed = true;
   }
 
@@ -633,14 +593,18 @@ export class LavalinkAdapter extends EventEmitter {
     manager.on("disconnect", (name, count) => {
       console.warn(`[Music] Lavalink node "${name}" disconnected (moved players: ${count})`);
       this.#safeRegistryUnavailable(name);
-      const node = manager.nodes.get(name);
-      if (node && (node.state === 3 || node.state === 2)) {
-        setTimeout(() => {
-          if (node.state === 3 && this.#manager) {
-            node.connect().catch(() => {});
-          }
-        }, 3000);
-      }
+      // Shoukaku evicts the node from its pool here — addNode() registers
+      // `node.once("disconnect", () => this.nodes.delete(node.name))`. Worse,
+      // Node.connect() reaches this path even on a SUCCESSFUL reconnect: its
+      // retry loop never clears `connectError`, so a socket that comes back
+      // after a single failed attempt is torn down and evicted anyway. That is
+      // the normal case whenever the node restarts.
+      //
+      // Re-adding is the only way back: reconnecting the orphaned Node object
+      // does not restore it to manager.nodes, so placement would never see the
+      // node again for the life of the process. Deferred because Shoukaku's own
+      // delete listener runs immediately after this one.
+      setTimeout(() => this.#readdNode(name), NODE_READD_DELAY_MS).unref();
     });
     manager.on("error", (name, error: any) => {
       const msg = error?.message || String(error);
@@ -660,6 +624,32 @@ export class LavalinkAdapter extends EventEmitter {
     manager.on("raw", (name, json) => {
       this.#handleRawStats(name, json);
     });
+  }
+
+  /** Returns an evicted node to the Shoukaku pool. See the disconnect handler. */
+  #readdNode(name: string): void {
+    const manager = this.#manager;
+    if (!manager || this.#destroyed || manager.nodes.has(name)) return;
+
+    let config: ReturnType<NodeRegistry["getConfig"]>;
+    try {
+      config = this.#registry.getConfig(name);
+    } catch {
+      return; // No longer part of the deployment configuration.
+    }
+
+    console.log(`[Music] Lavalink node "${name}" was dropped from the pool — re-adding.`);
+    manager.addNode(nodeOptions(config));
+
+    // Repoint live players at the replacement. Shoukaku's resumePlayers()
+    // selects players by node name but resumes them through player.node.rest,
+    // so a player still holding the evicted Node would PATCH that node's stale
+    // sessionId instead of the new one and silently fail to come back.
+    const readded = manager.nodes.get(name);
+    if (!readded) return;
+    for (const player of manager.players.values()) {
+      if (player.node.name === name && player.node !== readded) player.node = readded;
+    }
   }
 
   #safeRegistryUpdate(name: string, update: Parameters<NodeRegistry["update"]>[1]): void {
