@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
     "resume",
     "stop",
     "shuffle",
+    "autoplay",
     "play",
     "volume",
     "remove",

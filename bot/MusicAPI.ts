@@ -92,10 +92,13 @@ interface PlayerState {
   currentTrack: TrackInfo | null;
   queue: TrackInfo[];
   volume: number;
+  /** Repeat mode: 0 = off, 1 = track, 2 = queue */
   repeatMode: number;
-  /** Current playback progress in ms */
+  /** Whether smart autoplay is enabled when the queue ends */
+  autoplay: boolean;
+  /** Current progress in ms */
   progress: number;
-  /** Total duration of current track in ms */
+  /** Total duration in ms */
   totalDuration: number;
   /** Active audio filters */
   activeFilters: string[];
@@ -518,6 +521,7 @@ export function registerMusicAPI(
             ),
             volume: snapshot.volume,
             repeatMode: repeatModeToNumber(snapshot.repeatMode),
+            autoplay: snapshot.autoplay ?? false,
             progress: state.positionMs,
             totalDuration: current?.track.durationMs ?? 0,
             // Lavalink stores the merged filter payload, so the names are its
@@ -785,6 +789,56 @@ export function registerMusicAPI(
           });
         } catch (err: any) {
           return sendInternalError(res, "Error setting volume", err);
+        }
+      }
+
+      // Route: POST /music/autoplay/:guildId
+      const autoplayMatch = pathname.match(/^\/music\/autoplay\/(\d+)$/);
+      if (autoplayMatch && req.method === "POST") {
+        const guildId = autoplayMatch[1];
+        try {
+          if (!musicRuntime) return sendUnavailable(res);
+          const body = await parseBody(req);
+          const enabled = Boolean(body.enabled);
+          const operationId = operationIdFrom(body);
+          const result = await runMutation(
+            musicRuntime,
+            guildId,
+            revisionFrom(body),
+            (revision) => ({
+              type: "autoplay",
+              guildId,
+              operationId,
+              expectedRevision: revision,
+              enabled,
+            }),
+          );
+          if (!result.ok) return sendMusicError(res, result.error);
+          return sendJson(res, 200, {
+            success: true,
+            autoplay: enabled,
+            revision: result.value.revision,
+            operationId,
+          });
+        } catch (err: any) {
+          return sendInternalError(res, "Error updating autoplay", err);
+        }
+      }
+
+      // Route: GET /music/lyrics/:guildId
+      const lyricsMatch = pathname.match(/^\/music\/lyrics\/(\d+)$/);
+      if (lyricsMatch && req.method === "GET") {
+        const guildId = lyricsMatch[1];
+        try {
+          if (!musicRuntime) return sendUnavailable(res);
+          const query = parsedUrl.searchParams.get("query") ?? undefined;
+          const result = await musicRuntime.musicService.getLyrics(guildId, query);
+          if (!result.ok) {
+            return sendJson(res, 404, { error: result.error.message });
+          }
+          return sendJson(res, 200, result.value);
+        } catch (err: any) {
+          return sendInternalError(res, "Error fetching lyrics", err);
         }
       }
 
@@ -1160,6 +1214,7 @@ function offlinePlayerState(): PlayerState {
     queue: [],
     volume: 50,
     repeatMode: 0,
+    autoplay: false,
     progress: 0,
     totalDuration: 0,
     activeFilters: [],
