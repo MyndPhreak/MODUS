@@ -1638,19 +1638,20 @@ async function handlePlaybackFailure(
   event: Extract<MusicPlaybackEvent, { type: "track.stuck" | "track.exception" | "voice.closed" }>,
 ) {
   const guildId = event.guildId;
+  if (event.type === "voice.closed") {
+    // The bot left (or was removed from) voice — mirror the old disconnect
+    // handler and drop the music nickname without logging a false error.
+    moduleManager.logger.info(`Voice connection closed in ${guildId}`, guildId, "music");
+    await resetNicknameIfEnabled(moduleManager, guildId);
+    return;
+  }
+
   moduleManager.logger.error(
     `Playback ${event.type} in ${guildId}: ${event.error.code}`,
     guildId,
     event.error,
     "music",
   );
-
-  if (event.type === "voice.closed") {
-    // The bot left (or was removed from) voice — mirror the old disconnect
-    // handler and drop the music nickname.
-    await resetNicknameIfEnabled(moduleManager, guildId);
-    return;
-  }
 
   const context = announceContexts.get(guildId);
   await (context?.channel as any)
