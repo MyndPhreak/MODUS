@@ -105,8 +105,10 @@ plugins:
 
 metrics:
   prometheus:
-    # Scraped over the private network only (never published to the host).
-    enabled: true
+    # Disabled by default: Prometheus Hotspot exports query Java's Cgroup MXBean
+    # which crashes on Unraid / hybrid-cgroup Docker hosts. MODUS tracks its
+    # own metrics via WebSocket stats frames and does not scrape this endpoint.
+    enabled: false
     endpoint: /metrics
 
 logging:
