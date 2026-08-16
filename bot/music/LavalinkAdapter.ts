@@ -211,6 +211,7 @@ export class LavalinkAdapter extends EventEmitter {
   readonly #requestedNodes = new Map<string, string>();
   readonly #boundPlayers = new WeakSet<object>();
   #heartbeatTimer: NodeJS.Timeout | null = null;
+  #destroyed = false;
 
   constructor(client: Client, registry: NodeRegistry) {
     super();
@@ -233,6 +234,7 @@ export class LavalinkAdapter extends EventEmitter {
   }
 
   async connect(): Promise<MusicResult<void>> {
+    if (this.#destroyed) return failure("MUSIC_RELAY_OFFLINE", RELAY_UNAVAILABLE_MESSAGE);
     if (this.#manager) return ok(undefined);
 
     try {
@@ -250,9 +252,18 @@ export class LavalinkAdapter extends EventEmitter {
       });
 
       const manager = new Shoukaku(new Connectors.DiscordJS(this.#client), nodes, {
+        // Server-side resume stays off: a resumed socket was being rejected by
+        // the node after a restart. Library-side resume is the replacement —
+        // when a node reconnects, Shoukaku re-PATCHes every live player (track,
+        // position, filters, volume, and the current voice credentials) onto
+        // the node's new session. Without it a Lavalink restart leaves this
+        // process holding players bound to a session that no longer exists, and
+        // every affected guild goes silent until someone issues a new command.
+        // It re-uses the existing Discord voice connection, so the bot never
+        // leaves the channel and no spurious voiceStateUpdate is raised.
         resume: false,
         resumeTimeout: 30,
-        resumeByLibrary: false,
+        resumeByLibrary: true,
         reconnectTries: Number.MAX_SAFE_INTEGER,
         reconnectInterval: 5,
         restTimeout: 30,
@@ -319,11 +330,21 @@ export class LavalinkAdapter extends EventEmitter {
     }
   }
 
+  /**
+   * Stops the reconnect probe and retires this adapter. The Shoukaku sockets
+   * are deliberately left for process exit to reap: Shoukaku's own close
+   * handler reconnects unconditionally — it does not honour the DISCONNECTING
+   * state — so an explicit node.disconnect() paired with our unbounded
+   * reconnectTries would start a reconnect storm inside the shutdown window.
+   * The destroyed flag exists so a connect() after this cannot hand back a
+   * manager whose heartbeat is no longer armed.
+   */
   destroy(): void {
     if (this.#heartbeatTimer) {
       clearInterval(this.#heartbeatTimer);
       this.#heartbeatTimer = null;
     }
+    this.#destroyed = true;
   }
 
   async loadTracks(request: LavalinkLoadRequest): Promise<MusicResult<LavalinkLoadResult>> {

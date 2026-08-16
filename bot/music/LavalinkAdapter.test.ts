@@ -166,7 +166,7 @@ describe("LavalinkAdapter", () => {
     shoukakuMock.instances.length = 0;
   });
 
-  it("initializes Shoukaku once with bounded reconnects, resuming, MODUS placement, and library failover disabled", async () => {
+  it("initializes Shoukaku once with bounded reconnects, library-side player resume, MODUS placement, and node failover disabled", async () => {
     const { adapter, client, registry } = setup([config("primary"), config("secondary")]);
 
     await adapter.connect();
@@ -175,8 +175,13 @@ describe("LavalinkAdapter", () => {
     expect(shoukakuMock.connectors).toEqual([{ client }]);
     expect(shoukakuMock.instances).toHaveLength(1);
     expect(manager().options).toMatchObject({
+      // Server-side resume stays off — a resumed socket was being rejected by
+      // the node after a restart. Library-side resume is the replacement: on
+      // reconnect Shoukaku re-PATCHes each live player (track, position,
+      // filters, and voice credentials) onto the node's new session, so a
+      // Lavalink restart does not silently strand every guild's audio.
       resume: false,
-      resumeByLibrary: false,
+      resumeByLibrary: true,
       reconnectTries: Number.MAX_SAFE_INTEGER,
       reconnectInterval: 5,
       moveOnDisconnect: false,
@@ -189,6 +194,21 @@ describe("LavalinkAdapter", () => {
 
     expect(resolved).toBe(secondary);
     expect(resolved).not.toBe(primary);
+  });
+
+  it("refuses to reconnect after destroy instead of returning a manager with no reconnect probe armed", async () => {
+    const { adapter } = setup();
+
+    await adapter.connect();
+    expect(shoukakuMock.instances).toHaveLength(1);
+
+    adapter.destroy();
+    const reconnected = await adapter.connect();
+
+    expect(reconnected.ok).toBe(false);
+    expect(!reconnected.ok && reconnected.error.code).toBe("MUSIC_RELAY_OFFLINE");
+    expect(!reconnected.ok && reconnected.error.retryable).toBe(false);
+    expect(shoukakuMock.instances).toHaveLength(1);
   });
 
   it.each([
