@@ -177,7 +177,8 @@ describe("LavalinkAdapter", () => {
     expect(manager().options).toMatchObject({
       resume: true,
       resumeByLibrary: false,
-      reconnectTries: 3,
+      reconnectTries: Number.MAX_SAFE_INTEGER,
+      reconnectInterval: 5,
       moveOnDisconnect: false,
     });
 

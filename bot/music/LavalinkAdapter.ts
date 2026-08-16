@@ -252,7 +252,7 @@ export class LavalinkAdapter extends EventEmitter {
         resume: true,
         resumeTimeout: 60,
         resumeByLibrary: false,
-        reconnectTries: 3,
+        reconnectTries: Number.MAX_SAFE_INTEGER,
         reconnectInterval: 5,
         restTimeout: 30,
         moveOnDisconnect: false,
