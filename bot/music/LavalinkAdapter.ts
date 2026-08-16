@@ -249,6 +249,12 @@ export class LavalinkAdapter extends EventEmitter {
       });
       this.#manager = manager;
       this.#bindManagerEvents(manager);
+      if (this.#client.isReady() && manager.nodes.size === 0) {
+        manager.id = this.#client.user?.id ?? null;
+        for (const node of nodes) {
+          manager.addNode(node);
+        }
+      }
       return ok(undefined);
     } catch {
       return failure("MUSIC_RELAY_OFFLINE", RELAY_UNAVAILABLE_MESSAGE, true);
