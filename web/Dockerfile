@@ -35,6 +35,21 @@ RUN pnpm install --frozen-lockfile
 # Copy web source and build Nuxt. Output is .output/ — a self-contained Node
 # server bundle with all runtime dependencies pre-bundled.
 COPY web/ ./web/
+
+# Drop @nuxt/fonts' resolved-URL cache before building.
+#
+# @nuxt/fonts (pulled in by @nuxt/ui) resolves Google Fonts CSS to concrete
+# fonts.gstatic.com woff2 URLs and memoises them under
+# node_modules/.cache/nuxt/fonts/meta. Google periodically rotates those asset
+# filenames and retires the old ones, at which point every cached URL 404s and
+# `nuxt build` fails outright. The cache is created by the postinstall above,
+# so it lives in the layer restored by `cache-from: type=gha` and the failure
+# repeats on every rerun until the layer cache is evicted.
+#
+# Re-resolving costs one CSS fetch per family. Removing it here means a build
+# can never inherit URLs that have since expired.
+RUN rm -rf node_modules/.cache/nuxt/fonts \
+           web/node_modules/.cache/nuxt/fonts
 RUN pnpm --filter web run build
 
 # ── Stage 2: Production ──────────────────────────────────────────────────────
