@@ -80,10 +80,13 @@ lavalink:
     # Note: no `ratelimit:`/`httpConfig:` blocks. MODUS does not rotate IP
     # blocks, route extraction through proxies, or otherwise evade platform
     # enforcement. Do not add them.
+    # 10s, not the 3s these were: YouTube extraction routinely needs more than
+    # three seconds, and a socket timeout that fires mid-extraction surfaces as
+    # a track that simply fails to load. Matches the value running in production.
     timeouts:
-      connectTimeoutMs: 3000
-      connectionRequestTimeoutMs: 3000
-      socketTimeoutMs: 3000
+      connectTimeoutMs: 10000
+      connectionRequestTimeoutMs: 10000
+      socketTimeoutMs: 10000
 
   # Session resuming has no server-side key in Lavalink v4 — the client opts in
   # per session over the REST API. MODUS deliberately does NOT: the adapter sets
