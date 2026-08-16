@@ -240,11 +240,79 @@ jobs:
         if: always()
         run: docker rm -f lavalink-ci
 
+  # ── Typecheck the dashboard (only if web/** changed) ──────────────────────
+  # Gates on the error classes that are runtime faults rather than type-strict
+  # nitpicks: an identifier or module the bundle references but cannot resolve
+  # throws ReferenceError at setup and renders a blank page. `nuxt build`
+  # does NOT catch these — a page whose script crashes still bundles fine, and
+  # that is exactly how a broken music dashboard reached production.
+  #
+  # Deliberately NOT a blocking full typecheck. The project carries ~20
+  # pre-existing nullability and inference errors (@nuxt/ui select models,
+  # TS2321 recursion limits in Nuxt's route-map types); failing on those would
+  # leave CI permanently red and train everyone to ignore it. The full output
+  # is still printed, so the backlog stays visible. Once it reaches zero,
+  # replace this with a plain `pnpm typecheck`.
+  typecheck-web:
+    name: Typecheck Web
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # web's postinstall runs `nuxt prepare`, which generates the .nuxt types
+      # the typecheck depends on.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web
+        run: |
+          set +e
+          pnpm typecheck 2>&1 | tee typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          # TS2304  Cannot find name             → ReferenceError
+          # TS2552  Cannot find name, did you..  → ReferenceError
+          # TS18004 Shorthand with no binding    → ReferenceError
+          # TS2307  Cannot find module           → import fails at runtime
+          fatal="$(grep -E 'error TS(2304|2552|18004|2307):' typecheck.log || true)"
+          total="$(grep -cE 'error TS' typecheck.log || true)"
+
+          if [ -n "$fatal" ]; then
+            echo "::error::Unresolved identifiers or modules — these fail at runtime, not just in the typechecker."
+            printf '%s\n' "$fatal"
+            exit 1
+          fi
+
+          # No error lines at all but a non-zero exit means the tool itself
+          # failed (missing types, OOM), which must not pass silently.
+          if [ "$status" -ne 0 ] && [ "${total:-0}" -eq 0 ]; then
+            echo "::error::typecheck did not run to completion (exit ${status})."
+            exit 1
+          fi
+
+          echo "No runtime-fatal type errors. Pre-existing type errors: ${total:-0}"
+
   # ── Build Web Image (only if web/** changed) ──────────────────────────────
   build-web:
     name: Build Web Image
-    needs: changes
-    if: ${{ needs.changes.outputs.web == 'true' }}
+    needs: [changes, typecheck-web]
+    if: ${{ needs.changes.outputs.web == 'true' && needs.typecheck-web.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
