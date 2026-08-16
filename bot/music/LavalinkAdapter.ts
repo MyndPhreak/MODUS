@@ -14,7 +14,8 @@ import {
 import { MusicError, type MusicErrorCode } from "./errors";
 import type { LavalinkAdapterEventMap, MusicPlaybackEvent, MusicPlaybackTrack } from "./LavalinkEvents";
 import { NodeRegistry, type NodeSelectionRequest } from "./NodeRegistry";
-import type { CanonicalTrack, MusicFilters, MusicResult, MusicSource } from "./types";
+import type { CanonicalTrack, LyricsData, MusicFilters, MusicResult, MusicSource } from "./types";
+import { fetchLrclibLyrics, normalizeLavaLyrics } from "./lyrics";
 
 export type LavalinkSearchSource = "youtube" | "youtube-music" | "soundcloud";
 
@@ -443,6 +444,45 @@ export class LavalinkAdapter extends EventEmitter {
       return failure("MUSIC_RELAY_OFFLINE", RELAY_UNAVAILABLE_MESSAGE, true);
     }
   }
+
+  async getLyrics(request: { guildId: string; track?: CanonicalTrack; query?: string }): Promise<MusicResult<LyricsData>> {
+    const manager = this.#manager;
+    const player = manager?.players.get(request.guildId);
+    const selected = this.#registry.selectNode({ guildId: request.guildId, assignedNodeId: player?.node.name });
+    const node = (selected.ok && manager) ? manager.nodes.get(selected.value.id) : undefined;
+
+    // 1. Try LavaLyrics via Lavalink node REST if node is available
+    if (node && node.sessionId) {
+      try {
+        const queryParams = request.query ? `?query=${encodeURIComponent(request.query)}` : "";
+        const url = `${node.url}/v4/sessions/${node.sessionId}/players/${request.guildId}/track/lyrics${queryParams}`;
+        const res = await fetch(url, {
+          headers: { Authorization: node.auth },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const normalized = normalizeLavaLyrics(data);
+          if (normalized) return ok(normalized);
+        }
+      } catch {
+        // Fallthrough to LRCLIB
+      }
+    }
+
+    // 2. Fallback to open LRCLIB database
+    const title = request.query ?? request.track?.title;
+    if (!title) {
+      return failure("MUSIC_NO_MATCH", "No track or query specified to find lyrics for.");
+    }
+    const artist = request.track?.artists?.[0];
+    const duration = request.track?.durationMs ? request.track.durationMs / 1000 : undefined;
+    const lrclibLyrics = await fetchLrclibLyrics(title, artist, duration);
+    if (lrclibLyrics) return ok(lrclibLyrics);
+
+    return failure("MUSIC_NO_MATCH", "No matching lyrics found.");
+  }
+
 
   #candidate(
     item: Track,

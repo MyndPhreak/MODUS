@@ -26,6 +26,8 @@ lavalink:
     # version referenced in INSTALLATION.md together.
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
       snapshot: false
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+      snapshot: false
   server:
     # Injected by Docker Compose from LAVALINK_SERVER_PASSWORD. Never write a
     # literal password here: this file is committed. The bot presents the same
@@ -104,6 +106,12 @@ plugins:
       - WEB
       - ANDROID_VR
       - MUSIC
+
+  lavalyrics:
+    sources:
+      - youtube
+      - spotify
+      - deezer
 
 metrics:
   prometheus:
