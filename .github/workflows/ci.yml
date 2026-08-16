@@ -22,6 +22,7 @@ on:
     paths:
       - "bot/**"
       - "web/**"
+      - "lavalink/**"
       - "packages/**"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -108,6 +109,7 @@ jobs:
             bot:
               - *shared
               - "bot/**"
+              - "lavalink/**"
             web:
               - *shared
               - "web/**"
@@ -158,6 +160,85 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── Validate the pinned Lavalink node boots (bot/** or lavalink/** changed) ─
+  # Starts the exact image docker-compose.yml pins, with the exact
+  # lavalink/application.yml this repo ships, and proves it answers an
+  # authenticated /version with the YouTube plugin registered. Catches a bad
+  # plugin coordinate, an unknown config key, or an image bump that no longer
+  # boots — none of which the TypeScript tests can see, since they use fakes.
+  lavalink-config:
+    name: Validate Lavalink Config
+    needs: changes
+    if: ${{ needs.changes.outputs.bot == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      # Keep in lockstep with the `lavalink` service in docker-compose.yml;
+      # the assertion below fails the job if the two ever drift apart.
+      LAVALINK_IMAGE: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Assert the pinned image matches docker-compose.yml
+        run: |
+          grep -qF "image: $LAVALINK_IMAGE" docker-compose.yml
+
+      # Throwaway, CI-local, and never a real deployment secret — it only has
+      # to be present so the node's auth check accepts the health probe.
+      # ::add-mask:: keeps it out of every subsequent log line.
+      - name: Generate a throwaway node password
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          echo "LAVALINK_SERVER_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Start Lavalink with the repository configuration
+        run: |
+          docker run -d --name lavalink-ci \
+            -e LAVALINK_SERVER_PASSWORD \
+            -e _JAVA_OPTIONS=-Xmx1G \
+            -v "$PWD/lavalink/application.yml:/opt/Lavalink/application.yml:ro" \
+            -p 127.0.0.1:2333:2333 \
+            "$LAVALINK_IMAGE"
+
+      # First boot downloads the pinned plugin from maven.lavalink.dev and
+      # warms the JVM, so allow a generous window before failing.
+      - name: Wait for an authenticated /version
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+              -H "Authorization: $LAVALINK_SERVER_PASSWORD" \
+              http://127.0.0.1:2333/version; then
+              echo "Lavalink answered /version after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Lavalink did not answer /version within 300s."
+          exit 1
+
+      - name: Assert the YouTube source is registered by the plugin
+        run: |
+          info="$(curl -fsS -H "Authorization: $LAVALINK_SERVER_PASSWORD" http://127.0.0.1:2333/v4/info)"
+          if ! printf '%s' "$info" | grep -q '"youtube"'; then
+            echo "::error::youtube-plugin did not register a youtube source manager."
+            printf '%s\n' "$info"
+            exit 1
+          fi
+
+      # Redacted twice over: application.yml already disables header/payload
+      # request logging, and the password is masked and stripped here as well.
+      - name: Print sanitized Lavalink logs
+        if: failure()
+        run: |
+          docker logs lavalink-ci 2>&1 \
+            | sed "s/$LAVALINK_SERVER_PASSWORD/***REDACTED***/g" \
+            | tail -n 200
+
+      - name: Stop and remove the Lavalink container
+        if: always()
+        run: docker rm -f lavalink-ci
 
   # ── Build Web Image (only if web/** changed) ──────────────────────────────
   build-web:

@@ -59,6 +59,53 @@ services:
     networks:
       - modus
 
+  # ── Lavalink (music relay node) ──────────────────────────────────────────
+  # Upstream Lavalink v4 + the youtube-source plugin, both pinned. MODUS owns
+  # the canonical queue, leases, and recovery; this node only extracts,
+  # decodes, filters, and streams audio into Discord voice.
+  #
+  # Deliberately NOT published to the host — 2333 is reachable only as
+  # http://lavalink:2333 from the `modus` network (and over Tailscale between
+  # hosts). Never map it to a public interface.
+  #
+  # Password wiring (the same value goes in two places, by design):
+  #   - repo-root .env  → LAVALINK_SERVER_PASSWORD, which Compose injects here
+  #   - bot/.env        → LAVALINK_SERVER_PASSWORD, which the bot substitutes
+  #                       into LAVALINK_NODES_JSON
+  # Generate with `openssl rand -hex 24`; see INSTALLATION.md. If it is unset
+  # Compose warns and passes an empty value: Lavalink still starts, but treat
+  # that as unconfigured, not as a working default.
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
+    container_name: modus-lavalink
+    restart: unless-stopped
+    environment:
+      - LAVALINK_SERVER_PASSWORD=${LAVALINK_SERVER_PASSWORD}
+      # Heap ceiling. The default suits a handful of guilds; raise it for a
+      # busy node (e.g. LAVALINK_JAVA_OPTIONS=-Xmx4G).
+      - _JAVA_OPTIONS=${LAVALINK_JAVA_OPTIONS:--Xmx1G}
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+    expose:
+      # Documentation only — other containers on `modus` can already reach it.
+      - "2333"
+    healthcheck:
+      # Lavalink v4 auth is a raw `Authorization: <password>` header, with no
+      # `Bearer` prefix. `$$` defers expansion to the container's shell so the
+      # password never appears in `docker compose config` output.
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header \"Authorization: $$LAVALINK_SERVER_PASSWORD\" http://localhost:2333/version",
+        ]
+      interval: 30s
+      timeout: 5s
+      # First boot downloads the pinned plugin and warms the JVM.
+      start_period: 120s
+      retries: 5
+    networks:
+      - modus
+
   # ── Discord Bot ───────────────────────────────────────────────────────────
   bot:
     build:
@@ -72,6 +119,14 @@ services:
       - "3005:3005"
     environment:
       - BOT_PORT=3005
+    depends_on:
+      # Startup ordering ONLY — never `condition: service_healthy`. Music is
+      # one module among many: when the relay is missing or down the bot
+      # answers music commands with MUSIC_RELAY_OFFLINE and keeps serving
+      # tickets, moderation, and everything else. Gating bot startup on
+      # Lavalink health would take the whole bot down with the node.
+      lavalink:
+        condition: service_started
     healthcheck:
       test:
         [
