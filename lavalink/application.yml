@@ -99,9 +99,10 @@ plugins:
     # `oauth:` block and no `pot:` block. Do not add them.
     clients:
       - MUSIC
-      - ANDROID_VR
+      - TVHTML5_SIMPLY
+      - ANDROID_MUSIC
+      - ANDROID
       - WEB
-      - WEBEMBEDDED
 
 metrics:
   prometheus:
