@@ -127,6 +127,9 @@ export function createMusicService(options: CreateMusicServiceOptions): MusicRun
   const metrics = new MusicMetrics({
     shardId,
     nodes: () => nodeRegistry.snapshots(),
+    // The music state channel is fleet-wide, so filter it down to the guilds
+    // this shard serves — the same ownership test recoverDormantSessions uses.
+    ownsGuild: (guildId) => options.client.guilds.cache.has(guildId),
   });
 
   return {

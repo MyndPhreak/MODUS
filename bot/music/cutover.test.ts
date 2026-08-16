@@ -370,6 +370,104 @@ describe("music metrics aggregation", () => {
     expect(subscriptions).toContain("unsubscribed:modus:realtime:music");
   });
 
+  it("ignores guilds this shard does not serve", () => {
+    const registry = new NodeRegistry([nodeConfig("one")]);
+    registry.update("one", { available: true });
+    const recorder = new MusicMetrics({
+      shardId: 3,
+      nodes: () => registry.snapshots(),
+      ownsGuild: (guildId) => guildId === "guild-mine",
+      now: () => 1_000,
+    });
+
+    // The music state channel is fleet-wide: this is another shard's guild.
+    recorder.recordStateEvent({ guildId: "guild-theirs", queueRevision: 1, nodeId: "one", operationId: "a", status: "playing" });
+    recorder.recordStateEvent({ guildId: "guild-mine", queueRevision: 1, nodeId: "one", operationId: "b", status: "playing" });
+
+    const snapshot = recorder.snapshot();
+    expect(snapshot.counters.commands.map((entry) => entry.key.guildId)).toEqual(["guild-mine"]);
+    expect(snapshot.activePlayers).toBe(1);
+  });
+
+  it("treats a throwing ownership predicate as not ours rather than failing", () => {
+    const registry = new NodeRegistry([nodeConfig("one")]);
+    registry.update("one", { available: true });
+    const recorder = new MusicMetrics({
+      shardId: 3,
+      nodes: () => registry.snapshots(),
+      ownsGuild: () => {
+        throw new Error("cache unavailable");
+      },
+      now: () => 1_000,
+    });
+
+    expect(() => recorder.recordStateEvent({
+      guildId: "guild-1",
+      queueRevision: 1,
+      nodeId: "one",
+      operationId: "a",
+      status: "playing",
+    })).not.toThrow();
+    expect(recorder.snapshot().counters.commands).toEqual([]);
+  });
+
+  it("drains interval counters and latencies on each snapshot", () => {
+    let clock = 1_000;
+    const recorder = metrics(() => clock);
+
+    recorder.recordStateEvent({ guildId: "guild-1", queueRevision: 1, nodeId: "one", operationId: "play-op", status: "playing" });
+    clock += 200;
+    recorder.recordStateEvent({
+      guildId: "guild-1",
+      queueRevision: 1,
+      nodeId: "one",
+      operationId: "playback:track.start",
+      status: "playing",
+      currentEntryId: "entry-1",
+    });
+
+    // One series for the command, one for the playback event it produced.
+    const first = recorder.snapshot();
+    expect(first.counters.commands.map((entry) => entry.key.operation))
+      .toEqual(["command", "playback:track.start"]);
+    expect(first.commandToAudioLatencyMs.count).toBe(1);
+
+    const second = recorder.snapshot();
+    expect(second.counters.commands).toEqual([]);
+    expect(second.counters.failures).toEqual([]);
+    expect(second.commandToAudioLatencyMs).toEqual({ count: 0, totalMs: 0, maxMs: 0, averageMs: 0 });
+    expect(second.recoveryGapMs).toEqual({ count: 0, totalMs: 0, maxMs: 0, averageMs: 0 });
+  });
+
+  it("keeps gauges across a drain so a quiet interval still reports its players", () => {
+    const recorder = metrics(() => 1_000);
+
+    recorder.recordStateEvent({ guildId: "guild-1", queueRevision: 1, nodeId: "one", operationId: "a", status: "playing" });
+    recorder.snapshot();
+
+    const second = recorder.snapshot();
+    expect(second.activePlayers).toBe(1);
+    expect(second.playersByStatus).toMatchObject({ playing: 1 });
+    expect(second.nodes.map((node) => node.nodeId)).toEqual(["one"]);
+    expect(second.health).toBe("healthy");
+  });
+
+  it("reports counts since the previous sweep in the status line", () => {
+    const recorder = metrics(() => 1_000);
+
+    recorder.recordStateEvent({
+      guildId: "guild-1",
+      queueRevision: 1,
+      nodeId: "one",
+      operationId: "a",
+      errorCode: "MUSIC_CONFLICT",
+      status: "unavailable",
+    });
+
+    expect(recorder.statusLine()).toContain("conflicts=1");
+    expect(recorder.statusLine()).toContain("conflicts=0");
+  });
+
   it("drops malformed events instead of corrupting the rollup", () => {
     const recorder = metrics(() => 1_000);
 

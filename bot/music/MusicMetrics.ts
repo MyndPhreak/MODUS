@@ -55,8 +55,10 @@ export interface MusicNodeLoad {
 export interface MusicMetricsSnapshot {
   health: MusicHealth;
   shardId: number;
+  /** Gauge — guilds this shard serves, by their latest published status. */
   activePlayers: number;
   playersByStatus: Record<MusicPlayerStatus, number>;
+  /** Counters and latencies below are deltas since the previous snapshot. */
   counters: {
     /** Every observed operation, command and playback alike. */
     commands: MusicCounter[];
@@ -97,6 +99,15 @@ export interface MusicMetricsOptions {
   shardId: number;
   /** Live Lavalink node health, read on demand rather than polled. */
   nodes: () => readonly NodeSnapshot[];
+  /**
+   * True when this process is the shard serving `guildId`.
+   *
+   * `CHANNEL_MUSIC_STATE` is a fleet-wide channel, so every shard receives
+   * every other shard's events. Without this predicate each shard would stamp
+   * its own `shardId` on other shards' guilds, and an N-shard fleet would
+   * count each event N times. Omitted (single process) means own everything.
+   */
+  ownsGuild?: (guildId: string) => boolean;
   now?: () => number;
   /** How long a failure keeps the subsystem `degraded`. */
   failureWindowMs?: number;
@@ -139,13 +150,18 @@ class LatencySeries {
     if (milliseconds > this.maxMs) this.maxMs = milliseconds;
   }
 
-  summary(): MusicLatencySummary {
-    return {
+  /** Reads the interval's summary and starts the next one. */
+  drain(): MusicLatencySummary {
+    const summary: MusicLatencySummary = {
       count: this.count,
       totalMs: this.totalMs,
       maxMs: this.maxMs,
       averageMs: this.count === 0 ? 0 : this.totalMs / this.count,
     };
+    this.count = 0;
+    this.totalMs = 0;
+    this.maxMs = 0;
+    return summary;
   }
 }
 
@@ -162,15 +178,16 @@ class LatencySeries {
 export class MusicMetrics {
   private readonly shardId: number;
   private readonly nodes: () => readonly NodeSnapshot[];
+  private readonly ownsGuild: (guildId: string) => boolean;
   private readonly now: () => number;
   private readonly failureWindowMs: number;
 
-  private readonly counters = new Map<string, MusicCounter>();
-  private readonly failures = new Map<string, MusicCounter>();
-  private readonly queueConflicts = new Map<string, MusicCounter>();
-  private readonly resolutionFailures = new Map<string, MusicCounter>();
-  private readonly recoveryAttempts = new Map<string, MusicCounter>();
-  private readonly leaseFencings = new Map<string, MusicCounter>();
+  private counters = new Map<string, MusicCounter>();
+  private failures = new Map<string, MusicCounter>();
+  private queueConflicts = new Map<string, MusicCounter>();
+  private resolutionFailures = new Map<string, MusicCounter>();
+  private recoveryAttempts = new Map<string, MusicCounter>();
+  private leaseFencings = new Map<string, MusicCounter>();
   private readonly guilds = new Map<string, GuildObservation>();
   private readonly commandToAudio = new LatencySeries();
   private readonly recoveryGap = new LatencySeries();
@@ -183,6 +200,7 @@ export class MusicMetrics {
 
     this.shardId = options.shardId;
     this.nodes = options.nodes;
+    this.ownsGuild = options.ownsGuild ?? (() => true);
     this.now = options.now ?? Date.now;
     this.failureWindowMs = options.failureWindowMs ?? DEFAULT_FAILURE_WINDOW_MS;
   }
@@ -201,10 +219,12 @@ export class MusicMetrics {
   /**
    * Folds one durable state event into the rollup. Malformed payloads are
    * dropped: this stream crosses a Redis boundary, and one bad publisher must
-   * not corrupt the health verdict.
+   * not corrupt the health verdict. Guilds this shard does not serve are
+   * dropped too — their owning shard records them under its own `shardId`.
    */
   recordStateEvent(event: MusicStateEvent): void {
     if (!isStateEvent(event)) return;
+    if (!this.owns(event.guildId)) return;
 
     const at = this.now();
     const operation = classifyOperation(event.operationId);
@@ -263,33 +283,55 @@ export class MusicMetrics {
     return "healthy";
   }
 
+  /**
+   * Reads the rollup and **drains** the interval counters.
+   *
+   * Counters are reported as deltas rather than lifetime totals because their
+   * key includes `queueRevision`, which bumps on every queue mutation — keeping
+   * them cumulatively would grow one map entry per guild per revision per
+   * operation class for the life of a process that runs for weeks. The single
+   * consumer (`statusLine()`, once per 5-minute sweep) only ever sums them, so
+   * nothing needs the per-revision history. Gauges — health, node load, and
+   * players by status — are current-state and are not drained.
+   */
   snapshot(): MusicMetricsSnapshot {
     const playersByStatus = emptyStatusCounts();
     for (const observation of this.guilds.values()) {
       if (observation.status) playersByStatus[observation.status] += 1;
     }
 
+    const counters = {
+      commands: series(this.counters),
+      failures: series(this.failures),
+      queueConflicts: series(this.queueConflicts),
+      resolutionFailures: series(this.resolutionFailures),
+      recoveryAttempts: series(this.recoveryAttempts),
+      leaseFencings: series(this.leaseFencings),
+    };
+    this.counters = new Map();
+    this.failures = new Map();
+    this.queueConflicts = new Map();
+    this.resolutionFailures = new Map();
+    this.recoveryAttempts = new Map();
+    this.leaseFencings = new Map();
+
     return {
       health: this.health(),
       shardId: this.shardId,
       activePlayers: AUDIBLE_STATUSES.reduce((total, status) => total + playersByStatus[status], 0),
       playersByStatus,
-      counters: {
-        commands: series(this.counters),
-        failures: series(this.failures),
-        queueConflicts: series(this.queueConflicts),
-        resolutionFailures: series(this.resolutionFailures),
-        recoveryAttempts: series(this.recoveryAttempts),
-        leaseFencings: series(this.leaseFencings),
-      },
-      commandToAudioLatencyMs: this.commandToAudio.summary(),
-      recoveryGapMs: this.recoveryGap.summary(),
+      counters,
+      commandToAudioLatencyMs: this.commandToAudio.drain(),
+      recoveryGapMs: this.recoveryGap.drain(),
       resolutionLatencyMs: { count: 0, totalMs: 0, maxMs: 0, averageMs: 0 },
       nodes: this.nodes().map(toNodeLoad),
     };
   }
 
-  /** One-line rollup for the periodic status sweep. */
+  /**
+   * One-line rollup for the periodic status sweep. Drains the interval
+   * counters via `snapshot()`, so the counts are "since the last sweep".
+   */
   statusLine(): string {
     const snapshot = this.snapshot();
     const nodes = snapshot.nodes.filter((node) => node.available).length;
@@ -299,6 +341,18 @@ export class MusicMetrics {
       + ` conflicts=${total(snapshot.counters.queueConflicts)}`
       + ` recoveries=${total(snapshot.counters.recoveryAttempts)}`
       + ` fenced=${total(snapshot.counters.leaseFencings)}`;
+  }
+
+  /**
+   * Whether this process serves the guild. A throwing predicate is treated as
+   * "not ours": observability must never take down the event subscriber.
+   */
+  private owns(guildId: string): boolean {
+    try {
+      return this.ownsGuild(guildId);
+    } catch {
+      return false;
+    }
   }
 
   /**
