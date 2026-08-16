@@ -175,7 +175,7 @@ describe("LavalinkAdapter", () => {
     expect(shoukakuMock.connectors).toEqual([{ client }]);
     expect(shoukakuMock.instances).toHaveLength(1);
     expect(manager().options).toMatchObject({
-      resume: true,
+      resume: false,
       resumeByLibrary: false,
       reconnectTries: Number.MAX_SAFE_INTEGER,
       reconnectInterval: 5,

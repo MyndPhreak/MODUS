@@ -250,8 +250,8 @@ export class LavalinkAdapter extends EventEmitter {
       });
 
       const manager = new Shoukaku(new Connectors.DiscordJS(this.#client), nodes, {
-        resume: true,
-        resumeTimeout: 60,
+        resume: false,
+        resumeTimeout: 30,
         resumeByLibrary: false,
         reconnectTries: Number.MAX_SAFE_INTEGER,
         reconnectInterval: 5,
@@ -273,7 +273,7 @@ export class LavalinkAdapter extends EventEmitter {
         this.#heartbeatTimer = setInterval(async () => {
           if (!this.#manager || !this.#client.isReady()) return;
           for (const node of this.#manager.nodes.values()) {
-            if (node.state === 3 /* DISCONNECTED */) {
+            if ((node.state as number) !== 1 /* CONNECTED */) {
               const config = this.#registry.snapshots().find((s) => s.id === node.name);
               const nodeConfig = config ? this.#registry.getConfig(config.id) : undefined;
               if (nodeConfig) {
@@ -283,8 +283,11 @@ export class LavalinkAdapter extends EventEmitter {
                     headers: { Authorization: nodeConfig.password },
                     signal: AbortSignal.timeout(2000),
                   });
-                  if (res.ok && node.state === 3) {
-                    console.log(`[Music] Lavalink node "${node.name}" REST endpoint is reachable, initiating WebSocket connect...`);
+                  if (res.ok && (node.state as number) !== 1) {
+                    console.log(`[Music] Lavalink node "${node.name}" REST is healthy — reconnecting WebSocket...`);
+                    const nodeAny = node as any;
+                    nodeAny.cleanupWebsocket();
+                    nodeAny.state = 3 /* DISCONNECTED */;
                     node.connect().catch(() => {});
                   }
                 } catch {
