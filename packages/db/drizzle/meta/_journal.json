@@ -50,6 +50,13 @@
       "when": 1786829734226,
       "tag": "0006_music_playback_state",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786857746094,
+      "tag": "0007_exotic_sir_ram",
+      "breakpoints": true
     }
   ]
 }

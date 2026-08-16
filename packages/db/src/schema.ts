@@ -787,6 +787,7 @@ export const musicSessions = pgTable(
     checkpointedAt: timestamp("checkpointed_at", { withTimezone: true }),
     volume: integer("volume").notNull().default(100),
     repeatMode: text("repeat_mode").notNull().default("off"),
+    autoplay: boolean("autoplay").notNull().default(false),
     filters: jsonb("filters")
       .notNull()
       .default(sql`'{}'::jsonb`)

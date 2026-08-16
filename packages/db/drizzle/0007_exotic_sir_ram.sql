@@ -1,0 +1,1 @@
+ALTER TABLE "music_sessions" ADD COLUMN "autoplay" boolean DEFAULT false NOT NULL;

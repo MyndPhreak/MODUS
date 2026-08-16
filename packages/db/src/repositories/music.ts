@@ -43,6 +43,7 @@ export interface DurableMusicQueueSnapshot {
   checkpointPositionMs: number;
   checkpointedAt: Date | null;
   repeatMode: MusicRepeatModeData;
+  autoplay: boolean;
   volume: number;
   filters: Record<string, unknown>;
   assignedNodeId: string | null;
@@ -85,6 +86,7 @@ export interface MusicCheckpointInput {
   checkpointedAt?: Date;
   volume?: number;
   repeatMode?: MusicRepeatModeData;
+  autoplay?: boolean;
   filters?: Record<string, unknown>;
 }
 
@@ -156,6 +158,7 @@ export class MusicRepository {
         checkpointPositionMs: session.checkpointPositionMs,
         checkpointedAt: session.checkpointedAt,
         repeatMode: session.repeatMode as MusicRepeatModeData,
+        autoplay: session.autoplay ?? false,
         volume: session.volume,
         filters: session.filters,
         assignedNodeId: session.assignedNodeId,
@@ -436,6 +439,7 @@ export class MusicRepository {
     };
     if (input.volume !== undefined) patch.volume = input.volume;
     if (input.repeatMode !== undefined) patch.repeatMode = input.repeatMode;
+    if (input.autoplay !== undefined) patch.autoplay = input.autoplay;
     if (input.filters !== undefined) patch.filters = input.filters;
 
     const [updated] = await this.db
@@ -512,6 +516,7 @@ export class MusicRepository {
       };
       if (input.checkpoint.volume !== undefined) patch.volume = input.checkpoint.volume;
       if (input.checkpoint.repeatMode !== undefined) patch.repeatMode = input.checkpoint.repeatMode;
+      if (input.checkpoint.autoplay !== undefined) patch.autoplay = input.checkpoint.autoplay;
       if (input.checkpoint.filters !== undefined) patch.filters = input.checkpoint.filters;
 
       await tx
@@ -563,6 +568,7 @@ function emptySnapshot(guildId: string): DurableMusicQueueSnapshot {
     checkpointPositionMs: 0,
     checkpointedAt: null,
     repeatMode: "off",
+    autoplay: false,
     volume: 100,
     filters: {},
     assignedNodeId: null,
