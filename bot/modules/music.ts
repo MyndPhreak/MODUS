@@ -480,6 +480,56 @@ const filterCommand = new SlashCommandBuilder()
       ),
   );
 
+const lyricsCommand = new SlashCommandBuilder()
+  .setName("lyrics")
+  .setDescription("Get lyrics for the current song or search for a song")
+  .addStringOption((opt) =>
+    opt
+      .setName("song")
+      .setDescription("Song name or artist (leave blank for current playing song)")
+      .setRequired(false),
+  )
+  .addBooleanOption((opt) =>
+    opt
+      .setName("dm")
+      .setDescription("Send lyrics privately to your DM instead of the channel")
+      .setRequired(false),
+  );
+
+const autoplayCommand = new SlashCommandBuilder()
+  .setName("autoplay")
+  .setDescription("Toggle smart autoplay (plays recommended tracks when queue ends)")
+  .addBooleanOption((opt) =>
+    opt
+      .setName("enabled")
+      .setDescription("Enable or disable autoplay")
+      .setRequired(true),
+  );
+
+const speedCommand = new SlashCommandBuilder()
+  .setName("speed")
+  .setDescription("Set playback speed (0.5x - 2.0x)")
+  .addNumberOption((opt) =>
+    opt
+      .setName("rate")
+      .setDescription("Playback speed multiplier (e.g. 1.25, 0.8)")
+      .setRequired(true)
+      .setMinValue(0.5)
+      .setMaxValue(2.0),
+  );
+
+const pitchCommand = new SlashCommandBuilder()
+  .setName("pitch")
+  .setDescription("Set playback pitch (0.5x - 2.0x)")
+  .addNumberOption((opt) =>
+    opt
+      .setName("level")
+      .setDescription("Pitch multiplier (e.g. 1.2, 0.9)")
+      .setRequired(true)
+      .setMinValue(0.5)
+      .setMaxValue(2.0),
+  );
+
 // ─── Presentation Helpers ────────────────────────────────────────────────
 
 interface DisplayTrack {
@@ -547,6 +597,11 @@ function buildNowPlayingButtons(
       .setEmoji("⏹️")
       .setLabel("Stop")
       .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("music:lyrics")
+      .setEmoji("📜")
+      .setLabel("Lyrics")
+      .setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -579,6 +634,7 @@ function buildNowPlayingCard(
         inline: true,
       },
       { name: "Loop", value: loopModeToString(snapshot.repeatMode), inline: true },
+      { name: "Autoplay", value: snapshot.autoplay ? "✅ On" : "❌ Off", inline: true },
     ],
     footer: `Volume: ${snapshot.volume}%`,
     components: [buildNowPlayingButtons(isPaused)],
@@ -1381,6 +1437,206 @@ async function handleFilter(
   });
 }
 
+async function handleLyrics(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const songQuery = interaction.options.getString("song");
+  const sendToDm = interaction.options.getBoolean("dm") ?? false;
+
+  let query = songQuery?.trim();
+  if (!query) {
+    const snapshot = await runtime.musicService.getQueue(guildId);
+    const current = currentEntry(snapshot);
+    if (!current) {
+      await interaction.editReply({
+        content: "❌ Nothing is currently playing. Specify a song name to search: `/lyrics song:<name>`",
+      });
+      return;
+    }
+    query = `${current.track.artists[0] ?? ""} ${current.track.title}`.trim();
+  }
+
+  const lyricsRes = await runtime.musicService.getLyrics(guildId, query);
+  if (!lyricsRes.ok) {
+    await interaction.editReply({
+      content: `❌ No lyrics found for **${query}**.`,
+    });
+    return;
+  }
+
+  const lyrics = lyricsRes.value;
+  const lines = lyrics.lines.map((l) => l.text).join("\n");
+  const truncated = lines.length > 3900 ? `${lines.slice(0, 3900)}\n\n*(lyrics truncated)*` : lines;
+
+  const components = buildV2Layout({
+    title: `📜 ${lyrics.trackTitle || query}`,
+    description: `${lyrics.artist ? `**${lyrics.artist}**\n\n` : ""}${truncated || "No lyrics content available."}`,
+    footer: `Source: ${lyrics.source || "LRCLIB"} • Synced: ${lyrics.synced ? "Yes" : "No"}`,
+    color: 0x9333ea,
+    useContainer: true,
+  });
+
+  if (sendToDm) {
+    try {
+      await interaction.user.send({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
+      await interaction.editReply({
+        content: `📬 Sent lyrics for **${lyrics.trackTitle || query}** to your DMs!`,
+      });
+    } catch {
+      await interaction.editReply({
+        content: "❌ Could not send DM. Please check your Discord privacy settings.",
+      });
+    }
+  } else {
+    await interaction.editReply({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
+  }
+}
+
+async function handleAutoplay(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const enabled = interaction.options.getBoolean("enabled", true);
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "autoplay",
+    enabled,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: `📻 Autoplay ${enabled ? "Enabled" : "Disabled"}`,
+      description: enabled
+        ? "When the queue ends, the bot will automatically find and play recommended tracks!"
+        : "Autoplay is now turned off. Playback will stop when the queue finishes.",
+      color: enabled ? 0x57f287 : 0xed4245,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
+
+async function handleSpeed(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const rate = interaction.options.getNumber("rate", true);
+
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const currentFilters = { ...(snapshot.filters ?? {}) };
+  const currentTimescale = (currentFilters.timescale as Record<string, number> | undefined) ?? {};
+
+  const updatedFilters = {
+    ...currentFilters,
+    timescale: {
+      ...currentTimescale,
+      speed: rate,
+      rate: 1,
+    },
+  };
+
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "filters",
+    filters: updatedFilters,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: "⚡ Playback Speed Updated",
+      description: `Speed set to **${rate}x** (pitch preserved).`,
+      color: 0x5865f2,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
+
+async function handlePitch(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const level = interaction.options.getNumber("level", true);
+
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const currentFilters = { ...(snapshot.filters ?? {}) };
+  const currentTimescale = (currentFilters.timescale as Record<string, number> | undefined) ?? {};
+
+  const updatedFilters = {
+    ...currentFilters,
+    timescale: {
+      ...currentTimescale,
+      pitch: level,
+    },
+  };
+
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "filters",
+    filters: updatedFilters,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: "🎵 Playback Pitch Updated",
+      description: `Pitch set to **${level}x**.`,
+      color: 0x5865f2,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
+
 async function handlePlayQueue(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
@@ -1886,6 +2142,10 @@ const musicModule: BotModule = {
     loopCommand.toJSON(),
     settingsCommand.toJSON(),
     filterCommand.toJSON(),
+    lyricsCommand.toJSON(),
+    autoplayCommand.toJSON(),
+    speedCommand.toJSON(),
+    pitchCommand.toJSON(),
   ],
 
   registerEvents: registerMusicEvents,
@@ -2014,6 +2274,14 @@ const musicModule: BotModule = {
         return handleSettings(interaction, moduleManager);
       case "filter":
         return handleFilter(interaction, moduleManager);
+      case "lyrics":
+        return handleLyrics(interaction, moduleManager);
+      case "autoplay":
+        return handleAutoplay(interaction, moduleManager);
+      case "speed":
+        return handleSpeed(interaction, moduleManager);
+      case "pitch":
+        return handlePitch(interaction, moduleManager);
       default:
         await interaction.editReply({ content: "❓ Unknown command." });
     }
@@ -2110,6 +2378,31 @@ const musicModule: BotModule = {
         await interaction.update({
           components: buildV2Layout({
             description: "⏭️ Skipped.",
+            useContainer: true,
+          }),
+          flags: MessageFlags.IsComponentsV2,
+        });
+        break;
+      }
+      case "lyrics": {
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+        const lyricsRes = await runtime.musicService.getLyrics(guildId);
+        if (!lyricsRes.ok) {
+          await interaction.editReply({
+            content: "❌ No lyrics found for the current track.",
+          });
+          return;
+        }
+        const lyrics = lyricsRes.value;
+        const lines = lyrics.lines.map((l) => l.text).join("\n");
+        const truncated = lines.length > 3900 ? `${lines.slice(0, 3900)}\n\n*(lyrics truncated)*` : lines;
+
+        await interaction.editReply({
+          components: buildV2Layout({
+            title: `📜 Lyrics: ${lyrics.trackTitle || entry.track.title}`,
+            description: `${lyrics.artist ? `**${lyrics.artist}**\n\n` : ""}${truncated || "No lyrics content available."}`,
+            footer: `Source: ${lyrics.source || "LRCLIB"}`,
+            color: 0x9333ea,
             useContainer: true,
           }),
           flags: MessageFlags.IsComponentsV2,

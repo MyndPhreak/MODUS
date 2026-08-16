@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   DurableMusicQueueSnapshot,
   MusicApplyMutationInput,
@@ -33,6 +34,7 @@ import type { NodeRegistry } from "./NodeRegistry";
 import { scoreTrackMatch } from "./track-matching";
 import type {
   CanonicalTrack,
+  LyricsData,
   MusicCommand,
   MusicPlayerState,
   MusicQueueSnapshot,
@@ -281,6 +283,17 @@ export class LavalinkMusicService implements MusicService {
     return toQueueSnapshot(await this.repository.readSnapshot(guildId));
   }
 
+  async getLyrics(guildId: string, query?: string): Promise<MusicResult<LyricsData>> {
+    validateGuildId(guildId);
+    const durable = await this.repository.readSnapshot(guildId);
+    const current = durable.entries.find((entry) => entry.id === durable.currentEntryId);
+    return this.adapter.getLyrics({
+      guildId,
+      track: current?.track,
+      query,
+    });
+  }
+
   async isActive(guildId: string): Promise<boolean> {
     validateGuildId(guildId);
     if (this.adapter.getPlayer(guildId)) return true;
@@ -410,6 +423,7 @@ export class LavalinkMusicService implements MusicService {
       case "seek":
       case "volume":
       case "repeat":
+      case "autoplay":
       case "filters":
         return this.executeCheckpointCommand(command);
       case "skip":
@@ -677,6 +691,7 @@ export class LavalinkMusicService implements MusicService {
       checkpointedAt: new Date(this.now()),
       ...(command.type === "volume" ? { volume: command.volume } : {}),
       ...(command.type === "repeat" ? { repeatMode: command.repeatMode } : {}),
+      ...(command.type === "autoplay" ? { autoplay: command.enabled } : {}),
       ...(command.type === "filters" ? { filters: command.filters } : {}),
     };
     const committed = await this.repository.applyCheckpointOperation({
@@ -690,7 +705,7 @@ export class LavalinkMusicService implements MusicService {
       return { ok: true, value: toQueueSnapshot(latest) };
     }
 
-    if (command.type === "repeat") {
+    if (command.type === "repeat" || command.type === "autoplay") {
       return { ok: true, value: await this.getQueue(command.guildId) };
     }
     if (!player) {
@@ -827,7 +842,63 @@ export class LavalinkMusicService implements MusicService {
     }
 
     const next = nextPlayableEntry(after, finished?.id ?? null);
-    if (!next) return this.destroyCommittedPlayer(guildId, revision, operationId);
+    if (!next) {
+      if (durable.autoplay && finished?.track) {
+        const query = `${finished.track.artists[0] ?? ""} ${finished.track.title}`.trim();
+        const loadResult = await this.adapter.loadTracks({
+          guildId,
+          input: `ytsearch:${query} mix`,
+          requestedBy: "Autoplay",
+          requestType: "search",
+          source: "youtube",
+        });
+
+        if (loadResult.ok && loadResult.value.candidates.length > 0) {
+          const existingTitles = new Set(durable.entries.map((e) => e.track.title.toLowerCase().trim()));
+          const candidate = loadResult.value.candidates.find(
+            (c) => !existingTitles.has(c.track.title.toLowerCase().trim()) && c.track.title.toLowerCase() !== finished.track.title.toLowerCase(),
+          ) ?? loadResult.value.candidates[0];
+
+          if (candidate) {
+            const autoTrack: CanonicalTrack = {
+              ...candidate.track,
+              requestedBy: "Autoplay",
+              requestedAt: new Date(this.now()).toISOString(),
+            };
+            const insertOpId = `autoplay_${operationId}_${randomUUID()}`;
+            const inserted = await this.repository.applyMutation({
+              guildId,
+              operationId: insertOpId,
+              expectedRevision: revision,
+              mutation: {
+                type: "insert",
+                entry: {
+                  id: autoTrack.id,
+                  track: autoTrack,
+                  requesterId: "Autoplay",
+                  status: "ready",
+                  matchSource: autoTrack.playbackSource?.name ?? null,
+                  matchConfidence: autoTrack.matchConfidence ?? null,
+                },
+                position: after.entries.length,
+              },
+            });
+
+            const freshDurable = await this.repository.readSnapshot(guildId);
+            const freshNext = freshDurable.entries.find((e) => e.id === autoTrack.id);
+            if (freshNext) {
+              return this.dispatchEntry({
+                durable: { ...freshDurable, revision: inserted.revision },
+                entry: freshNext,
+                operationId: `dispatch_${insertOpId}`,
+              });
+            }
+          }
+        }
+      }
+
+      return this.destroyCommittedPlayer(guildId, revision, operationId);
+    }
     return this.dispatchEntry({ durable: { ...after, revision }, entry: next, operationId });
   }
 
@@ -1100,6 +1171,11 @@ function validateCommand(command: MusicCommand): MusicError | null {
           throw new Error("repeatMode is invalid.");
         }
         break;
+      case "autoplay":
+        if (typeof command.enabled !== "boolean") {
+          throw new Error("autoplay is invalid.");
+        }
+        break;
       case "filters":
         if (!command.filters || typeof command.filters !== "object" || Array.isArray(command.filters)) {
           throw new Error("filters are invalid.");
@@ -1200,6 +1276,7 @@ function toQueueSnapshot(snapshot: DurableMusicQueueSnapshot): MusicQueueSnapsho
     })),
     currentEntryId: snapshot.currentEntryId,
     repeatMode: snapshot.repeatMode,
+    autoplay: snapshot.autoplay,
     volume: snapshot.volume,
     filters: snapshot.filters,
   };

@@ -38,12 +38,27 @@ export interface MusicQueueEntry {
   status: "pending" | "ready" | "playing" | "failed";
 }
 
+export interface LyricsLine {
+  timeMs?: number;
+  text: string;
+}
+
+export interface LyricsData {
+  trackTitle?: string;
+  artist?: string;
+  source?: string;
+  synced: boolean;
+  lines: LyricsLine[];
+  text: string;
+}
+
 export interface MusicQueueSnapshot {
   guildId: string;
   revision: number;
   entries: MusicQueueEntry[];
   currentEntryId: string | null;
   repeatMode: MusicRepeatMode;
+  autoplay: boolean;
   volume: number;
   filters: MusicFilters;
 }
@@ -81,4 +96,5 @@ export type MusicCommand =
   | (MusicMutation & { type: "queue.shuffle" })
   | (MusicMutation & { type: "volume"; volume: number })
   | (MusicMutation & { type: "repeat"; repeatMode: MusicRepeatMode })
+  | (MusicMutation & { type: "autoplay"; enabled: boolean })
   | (MusicMutation & { type: "filters"; filters: MusicFilters });
