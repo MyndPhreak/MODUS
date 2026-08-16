@@ -97,6 +97,9 @@ plugins:
     # Upstream's documented default client set for 1.18.1, in query order.
     # Every one of these works unauthenticated: there is deliberately no
     # `oauth:` block and no `pot:` block. Do not add them.
+    oauth:
+      enabled: true
+      skipInitialization: false
     clients:
       - MUSIC
       - TVHTML5_SIMPLY
