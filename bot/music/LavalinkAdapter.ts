@@ -454,10 +454,13 @@ export class LavalinkAdapter extends EventEmitter {
     // 1. Try LavaLyrics via Lavalink node REST if node is available
     if (node && node.sessionId) {
       try {
+        const nodeAny = node as any;
+        const rawUrl = nodeAny.rest?.url || nodeAny.url || (nodeAny.options?.secure ? `https://${nodeAny.options?.url}` : `http://${nodeAny.options?.url}`);
+        const auth = nodeAny.rest?.auth || nodeAny.auth || nodeAny.options?.auth;
         const queryParams = request.query ? `?query=${encodeURIComponent(request.query)}` : "";
-        const url = `${node.url}/v4/sessions/${node.sessionId}/players/${request.guildId}/track/lyrics${queryParams}`;
+        const url = `${rawUrl}/v4/sessions/${node.sessionId}/players/${request.guildId}/track/lyrics${queryParams}`;
         const res = await fetch(url, {
-          headers: { Authorization: node.auth },
+          headers: auth ? { Authorization: auth } : {},
           signal: AbortSignal.timeout(3000),
         });
         if (res.ok) {

@@ -64,6 +64,7 @@ interface CoordinatorAdapter {
   getPlayer: LavalinkAdapter["getPlayer"];
   destroyPlayer: LavalinkAdapter["destroyPlayer"];
   transferPlayer: LavalinkAdapter["transferPlayer"];
+  getLyrics: LavalinkAdapter["getLyrics"];
 }
 
 interface MusicEventPublisher {
@@ -678,7 +679,7 @@ export class LavalinkMusicService implements MusicService {
   }
 
   private async executeCheckpointCommand(
-    command: Extract<MusicCommand, { type: "pause" | "resume" | "seek" | "volume" | "repeat" | "filters" }>,
+    command: Extract<MusicCommand, { type: "pause" | "resume" | "seek" | "volume" | "repeat" | "autoplay" | "filters" }>,
   ): Promise<MusicResult<MusicQueueSnapshot>> {
     const durable = await this.repository.readSnapshot(command.guildId);
     const player = this.adapter.getPlayer(command.guildId);

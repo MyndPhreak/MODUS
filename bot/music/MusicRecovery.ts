@@ -467,6 +467,7 @@ function toQueueSnapshot(snapshot: DurableMusicQueueSnapshot): MusicQueueSnapsho
     })),
     currentEntryId: snapshot.currentEntryId,
     repeatMode: snapshot.repeatMode,
+    autoplay: snapshot.autoplay ?? false,
     volume: snapshot.volume,
     filters: snapshot.filters,
   };

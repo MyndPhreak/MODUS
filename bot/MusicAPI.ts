@@ -831,7 +831,7 @@ export function registerMusicAPI(
         const guildId = lyricsMatch[1];
         try {
           if (!musicRuntime) return sendUnavailable(res);
-          const query = parsedUrl.searchParams.get("query") ?? undefined;
+          const query = url.searchParams.get("query") ?? undefined;
           const result = await musicRuntime.musicService.getLyrics(guildId, query);
           if (!result.ok) {
             return sendJson(res, 404, { error: result.error.message });
