@@ -523,6 +523,41 @@ describe("music module command handlers", () => {
     expect(commandsOfType(harness.service, "stop")).toHaveLength(1);
   });
 
+  it("clears a queue whose remaining entries have all failed", async () => {
+    // A queue that only holds failed entries is still four rows in Postgres and
+    // still leaves music_sessions.current_entry_id pointing at one of them.
+    // Gating stop on playable entries made that state permanently unclearable:
+    // every clear path — /stop, the AI tool, the dashboard route, and the
+    // voice.closed cleanup — refused with "nothing is playing" while the rows
+    // stayed put, and they survived restarts because startup recovery skips
+    // sessions whose current entry is not playing/ready.
+    const harness = createHarness({
+      queue: snapshot({
+        currentEntryId: "entry-2",
+        entries: [
+          { id: "entry-1", track: track("entry-1", "One"), position: 0, status: "failed" },
+          { id: "entry-2", track: track("entry-2", "Two"), position: 1, status: "failed" },
+        ],
+      }),
+    });
+
+    const stopped = await musicStop("guild-1", harness.moduleManager);
+
+    expect(stopped.ok).toBe(true);
+    expect(commandsOfType(harness.service, "stop")).toHaveLength(1);
+  });
+
+  it("still reports nothing to stop when the guild has no durable queue state at all", async () => {
+    const harness = createHarness({
+      queue: snapshot({ currentEntryId: null, entries: [] }),
+    });
+
+    const stopped = await musicStop("guild-1", harness.moduleManager);
+
+    expect(stopped.ok).toBe(false);
+    expect(commandsOfType(harness.service, "stop")).toHaveLength(0);
+  });
+
   it("surfaces a stable music error code instead of throwing", async () => {
     const harness = createHarness({
       queue: snapshot({

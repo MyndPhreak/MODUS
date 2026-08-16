@@ -286,6 +286,21 @@ function currentEntry(snapshot: MusicQueueSnapshot): MusicQueueEntry | null {
   return snapshot.entries.find((entry) => entry.id === snapshot.currentEntryId) ?? null;
 }
 
+/**
+ * Whether the guild has durable music state worth clearing.
+ *
+ * Deliberately NOT playableEntries(): a failed entry is still a row in
+ * Postgres, and the session's current_entry_id can still point at one. Gating
+ * stop on playability made that state permanently unclearable — every path
+ * (/stop, the AI tool, the dashboard route, and the voice.closed cleanup)
+ * answered "nothing is playing" while the rows stayed put, and they outlived
+ * restarts because startup recovery skips sessions whose current entry is not
+ * playing or ready. Stop is the escape hatch, so it must see everything.
+ */
+function hasClearableState(snapshot: MusicQueueSnapshot): boolean {
+  return snapshot.entries.length > 0 || snapshot.currentEntryId !== null;
+}
+
 function upcomingEntries(snapshot: MusicQueueSnapshot): MusicQueueEntry[] {
   return playableEntries(snapshot).filter((entry) => entry.id !== snapshot.currentEntryId);
 }
@@ -975,10 +990,15 @@ async function handleStop(
   const runtime = requireRuntime(interaction, moduleManager);
   if (!runtime) return;
 
-  const snapshot = await requireQueue(interaction, runtime, false);
-  if (!snapshot) return;
-
+  // Not requireQueue(): stop has to reach a queue of nothing but failed
+  // entries, which is exactly the state a user cannot escape any other way.
   const guildId = interaction.guildId!;
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (!hasClearableState(snapshot)) {
+    await interaction.editReply({ content: NOTHING_PLAYING });
+    return;
+  }
+
   const result = await runMutation(runtime, guildId, (revision, operation) => ({
     type: "stop",
     guildId,
@@ -2571,7 +2591,7 @@ export async function musicStop(
   if (!runtime) return unavailable();
 
   const snapshot = await runtime.musicService.getQueue(guildId);
-  if (playableEntries(snapshot).length === 0) {
+  if (!hasClearableState(snapshot)) {
     return { ok: false, message: "Nothing is currently playing." };
   }
 

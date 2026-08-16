@@ -201,6 +201,15 @@ function currentEntry(snapshot: MusicQueueSnapshot): MusicQueueEntry | null {
 }
 
 /**
+ * Whether the guild has durable music state worth clearing. Mirrors the helper
+ * in modules/music.ts — a failed entry is still a durable row and can still be
+ * the session's current entry, so stop must not be gated on playability.
+ */
+function hasClearableState(snapshot: MusicQueueSnapshot): boolean {
+  return snapshot.entries.length > 0 || snapshot.currentEntryId !== null;
+}
+
+/**
  * The dashboard's `queue` array has always meant "tracks after this one", so
  * the current entry stays out of it and every index the dashboard sends back
  * is an index into this list.
@@ -726,7 +735,9 @@ export function registerMusicAPI(
           if (!musicRuntime) return sendUnavailable(res);
           const body = await parseBody(req);
           const snapshot = await musicRuntime.musicService.getQueue(guildId);
-          if (playableEntries(snapshot).length === 0) {
+          // hasClearableState, not playableEntries: stop is the only way out of
+          // a queue holding nothing but failed entries, so it must see them.
+          if (!hasClearableState(snapshot)) {
             return sendJson(res, 400, { error: NOTHING_PLAYING });
           }
 
