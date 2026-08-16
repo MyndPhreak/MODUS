@@ -481,7 +481,8 @@ export class LavalinkMusicService implements MusicService {
       if (durable.revision !== committed.revision) {
         return { ok: true, value: toQueueSnapshot(durable) };
       }
-      if (durable.currentEntryId && durable.currentEntryId !== entry.id) {
+      const replayActiveId = activeCurrentEntryId(durable);
+      if (replayActiveId && replayActiveId !== entry.id) {
         await this.repository.applyMutation({
           guildId: command.guildId,
           operationId: `${command.operationId}:ready`,
@@ -508,7 +509,7 @@ export class LavalinkMusicService implements MusicService {
     const entry = durable.entries.find((candidate) => candidate.id === command.track.id);
     if (!entry) throw new MusicQueueMutationError("The committed music entry could not be read.");
 
-    if (before.currentEntryId || this.adapter.getPlayer(command.guildId)) {
+    if (activeCurrentEntryId(before) || this.adapter.getPlayer(command.guildId)) {
       const ready = await this.repository.applyMutation({
         guildId: command.guildId,
         operationId: `${command.operationId}:ready`,
@@ -1208,6 +1209,23 @@ function positiveInteger(value: number, name: string): number {
 function nonNegativeInteger(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer.`);
   return value;
+}
+
+/**
+ * The entry a guild is genuinely mid-playback on, or null.
+ *
+ * A checkpointed current entry that has failed — or that no longer exists — is
+ * stale bookkeeping rather than playback. It can never end, so no track.end
+ * ever arrives to advance the queue, and treating it as an active session makes
+ * every later play commit its entry as "ready" and never dispatch it: the queue
+ * fills up with tracks that can never start. Only a live entry may hold the
+ * player.
+ */
+function activeCurrentEntryId(snapshot: DurableMusicQueueSnapshot): string | null {
+  if (!snapshot.currentEntryId) return null;
+  const entry = snapshot.entries.find((candidate) => candidate.id === snapshot.currentEntryId);
+  if (!entry || entry.status === "failed") return null;
+  return entry.id;
 }
 
 function playbackSource(track: CanonicalTrack): LavalinkSearchSource | null {

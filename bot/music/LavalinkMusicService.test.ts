@@ -357,6 +357,33 @@ describe("LavalinkMusicService", () => {
     }]);
   });
 
+  it("dispatches a new track when the checkpointed current entry has already failed", async () => {
+    // A failed current entry is stale bookkeeping, not playback: it can never
+    // end, so no track.end ever arrives to advance the queue. Treating it as an
+    // active session made every later /play commit the entry as "ready" and
+    // never dispatch it, so the guild accumulated songs that could not start.
+    const stalled: DurableMusicQueueSnapshot = {
+      ...emptySnapshot(5),
+      currentEntryId: "dead-entry",
+      entries: [{
+        id: "dead-entry",
+        track: track("dead-entry"),
+        requesterId: "user-1",
+        position: 0,
+        status: "failed",
+        matchSource: "youtube",
+        matchConfidence: 1,
+      }],
+    };
+    const { adapter, service } = setup(stalled);
+
+    const result = await service.execute(playCommand({ expectedRevision: 5 }));
+
+    expect(result.ok).toBe(true);
+    expect(adapter.playerUpdates).toHaveLength(1);
+    expect(adapter.playerUpdates[0]).toMatchObject({ guildId: "guild-1", voiceChannelId: "voice-1" });
+  });
+
   it("returns a stable conflict without leasing or dispatching when expectedRevision is stale", async () => {
     const { adapter, order, service } = setup(emptySnapshot(4));
 
