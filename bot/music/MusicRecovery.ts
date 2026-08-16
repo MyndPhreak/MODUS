@@ -3,6 +3,7 @@ import type {
   MusicCheckpointInput,
   MusicRepository,
 } from "@modus/db";
+import { CHANNEL_MUSIC_STATE } from "../EventBus";
 import { MusicError } from "./errors";
 import {
   GuildPlaybackLeaseOwnershipError,
@@ -22,7 +23,10 @@ import type {
   MusicResult,
 } from "./types";
 
-export const CHANNEL_MUSIC_STATE = "modus:realtime:music";
+// The channel itself is declared with every other realtime channel in
+// bot/EventBus.ts (kept in sync with web/server/utils/eventbus.ts) and
+// re-exported here so music callers keep importing it from the music package.
+export { CHANNEL_MUSIC_STATE };
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 100;

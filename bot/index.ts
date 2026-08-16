@@ -441,7 +441,7 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
-  registerMusicAPI(server, client);
+  registerMusicAPI(server, client, musicRuntime);
   registerWebhookRoutes(server, client, databaseService);
   registerDocsAPI(server, moduleManager);
 });
