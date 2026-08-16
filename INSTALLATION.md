@@ -37,7 +37,7 @@ Music playback needs one extra secret shared between the bot and its Lavalink no
 
 ## Music Relay (Lavalink)
 
-Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` `1.18.2` plugin) configured by [lavalink/application.yml](lavalink/application.yml).
+Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` plugin, pinned to snapshot commit `02f536d9` for SABR and PoToken support) configured by [lavalink/application.yml](lavalink/application.yml).
 
 ### 1. Set the node password
 
@@ -57,7 +57,7 @@ To rotate it, replace the value in both files and restart both services (`docker
 `LAVALINK_NODES_JSON` in `bot/.env` is a strict JSON array of relay nodes. The default entry matches the bundled service:
 
 ```json
-[{"id":"local","url":"http://lavalink:2333","password":"${LAVALINK_SERVER_PASSWORD}","region":"local","capabilities":["youtube"],"maxPlayers":20}]
+[{"id":"local","url":"http://lavalink:2333","password":"${LAVALINK_SERVER_PASSWORD}","region":"local","capabilities":["youtube","youtube-music","soundcloud"],"maxPlayers":20}]
 ```
 
 | Field | Meaning |
@@ -66,12 +66,27 @@ To rotate it, replace the value in both files and restart both services (`docker
 | `url` | Base URL. `http://lavalink:2333` on the Compose network; **HTTPS is required** for any address that isn't private. |
 | `password` | Literal, or `${NAME}` to read a deployment environment variable. |
 | `region` | Placement hint used to keep a guild near its voice region. |
-| `capabilities` | Sources the node can serve (`youtube`, `youtube-music`, `soundcloud`). Placement only considers nodes that advertise the requested source. |
+| `capabilities` | Sources the node can serve (`youtube`, `youtube-music`, `soundcloud`). Placement only considers nodes that advertise the requested source. Keep this in sync with the sources enabled in `lavalink/application.yml` — a source the node can resolve but does not advertise fails late, at placement, with a misleading `MUSIC_RELAY_OFFLINE`. |
 | `maxPlayers` | Concurrent-player ceiling before placement moves on to the next node. |
 
 Add more objects to the array to spread guilds across several nodes.
 
-### 3. Remote nodes (Tailscale only)
+### 3. YouTube access tokens (poToken)
+
+YouTube challenges unauthenticated extraction, and `youtube-source` answers it with a **poToken / visitorData** pair. Both are rotating session credentials, so they live in the environment rather than in the committed `lavalink/application.yml`. Add them to the **repo-root** `.env` (Compose passes them to the node):
+
+```sh
+PLUGINS_YOUTUBE_POT_TOKEN=…
+PLUGINS_YOUTUBE_POT_VISITORDATA=…
+```
+
+Mint a pair with the [youtube-source token generator](https://github.com/iv-org/youtube-trusted-session-generator) — both values must come from the **same** browser session or the pair is rejected. They expire: when YouTube playback starts failing on the `WEB` clients while `MUSIC` still works, regenerate and restart the node (`docker compose up -d lavalink`).
+
+Leaving both unset is supported — the plugin skips the poToken path entirely and falls back through the other clients in `application.yml`. Do **not** set them to empty strings: the plugin only checks for null, so a blank value applies a blank token instead of applying none.
+
+Signature deciphering is delegated to a remote cipher server (`plugins.youtube.remoteCipher.url`), which defaults to the public `https://cipher.kikkia.dev/`. That places a third party in the path of every YouTube playback. To remove the dependency, self-host [yt-cipher](https://github.com/kikkia/yt-cipher), point the URL at it, and set `PLUGINS_YOUTUBE_REMOTECIPHER_PASSWORD` if it requires auth.
+
+### 4. Remote nodes (Tailscale only)
 
 **Never expose Lavalink to the internet.** The bundled service intentionally does not publish port `2333` to the host — it is reachable only from the `modus` Docker network. To run a node on another machine, put both hosts on a [Tailscale](https://tailscale.com) tailnet and use the node's tailnet address:
 
@@ -81,7 +96,7 @@ LAVALINK_NODES_JSON=[{"id":"eu-1","url":"http://100.x.y.z:2333","password":"${LA
 
 Bind the remote node to its tailnet interface (or firewall `2333` to the tailnet) and leave it off any public interface. A node needs **no inbound access from the internet**, only outbound: HTTPS to the audio sources, HTTPS to `maven.lavalink.dev` on first boot to fetch the pinned plugin, and UDP to Discord's voice servers — the node connects to Discord voice directly, so a host that blocks outbound UDP will connect but never produce audio.
 
-### 4. Running without music
+### 5. Running without music
 
 Music is optional. Leave `LAVALINK_NODES_JSON` empty and the bot logs a warning at startup, skips the relay entirely, and answers every music command with a `MUSIC_RELAY_OFFLINE` error; tickets, moderation, recordings, and the rest of the bot are unaffected. The same applies while the node is merely down — the bot's own health check never fails because music is unavailable, and `bot` is deliberately **not** gated on Lavalink's health in `docker-compose.yml`, so a slow or unhealthy node can't keep the bot from starting. Queues live in Postgres, so playback resumes once a healthy node is back.
 
