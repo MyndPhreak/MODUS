@@ -1899,6 +1899,8 @@ async function handlePlaybackFailure(
     // handler and drop the music nickname without logging a false error.
     moduleManager.logger.info(`Voice connection closed in ${guildId}`, guildId, "music");
     await resetNicknameIfEnabled(moduleManager, guildId);
+    await musicStop(guildId, moduleManager).catch(() => {});
+    announceContexts.delete(guildId);
     return;
   }
 
@@ -1924,6 +1926,25 @@ async function registerMusicEvents(moduleManager: ModuleManager) {
       "music",
     );
     return;
+  }
+
+  if (typeof moduleManager.client?.on === "function") {
+    moduleManager.client.on("voiceStateUpdate", (oldState, newState) => {
+      if (
+        oldState.member?.id === moduleManager.client.user?.id
+        && oldState.channelId
+        && !newState.channelId
+      ) {
+        moduleManager.logger.info(
+          `Bot disconnected from voice in ${oldState.guild.id}, stopping music queue`,
+          oldState.guild.id,
+          "music",
+        );
+        void musicStop(oldState.guild.id, moduleManager).catch(() => {});
+        void resetNicknameIfEnabled(moduleManager, oldState.guild.id).catch(() => {});
+        announceContexts.delete(oldState.guild.id);
+      }
+    });
   }
 
   runtime.engine.on("playback", (event: MusicPlaybackEvent) => {
