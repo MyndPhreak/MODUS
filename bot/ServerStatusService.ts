@@ -1,14 +1,34 @@
 import { Client } from "discord.js";
 import { DatabaseService } from "./DatabaseService";
+import type { Logger } from "./Logger";
+import type { MusicMetrics } from "./music/MusicMetrics";
+
+export interface ServerStatusServiceOptions {
+  /**
+   * Where subsystem status is reported. The dashboard already streams the
+   * `logs` table in realtime, so this is the channel operators watch.
+   */
+  logger?: Logger;
+  /** Null when no Lavalink node is configured for this deployment. */
+  musicMetrics?: MusicMetrics | null;
+}
 
 export class ServerStatusService {
   private databaseService: DatabaseService;
   private client: Client;
+  private logger: Logger | null;
+  private musicMetrics: MusicMetrics | null;
   private checkInterval = 5 * 60 * 1000; // 5 minutes
 
-  constructor(client: Client, databaseService: DatabaseService) {
+  constructor(
+    client: Client,
+    databaseService: DatabaseService,
+    options: ServerStatusServiceOptions = {},
+  ) {
     this.client = client;
     this.databaseService = databaseService;
+    this.logger = options.logger ?? null;
+    this.musicMetrics = options.musicMetrics ?? null;
   }
 
   public start() {
@@ -17,7 +37,36 @@ export class ServerStatusService {
     setInterval(() => this.checkServers(), this.checkInterval);
   }
 
+  /**
+   * Reports the music control plane rollup alongside the guild sweep. Music
+   * health is subsystem status, not bot liveness — a degraded or unavailable
+   * fleet is logged, never escalated into a failed health check.
+   */
+  private reportMusicHealth() {
+    if (!this.musicMetrics || !this.logger) return;
+
+    try {
+      const health = this.musicMetrics.health();
+      const line = `[MusicHealth] ${this.musicMetrics.statusLine()}`;
+      if (health === "healthy") {
+        this.logger.info(line, undefined, "music");
+      } else if (health === "degraded") {
+        this.logger.warn(line, undefined, "music");
+      } else {
+        this.logger.warn(
+          `${line} — music commands report playback unavailable; other modules are unaffected.`,
+          undefined,
+          "music",
+        );
+      }
+    } catch (error) {
+      console.error("[ServerStatusService] Music health report failed:", error);
+    }
+  }
+
   private async checkServers() {
+    this.reportMusicHealth();
+
     const shardId = this.client.shard?.ids[0] ?? 0;
     const cachedGuilds = Array.from(this.client.guilds.cache.values());
 

@@ -9,6 +9,7 @@ import {
 } from "./LavalinkAdapter";
 import type { MusicPlaybackEvent } from "./LavalinkEvents";
 import { LavalinkMusicService, type AdvanceQueueOptions } from "./LavalinkMusicService";
+import { MusicMetrics } from "./MusicMetrics";
 import { CHANNEL_MUSIC_STATE, type MusicStateEvent, type RecoverGuildInput } from "./MusicRecovery";
 import type { MusicService } from "./MusicService";
 import { NodeRegistry } from "./NodeRegistry";
@@ -34,6 +35,11 @@ export interface MusicEngine {
 export interface MusicRuntime {
   readonly musicService: MusicService;
   readonly engine: MusicEngine;
+  /**
+   * Observability rollup for this process. Built here because it needs the
+   * node registry, which stays private to the control plane.
+   */
+  readonly metrics: MusicMetrics;
   /** Moves the durable queue on after a track ended on its own. */
   advance(
     guildId: string,
@@ -118,9 +124,15 @@ export function createMusicService(options: CreateMusicServiceOptions): MusicRun
     shardId,
   });
 
+  const metrics = new MusicMetrics({
+    shardId,
+    nodes: () => nodeRegistry.snapshots(),
+  });
+
   return {
     musicService,
     engine: adapter,
+    metrics,
 
     advance(guildId: string, options: AdvanceQueueOptions = {}) {
       return musicService.advanceQueue(guildId, `advance:${guildId}:${Date.now()}`, options);

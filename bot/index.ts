@@ -1,7 +1,4 @@
 import { Client, GatewayIntentBits, Events, Partials } from "discord.js";
-import { Player } from "discord-player";
-import { DefaultExtractors, SpotifyExtractor } from "@discord-player/extractor";
-import { YoutubeiExtractor } from "discord-player-youtubei";
 import http from "http";
 import path from "path";
 import fs from "fs";
@@ -23,12 +20,9 @@ import {
 } from "./RedisClient";
 import { EventBus } from "./EventBus";
 import { LeaderElection } from "./LeaderElection";
-import {
-  createYtDlpStreamFunction,
-  createSpotifyBridgeStreamFunction,
-} from "./lib/ytdlp-stream";
 import { registerMusicAPI } from "./MusicAPI";
 import { createMusicService } from "./music";
+import { botHealthResponse } from "./music/MusicMetrics";
 import { registerWebhookRoutes } from "./WebhookRouter";
 import { registerDocsAPI } from "./DocsAPI";
 
@@ -40,10 +34,6 @@ if (!process.env.PUBLIC_WEB_URL) {
     "[startup] PUBLIC_WEB_URL is not set — ticket close messages will omit the web transcript link.",
   );
 }
-
-// Silence verbose parsing warnings from youtubei.js
-import { Log } from "youtubei.js";
-Log.setLevel(Log.Level.ERROR);
 
 const client = new Client({
   intents: [
@@ -68,53 +58,6 @@ const client = new Client({
   ],
 });
 
-// Initialize discord-player
-const player = new Player(client, {
-  probeTimeout: 20000,
-  connectionTimeout: 20000,
-});
-
-// Load default extractors + YouTube extractor (removed from defaults in v7)
-// Load extractors before login
-async function loadExtractors() {
-  try {
-    await player.extractors.loadMulti(DefaultExtractors);
-    await player.extractors.register(YoutubeiExtractor, {
-      streamOptions: {
-        useClient: "TV_EMBEDDED",
-        highWaterMark: 1024 * 1024 * 10,
-      },
-      // Use yt-dlp for streaming — bypasses YouTube's 30-second throttle
-      createStream: createYtDlpStreamFunction,
-    } as any);
-
-    const spClientId =
-      process.env.DP_SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_ID || null;
-    const spClientSecret =
-      process.env.DP_SPOTIFY_CLIENT_SECRET ||
-      process.env.SPOTIFY_CLIENT_SECRET ||
-      null;
-
-    await player.extractors.register(SpotifyExtractor, {
-      clientId: spClientId,
-      clientSecret: spClientSecret,
-      createStream: createSpotifyBridgeStreamFunction,
-    } as any);
-
-    console.log(
-      "[Music] All extractors loaded:",
-      player.extractors.store.map((e) => e.identifier).join(", "),
-    );
-    console.log(
-      `[Music] Spotify API credentials: ${spClientId ? "✅ present" : "❌ missing"}`,
-    );
-  } catch (err) {
-    console.error("[Music] Failed to load extractors:", err);
-  }
-}
-// Expect loadExtractors to be awaited in the init flow or use top-level await if module
-// For now, we'll keep it as a promise chain or await it in client.once("ready")
-
 // Redis is optional: when REDIS_URL is unset, `clients` is null and
 // everything downstream falls back to in-process behavior (same as before).
 const redisClients: RedisClients | null = createRedisClients();
@@ -125,8 +68,7 @@ const eventBus: EventBus | null = redisClients
 const databaseService = new DatabaseService({ eventBus });
 const shardId = client.shard?.ids[0] ?? 0;
 const logger = new Logger(databaseService, shardId);
-const moduleManager = new ModuleManager(client, logger, player);
-const serverStatusService = new ServerStatusService(client, databaseService);
+const moduleManager = new ModuleManager(client, logger);
 
 // Lavalink music control plane. Built after the client, Redis, database, and
 // event bus exist; it connects and recovers dormant sessions once the gateway
@@ -144,6 +86,15 @@ const musicRuntime = createMusicService({
   },
 });
 moduleManager.music = musicRuntime;
+
+// Music observability. The rollup aggregates the durable state stream every
+// command result already publishes plus live node health, so nothing on the
+// playback path has to report metrics itself.
+const musicMetrics = musicRuntime?.metrics ?? null;
+const serverStatusService = new ServerStatusService(client, databaseService, {
+  logger,
+  musicMetrics,
+});
 
 client.once("ready", async () => {
   const shardIdStr = client.shard?.ids[0] ?? "N/A";
@@ -211,8 +162,6 @@ client.once("ready", async () => {
     }
   }
 
-  await loadExtractors();
-
   // Connect Lavalink and restore any session this shard owned before it
   // stopped, so modules register their playback listeners against a live
   // control plane.
@@ -221,6 +170,20 @@ client.once("ready", async () => {
       await musicRuntime.start();
     } catch (err) {
       logger.error("Failed to start the music service", undefined, err, "music");
+    }
+  }
+
+  // Aggregate the cross-shard music state stream. Without Redis there is no
+  // stream to read, so the rollup falls back to this process's node health.
+  if (musicMetrics && eventBus) {
+    try {
+      await musicMetrics.observe(eventBus);
+    } catch (err) {
+      logger.warn(
+        `Music metrics could not subscribe to the state stream: ${(err as Error).message}`,
+        undefined,
+        "music",
+      );
     }
   }
 
@@ -415,9 +378,13 @@ const basePort = parseInt(process.env.BOT_PORT || "3000");
 const shardOffset = client.shard?.ids[0] ?? 0;
 const PORT = basePort + (typeof shardOffset === "number" ? shardOffset : 0);
 
+// Liveness only. Music health rides along in the body so an operator can see
+// the control plane's state, but an unavailable Lavalink fleet never fails the
+// probe — every other module keeps serving.
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end(`OK (Shard ${shardOffset})`);
+  const health = botHealthResponse(shardOffset, musicMetrics?.health() ?? null);
+  res.writeHead(health.statusCode, { "Content-Type": "text/plain" });
+  res.end(health.body);
 });
 
 // Handle port-in-use gracefully (common during nodemon restarts)

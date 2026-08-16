@@ -206,7 +206,7 @@ function upcomingEntries(snapshot: MusicQueueSnapshot): MusicQueueEntry[] {
   return playableEntries(snapshot).filter((entry) => entry.id !== snapshot.currentEntryId);
 }
 
-/** discord-player's numeric repeat modes, kept for dashboard compatibility. */
+/** The dashboard's numeric repeat modes, kept from the pre-Lavalink contract. */
 function repeatModeToNumber(mode: MusicRepeatMode): number {
   return mode === "track" ? 1 : mode === "queue" ? 2 : 0;
 }
