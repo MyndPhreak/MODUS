@@ -22,10 +22,12 @@ server: # REST and WS server
 lavalink:
   plugins:
     # The built-in YouTube source is deprecated upstream and no longer updated;
-    # youtube-source replaces it. Pinned deliberately — bump this and the
-    # version referenced in INSTALLATION.md together.
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
-      snapshot: false
+    # youtube-source replaces it. Pinned to a snapshot commit deliberately (the
+    # SABR + PoToken work is not in a tagged release yet) — bump this, the
+    # version referenced in INSTALLATION.md, and the `clients:` list below
+    # together, since valid client names change between builds.
+    - dependency: "dev.lavalink.youtube:youtube-plugin:02f536d9ac05b4bb0f91dedc19f964f30fc18559"
+      snapshot: true
     - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
       snapshot: false
   server:
@@ -84,11 +86,11 @@ lavalink:
       socketTimeoutMs: 3000
 
   # Session resuming has no server-side key in Lavalink v4 — the client opts in
-  # per session over the REST API. MODUS enables it from bot/music/
-  # LavalinkAdapter.ts (`resume: true`, `resumeTimeout: 60`), which lets a
-  # restarted or reconnecting shard reclaim live players instead of dropping
-  # every guild's audio. Nothing to configure here; documented so the behaviour
-  # is not mistaken for a missing setting.
+  # per session over the REST API. MODUS deliberately does NOT: the adapter sets
+  # `resume: false` (bot/music/LavalinkAdapter.ts), because a resumed socket was
+  # being rejected by the node after a restart. Recovery is rebuilt from the
+  # durable Postgres queue instead. Nothing to configure here; documented so the
+  # absence is not mistaken for an oversight.
 
 plugins:
   youtube:
@@ -98,21 +100,49 @@ plugins:
     allowDirectPlaylistIds: true
     oauth:
       enabled: false
-    pot:
-      token: "Igj6F_oWkJahjg=="
-      visitorData: "CgtkT1dTNGpGV0tkVSiVt4XUBjIKCgJVUxIEGgAgKmLfAgrcAjIxLllUPVpmTnJSSWpNUnhVbTVLdVNtRlY4eTZLLUpFMF9PbG9qa0hmdGNaTGxKYktZM2xuRUl2eVZhb0lMLVFsV2dXY05WZ2JUWm9SNndSMGxPS3ZFVVJTWWwxTENFZWota0JKQUdfcHowUUlpZ2hiYUFpQ0ZPT3N4MXhXSDMtY3k1VkhZQVNRWFJrazV5TjNhWHJLeEtpN2tVWE5aY0d1VUhHX2ZnZXVvOFprMExXeUJETkwxdVQ2b2F1YjZsV0laXzFQUENrbDdSczY5T3hVdVJrb2VyWVF1MjAzbUF6U2dHTGFEVU1uTWVnLWFIT3VxcUcwNEVjUlVQUEgtOUpjNDU1Q09BTW5HUmVFSWtDM0NJei1WMll6TmFNU3lJRmtvLXVpR0RiY0JzU0NZSm03RlVZRno5QWs0UlZ4bzZtSXE0eml1TTVhTk5UNmR4dHJaUUZxYWYwbmQ4Zw%3D%3D"
+    # No `pot:` block here on purpose. A poToken/visitorData pair is a rotating
+    # YouTube session credential — it expires, and this file is committed, so it
+    # must never hold a literal. Supply it through the environment instead:
+    #
+    #   PLUGINS_YOUTUBE_POT_TOKEN=…
+    #   PLUGINS_YOUTUBE_POT_VISITORDATA=…
+    #
+    # Spring's relaxed binding maps those onto plugins.youtube.pot.*. Leaving
+    # them unset is safe: `pot` stays null and the plugin skips it. Do NOT write
+    # `token: "${VAR:}"` as a workaround — the plugin only null-checks, so an
+    # empty default would apply a blank poToken instead of applying none.
+    # Mint a pair with youtube-source's token generator; both values must come
+    # from the same browser session. See INSTALLATION.md → "Music Relay".
+    remoteCipher:
+      # Signature deciphering is delegated to this third-party host, which puts
+      # it in the critical path of every YouTube playback. Self-host
+      # https://github.com/kikkia/yt-cipher and point this at it to drop the
+      # external dependency. Set PLUGINS_YOUTUBE_REMOTECIPHER_PASSWORD if the
+      # server you use requires one.
+      url: "https://cipher.kikkia.dev/"
+      userAgent: "modus-lavalink"
+    # Verified against ClientProviderV4 at the pinned plugin commit. The only
+    # valid names are ANDROID, ANDROID_MUSIC, ANDROID_VR, IOS, MUSIC, TV, WEB,
+    # WEBEMBEDDED, MWEB, TVHTML5_SIMPLY — anything else is not an error, it is
+    # logged as "Failed to resolve … into a Client" and silently dropped. Order
+    # is fallback order. ANDROID_VR sits behind the WEB pair on purpose: the
+    # poToken only applies to WEB and WEBEMBEDDED, so a stale token would
+    # otherwise take out every client except MUSIC.
     clients:
       - MUSIC
-      - ANDROID_TESTSUITE
       - WEBEMBEDDED
-      - TVHTML5EMBEDDED
       - WEB
+      - ANDROID_VR
+      - MWEB
+      - TVHTML5_SIMPLY
 
   lavalyrics:
+    # Only providers backed by a loaded plugin do anything here. youtube-source
+    # supplies `youtube`; `spotify`/`deezer` would need LavaSrc, which MODUS
+    # does not ship, so listing them only implies coverage that does not exist.
+    # Non-YouTube lyrics fall back to LRCLIB in bot/music/lyrics.ts.
     sources:
       - youtube
-      - spotify
-      - deezer
 
 metrics:
   prometheus:
@@ -123,16 +153,21 @@ metrics:
     endpoint: /metrics
 
 logging:
-  file:
-    path: ./logs/
+  # No `file.path`. The container has no volume for it, so a file appender would
+  # write up to max-file-size × max-history into the container's writable layer
+  # and lose it on every recreate. Logging to stdout puts it where the runtime
+  # already collects it (`docker compose logs lavalink`).
 
   level:
     root: INFO
     lavalink: INFO
 
   request:
-    enabled: true
-    includeClientInfo: true
+    # Off by default: MODUS drives one REST call per player mutation plus the
+    # bot's reconnect probes, so this is steady noise that logs the caller's
+    # address on every line. Turn it on temporarily when debugging the relay.
+    enabled: false
+    includeClientInfo: false
     # All three stay off: request headers carry the node password, and query
     # strings and payloads carry signed media URLs and encoded tracks. None of
     # that belongs in container logs or CI output.
@@ -141,8 +176,3 @@ logging:
     includePayload: false
     maxPayloadLength: 0
     beforeRequest: false
-
-  logback:
-    rollingpolicy:
-      max-file-size: 100MB
-      max-history: 7

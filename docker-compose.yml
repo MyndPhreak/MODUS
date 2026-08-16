@@ -84,6 +84,16 @@ services:
       # Heap ceiling. The default suits a handful of guilds; raise it for a
       # busy node (e.g. LAVALINK_JAVA_OPTIONS=-Xmx4G).
       - _JAVA_OPTIONS=${LAVALINK_JAVA_OPTIONS:--Xmx1G}
+      # YouTube poToken pair, read from the repo-root .env. Spring's relaxed
+      # binding maps these onto plugins.youtube.pot.* — see lavalink/
+      # application.yml. Written as bare keys, NOT `NAME=${NAME}`: a bare key is
+      # left undefined when it is unset anywhere, whereas `NAME=${NAME}` would
+      # inject an empty string, and the plugin only null-checks — it would then
+      # apply a blank poToken rather than none at all.
+      - PLUGINS_YOUTUBE_POT_TOKEN
+      - PLUGINS_YOUTUBE_POT_VISITORDATA
+      # Only needed if you point remoteCipher at a server that requires auth.
+      - PLUGINS_YOUTUBE_REMOTECIPHER_PASSWORD
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
     expose:
