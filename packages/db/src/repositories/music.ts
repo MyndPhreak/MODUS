@@ -4,6 +4,7 @@ import {
   eq,
   gt,
   gte,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -164,7 +165,10 @@ export class MusicRepository {
 
   /**
    * Sessions that were mid-playback on a known node when their owner stopped.
-   * Only durable canonical state is returned; encoded tracks never persist.
+   * The join is what makes a row recoverable: the checkpointed entry must
+   * still exist and still be playable, so a queue that ran to completion (or
+   * whose current entry failed) is never resurrected. Only durable canonical
+   * state is returned; encoded tracks never persist.
    */
   async listRecoverableSessions(): Promise<RecoverableMusicSession[]> {
     const rows = await this.db
@@ -177,9 +181,14 @@ export class MusicRepository {
         checkpointedAt: musicSessions.checkpointedAt,
       })
       .from(musicSessions)
+      .innerJoin(musicQueueEntries, and(
+        eq(musicQueueEntries.guildId, musicSessions.guildId),
+        eq(musicQueueEntries.id, musicSessions.currentEntryId),
+      ))
       .where(and(
         isNotNull(musicSessions.currentEntryId),
         isNotNull(musicSessions.assignedNodeId),
+        inArray(musicQueueEntries.status, ["playing", "ready"]),
       ))
       .orderBy(asc(musicSessions.guildId));
 

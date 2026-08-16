@@ -1591,7 +1591,23 @@ async function handleTrackEnd(
   // means the player is gone — advancing either one would resurrect playback.
   if (event.reason !== "finished" && event.reason !== "loadFailed") return;
 
-  const advanced = await runtime.advance(guildId);
+  // A track that could not load is retired instead of replayed, so repeat
+  // modes cannot loop a broken source forever.
+  const advanced = await runtime.advance(guildId, {
+    trackFailed: event.reason === "loadFailed",
+  });
+
+  if (!advanced.ok) {
+    // A conflict means a concurrent command already moved the queue; anything
+    // else means playback stalled and must be visible.
+    const message = `Queue advance failed in ${guildId}: ${advanced.error.code}`;
+    if (advanced.error.code === "MUSIC_CONFLICT") {
+      moduleManager.logger.warn(message, guildId, "music");
+    } else {
+      moduleManager.logger.error(message, guildId, advanced.error, "music");
+    }
+  }
+
   const snapshot = advanced.ok
     ? advanced.value
     : await runtime.musicService.getQueue(guildId);

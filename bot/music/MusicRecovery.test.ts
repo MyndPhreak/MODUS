@@ -439,4 +439,43 @@ describe("MusicRecovery", () => {
     expect(lease.renewCalls).toBe(0);
     expect(adapter.loadRequests).toHaveLength(0);
   });
+
+  it("keeps the previous node available when the caller reports no failure", async () => {
+    const { adapter, nodeRegistry, recovery } = setup([config("primary")]);
+    // A startup restore reuses the node this process just connected to.
+    nodeRegistry.update("primary", { available: true });
+    adapter.player = null;
+
+    const result = await recovery.recoverGuild({
+      guildId: "guild-1",
+      failedNodeId: "primary",
+      markNodeFailed: false,
+      voiceChannelId: "voice-1",
+      shardId: 2,
+      operationId: "recover:startup:8",
+    });
+
+    expect(nodeRegistry.snapshot("primary").available).toBe(true);
+    expect(result).toMatchObject({ ok: true, value: { nodeId: "primary" } });
+    expect(adapter.updates[0]).toMatchObject({ nodeId: "primary", voiceChannelId: "voice-1" });
+  });
+
+  it("does not resurrect a checkpointed entry that already finished", async () => {
+    const { adapter, nodeRegistry, recovery, repository } = setup([config("primary")]);
+    nodeRegistry.update("primary", { available: true });
+    adapter.player = null;
+    repository.snapshot.entries[0]!.status = "failed";
+
+    const result = await recovery.recoverGuild({
+      guildId: "guild-1",
+      failedNodeId: "primary",
+      markNodeFailed: false,
+      voiceChannelId: "voice-1",
+      shardId: 2,
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { nodeId: null, fencingToken: null } });
+    expect(adapter.loadRequests).toHaveLength(0);
+    expect(adapter.updates).toHaveLength(0);
+  });
 });

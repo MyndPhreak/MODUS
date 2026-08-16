@@ -101,7 +101,9 @@ interface Harness {
   savedSettings: Record<string, any>[];
   nicknames: (string | null)[];
   sent: any[];
-  advanced: string[];
+  advanced: Array<{ guildId: string; options: any }>;
+  /** Overrides the fake runtime's advance() result for the next calls. */
+  advanceResult: { current: MusicResult<MusicQueueSnapshot> | null };
 }
 
 function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPlayerState } = {}): Harness {
@@ -117,7 +119,8 @@ function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPla
   const savedSettings: Record<string, any>[] = [];
   const nicknames: (string | null)[] = [];
   const sent: any[] = [];
-  const advanced: string[] = [];
+  const advanced: Array<{ guildId: string; options: any }> = [];
+  const advanceResult: { current: MusicResult<MusicQueueSnapshot> | null } = { current: null };
 
   const guild = {
     id: "guild-1",
@@ -137,9 +140,9 @@ function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPla
     music: {
       musicService: service,
       engine,
-      async advance(guildId: string) {
-        advanced.push(guildId);
-        return { ok: true, value: service.queue };
+      async advance(guildId: string, options: any = {}) {
+        advanced.push({ guildId, options });
+        return advanceResult.current ?? { ok: true, value: service.queue };
       },
       async start() {},
       async shutdown() {},
@@ -156,7 +159,17 @@ function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPla
     },
   };
 
-  return { moduleManager, service, engine, settings, savedSettings, nicknames, sent, advanced };
+  return {
+    moduleManager,
+    service,
+    engine,
+    settings,
+    savedSettings,
+    nicknames,
+    sent,
+    advanced,
+    advanceResult,
+  };
 }
 
 class FakeInteraction {
@@ -577,7 +590,72 @@ describe("music module playback events", () => {
     harness.engine.emit("playback", event);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(harness.advanced).toEqual(["guild-1"]);
+    expect(harness.advanced).toEqual([{ guildId: "guild-1", options: { trackFailed: false } }]);
     expect(harness.nicknames).toContain(null);
   });
+
+  it("retires a track that failed to load instead of letting repeat replay it", async () => {
+    const harness = createHarness({ queue: snapshot({ currentEntryId: null, entries: [] }) });
+    await musicModule.registerEvents!(harness.moduleManager);
+
+    harness.engine.emit("playback", trackEnd("loadFailed"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(harness.advanced).toEqual([{ guildId: "guild-1", options: { trackFailed: true } }]);
+  });
+
+  it("does not advance when a command already decided what plays next", async () => {
+    const harness = createHarness();
+    await musicModule.registerEvents!(harness.moduleManager);
+
+    harness.engine.emit("playback", trackEnd("stopped"));
+    harness.engine.emit("playback", trackEnd("replaced"));
+    harness.engine.emit("playback", trackEnd("cleanup"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(harness.advanced).toEqual([]);
+  });
+
+  it("logs a stalled advance instead of failing silently", async () => {
+    const harness = createHarness({
+      queue: snapshot({
+        currentEntryId: "entry-1",
+        entries: [{ id: "entry-1", track: track("entry-1", "One"), position: 0, status: "ready" }],
+      }),
+    });
+    await musicModule.registerEvents!(harness.moduleManager);
+    harness.advanceResult.current = {
+      ok: false,
+      error: Object.assign(new Error("relay offline"), {
+        code: "MUSIC_RELAY_OFFLINE",
+        retryable: true,
+      }) as never,
+    };
+
+    harness.engine.emit("playback", trackEnd("finished"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(harness.moduleManager.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Queue advance failed in guild-1: MUSIC_RELAY_OFFLINE"),
+      "guild-1",
+      expect.anything(),
+      "music",
+    );
+  });
 });
+
+function trackEnd(reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"): MusicPlaybackEvent {
+  return {
+    type: "track.end",
+    guildId: "guild-1",
+    nodeId: "local",
+    reason,
+    track: {
+      identifier: "video-entry-1",
+      title: "Durable Song",
+      artist: "MODUS",
+      durationMs: 180_000,
+      sourceName: "youtube",
+    },
+  };
+}

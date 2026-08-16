@@ -71,7 +71,14 @@ export interface MusicRecoveryOptions {
 
 export interface RecoverGuildInput {
   guildId: string;
+  /** The node that owned the session before recovery started. */
   failedNodeId: string;
+  /**
+   * False when the previous owner node is not known to be unhealthy — a
+   * startup restore reuses the node it just connected to, so marking it
+   * unavailable would disable placement for the whole process.
+   */
+  markNodeFailed?: boolean;
   voiceChannelId?: string;
   shardId?: number;
   paused?: boolean;
@@ -129,7 +136,7 @@ export class MusicRecovery {
     let selectedNodeId: string | null = null;
 
     try {
-      this.markFailedNodeUnavailable(input.failedNodeId);
+      if (input.markNodeFailed !== false) this.markFailedNodeUnavailable(input.failedNodeId);
       const durable = await this.repository.readSnapshot(input.guildId);
       queueRevision = durable.revision;
       const queue = toQueueSnapshot(durable);
@@ -419,9 +426,16 @@ function toSearchSource(value: string | undefined): LavalinkSearchSource | null 
   return value === "youtube" || value === "youtube-music" || value === "soundcloud" ? value : null;
 }
 
+/**
+ * The entry recovery may resurrect. A checkpointed current entry that has
+ * already finished (or failed) must never be re-dispatched, so only entries
+ * that were mid-flight when the owner stopped are eligible.
+ */
 function currentEntry(snapshot: DurableMusicQueueSnapshot) {
   if (!snapshot.currentEntryId) return null;
-  return snapshot.entries.find((entry) => entry.id === snapshot.currentEntryId) ?? null;
+  const entry = snapshot.entries.find((candidate) => candidate.id === snapshot.currentEntryId) ?? null;
+  if (!entry) return null;
+  return entry.status === "playing" || entry.status === "ready" ? entry : null;
 }
 
 function selectCandidate(requested: CanonicalTrack, result: LavalinkLoadResult) {

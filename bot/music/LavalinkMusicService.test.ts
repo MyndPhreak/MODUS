@@ -951,3 +951,227 @@ describe("LavalinkMusicService", () => {
     expect(repository.snapshot.currentEntryId).toBeNull();
   });
 });
+
+const queuedSnapshot = (
+  overrides: Partial<DurableMusicQueueSnapshot> = {},
+): DurableMusicQueueSnapshot => ({
+  ...emptySnapshot(5),
+  entries: [
+    {
+      id: "entry-1",
+      track: track("entry-1"),
+      requesterId: "user-1",
+      position: 0,
+      status: "playing",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    },
+    {
+      id: "entry-2",
+      track: track("entry-2"),
+      requesterId: "user-1",
+      position: 1,
+      status: "ready",
+      matchSource: "youtube",
+      matchConfidence: 1,
+    },
+  ],
+  currentEntryId: "entry-1",
+  assignedNodeId: "primary",
+  ...overrides,
+});
+
+const livePlayer = (): LavalinkPlayerSnapshot => ({
+  guildId: "guild-1",
+  nodeId: "primary",
+  positionMs: 180_000,
+  volume: 100,
+  paused: false,
+  filters: {},
+});
+
+function statusMutations(repository: FakeMusicRepository, entryId: string) {
+  return repository.mutationInputs.filter((input) =>
+    input.mutation.type === "setStatus" && input.mutation.entryId === entryId,
+  );
+}
+
+describe("LavalinkMusicService.advanceQueue", () => {
+  it("retires the finished entry and dispatches the next one when repeat is off", async () => {
+    const { adapter, repository, service } = setup(queuedSnapshot());
+    adapter.player = livePlayer();
+
+    const result = await service.advanceQueue("guild-1", "advance-1");
+
+    expect(result.ok).toBe(true);
+    expect(statusMutations(repository, "entry-1")[0]).toMatchObject({
+      mutation: { status: "failed" },
+    });
+    expect(repository.snapshot.currentEntryId).toBe("entry-2");
+    expect(repository.snapshot.entries.find((entry) => entry.id === "entry-2")?.status).toBe("playing");
+    expect(adapter.playerUpdates.at(-1)).toMatchObject({ ephemeralEncodedTrack: "ephemeral-secret" });
+  });
+
+  it("replays the same entry when repeat is track", async () => {
+    const { adapter, repository, service } = setup(queuedSnapshot({ repeatMode: "track" }));
+    adapter.player = livePlayer();
+
+    const result = await service.advanceQueue("guild-1", "advance-1");
+
+    expect(result.ok).toBe(true);
+    expect(statusMutations(repository, "entry-1").map((input) => (input.mutation as any).status))
+      .toEqual(["playing"]);
+    expect(repository.snapshot.currentEntryId).toBe("entry-1");
+    expect(adapter.playerUpdates).toHaveLength(1);
+  });
+
+  it("keeps the finished entry playable and wraps to the front when repeat is queue", async () => {
+    const { adapter, repository, service } = setup(queuedSnapshot({
+      repeatMode: "queue",
+      currentEntryId: "entry-2",
+    }));
+    repository.snapshot.entries[0]!.status = "ready";
+    repository.snapshot.entries[1]!.status = "playing";
+    adapter.player = livePlayer();
+
+    const result = await service.advanceQueue("guild-1", "advance-1");
+
+    expect(result.ok).toBe(true);
+    expect(statusMutations(repository, "entry-2")[0]).toMatchObject({ mutation: { status: "ready" } });
+    expect(repository.snapshot.currentEntryId).toBe("entry-1");
+  });
+
+  it("retires a track that failed to load even when repeat is track", async () => {
+    const { adapter, repository, service } = setup(queuedSnapshot({
+      repeatMode: "track",
+      entries: [{
+        id: "entry-1",
+        track: track("entry-1"),
+        requesterId: "user-1",
+        position: 0,
+        status: "playing",
+        matchSource: "youtube",
+        matchConfidence: 1,
+      }],
+    }));
+    adapter.player = livePlayer();
+
+    const result = await service.advanceQueue("guild-1", "advance-1", { trackFailed: true });
+
+    expect(result.ok).toBe(true);
+    expect(statusMutations(repository, "entry-1")[0]).toMatchObject({ mutation: { status: "failed" } });
+    expect(adapter.playerUpdates).toHaveLength(0);
+    expect(adapter.destroyCalls).toEqual(["guild-1"]);
+  });
+
+  it("destroys the player and retires the durable session when the queue is exhausted", async () => {
+    const { adapter, repository, service } = setup(queuedSnapshot({
+      entries: [{
+        id: "entry-1",
+        track: track("entry-1"),
+        requesterId: "user-1",
+        position: 0,
+        status: "playing",
+        matchSource: "youtube",
+        matchConfidence: 1,
+      }],
+    }));
+    adapter.player = livePlayer();
+
+    const result = await service.advanceQueue("guild-1", "advance-1");
+
+    expect(result.ok).toBe(true);
+    expect(adapter.destroyCalls).toEqual(["guild-1"]);
+    expect(repository.checkpointInputs.at(-1)).toMatchObject({ currentEntryId: null, positionMs: 0 });
+    expect(repository.assignmentInputs.at(-1)).toEqual({ guildId: "guild-1", nodeId: null });
+    expect(repository.snapshot.currentEntryId).toBeNull();
+    expect(repository.snapshot.assignedNodeId).toBeNull();
+  });
+
+  it("reports a conflict instead of success when another writer moved the queue", async () => {
+    const durable = queuedSnapshot();
+    const repository = {
+      snapshot: durable,
+      reads: 0,
+      async readSnapshot(): Promise<DurableMusicQueueSnapshot> {
+        this.reads += 1;
+        // The second read models a concurrent command committing first.
+        return structuredClone(this.reads > 1 ? { ...durable, revision: durable.revision + 5 } : durable);
+      },
+      async applyMutation(): Promise<MusicMutationResult> {
+        return { revision: durable.revision + 1, replayed: false };
+      },
+      async applyCheckpointOperation(): Promise<MusicMutationResult> {
+        return { revision: durable.revision + 1, replayed: false };
+      },
+      async checkpoint(): Promise<boolean> {
+        return true;
+      },
+      async recordNodeAssignment(): Promise<void> {},
+    };
+    const nodeRegistry = new NodeRegistry([config("primary")]);
+    nodeRegistry.update("primary", { available: true });
+    const order: string[] = [];
+    const adapter = new FakeAdapter(order);
+    adapter.player = livePlayer();
+    const service = new LavalinkMusicService({
+      repository,
+      nodeRegistry,
+      lease: new FakeLease(order),
+      adapter,
+      eventBus: new FakeEventBus(),
+      retryDelayMs: 0,
+    });
+
+    const result = await service.advanceQueue("guild-1", "advance-1");
+
+    expect(result).toMatchObject({ ok: false, error: { code: "MUSIC_CONFLICT" } });
+    expect(adapter.playerUpdates).toHaveLength(0);
+  });
+});
+
+describe("LavalinkMusicService.recoverOnStartup", () => {
+  it("restores the session without marking the node it just connected to as failed", async () => {
+    const { adapter, nodeRegistry, repository, service } = setup(queuedSnapshot());
+    adapter.player = null;
+
+    const results = await service.recoverOnStartup([{
+      guildId: "guild-1",
+      failedNodeId: "primary",
+      voiceChannelId: "voice-1",
+      shardId: 2,
+    }]);
+
+    expect(nodeRegistry.snapshot("primary").available).toBe(true);
+    expect(results).toEqual([{ guildId: "guild-1", ok: true }]);
+    expect(adapter.playerUpdates.at(-1)).toMatchObject({
+      nodeId: "primary",
+      voiceChannelId: "voice-1",
+      shardId: 2,
+    });
+    expect(repository.assignmentInputs.at(-1)).toEqual({ guildId: "guild-1", nodeId: "primary" });
+  });
+
+  it("reports the stable error code when a session cannot be restored", async () => {
+    const { adapter, nodeRegistry, service } = setup(queuedSnapshot());
+    adapter.player = null;
+    adapter.loadResults = [{
+      ok: false,
+      error: new MusicError("MUSIC_SOURCE_UNAVAILABLE", "source down"),
+    }];
+
+    const results = await service.recoverOnStartup([{
+      guildId: "guild-1",
+      failedNodeId: "primary",
+      voiceChannelId: "voice-1",
+      shardId: 2,
+    }]);
+
+    expect(results).toEqual([{
+      guildId: "guild-1",
+      ok: false,
+      errorCode: "MUSIC_SOURCE_UNAVAILABLE",
+    }]);
+    expect(nodeRegistry.snapshot("primary").available).toBe(true);
+  });
+});

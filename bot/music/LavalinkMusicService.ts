@@ -8,7 +8,7 @@ import {
   MusicQueueMutationError,
   MusicRevisionConflictError,
 } from "@modus/db";
-import { MusicError } from "./errors";
+import { MusicError, type MusicErrorCode } from "./errors";
 import {
   GuildPlaybackLeaseOwnershipError,
   type GuildPlaybackLease,
@@ -70,6 +70,17 @@ interface MusicEventPublisher {
 
 interface RecoveryCoordinator {
   recoverGuild(input: RecoverGuildInput): Promise<MusicResult<MusicRecoveryOutcome>>;
+}
+
+export interface AdvanceQueueOptions {
+  /** The finished track failed to load; retire it instead of replaying it. */
+  trackFailed?: boolean;
+}
+
+export interface StartupRecoveryResult {
+  guildId: string;
+  ok: boolean;
+  errorCode?: MusicErrorCode;
 }
 
 export interface LavalinkMusicServiceOptions {
@@ -186,12 +197,29 @@ export class LavalinkMusicService implements MusicService {
    * Rebuilds players for guilds that were mid-playback when their previous
    * owner stopped. Callers must pass only guilds this process owns, otherwise
    * a healthy remote owner would be fenced out of its own session.
+   *
+   * The previous owner node is never marked failed here: at startup it is the
+   * node this process just connected to, and marking it down would disable
+   * placement for every guild.
    */
-  async recoverOnStartup(sessions: readonly RecoverGuildInput[]): Promise<void> {
+  async recoverOnStartup(
+    sessions: readonly RecoverGuildInput[],
+  ): Promise<StartupRecoveryResult[]> {
+    const results: StartupRecoveryResult[] = [];
+
     for (const session of sessions) {
-      if (this.closed) return;
-      const result = await this.recovery.recoverGuild(session).catch(() => null);
-      if (!result || !result.ok || !result.value.nodeId || !result.value.fencingToken) continue;
+      if (this.closed) return results;
+      const result = await this.recovery
+        .recoverGuild({ ...session, markNodeFailed: false })
+        .catch((error: unknown) => ({ ok: false, error: normalizeCoordinatorError(error) } as const));
+
+      if (!result.ok) {
+        results.push({ guildId: session.guildId, ok: false, errorCode: result.error.code });
+        continue;
+      }
+      results.push({ guildId: session.guildId, ok: true });
+      if (!result.value.nodeId || !result.value.fencingToken) continue;
+
       this.active.set(session.guildId, {
         nodeId: result.value.nodeId,
         fencingToken: result.value.fencingToken,
@@ -203,13 +231,20 @@ export class LavalinkMusicService implements MusicService {
         paused: session.paused ?? false,
       });
     }
+
+    return results;
   }
 
   /**
    * Advances the durable queue after a track ends by itself. The repeat mode
-   * decides whether the finished entry replays, requeues, or is retired.
+   * decides whether the finished entry replays, requeues, or is retired; a
+   * track that failed to load is always retired so it cannot replay forever.
    */
-  async advanceQueue(guildId: string, operationId: string): Promise<MusicResult<MusicQueueSnapshot>> {
+  async advanceQueue(
+    guildId: string,
+    operationId: string,
+    options: AdvanceQueueOptions = {},
+  ): Promise<MusicResult<MusicQueueSnapshot>> {
     if (!guildId.trim() || !operationId.trim()) {
       return { ok: false, error: new MusicError("MUSIC_CONFLICT", "The music command is invalid.") };
     }
@@ -219,7 +254,7 @@ export class LavalinkMusicService implements MusicService {
 
     return this.runExclusive(guildId, async () => {
       try {
-        return await this.executeAdvance(guildId, operationId);
+        return await this.executeAdvance(guildId, operationId, options);
       } catch (error) {
         return { ok: false, error: normalizeCoordinatorError(error) };
       }
@@ -750,13 +785,18 @@ export class LavalinkMusicService implements MusicService {
   private async executeAdvance(
     guildId: string,
     operationId: string,
+    options: AdvanceQueueOptions,
   ): Promise<MusicResult<MusicQueueSnapshot>> {
     const durable = await this.repository.readSnapshot(guildId);
     const finished = durable.entries.find((entry) => entry.id === durable.currentEntryId)
       ?? durable.entries.find((entry) => entry.status === "playing")
       ?? null;
 
-    if (durable.repeatMode === "track" && finished) {
+    // A track that could not load must never replay: repeating it would loop
+    // load failure → advance → load failure without bound.
+    const retire = options.trackFailed === true;
+
+    if (!retire && durable.repeatMode === "track" && finished) {
       return this.dispatchEntry({ durable, entry: finished, operationId });
     }
 
@@ -770,14 +810,21 @@ export class LavalinkMusicService implements MusicService {
           type: "setStatus",
           entryId: finished.id,
           // A requeued entry stays playable; a retired one must not be replayed.
-          status: durable.repeatMode === "queue" ? "ready" : "failed",
+          status: !retire && durable.repeatMode === "queue" ? "ready" : "failed",
         },
       });
       revision = retired.revision;
     }
 
     const after = await this.repository.readSnapshot(guildId);
-    if (after.revision !== revision) return { ok: true, value: toQueueSnapshot(after) };
+    if (after.revision !== revision) {
+      // Another writer moved the queue while this advance ran; it decided what
+      // plays next, so reporting success here would hide a stalled queue.
+      return {
+        ok: false,
+        error: new MusicError("MUSIC_CONFLICT", "The music queue changed before the advance completed."),
+      };
+    }
 
     const next = nextPlayableEntry(after, finished?.id ?? null);
     if (!next) return this.destroyCommittedPlayer(guildId, revision, operationId);
@@ -857,7 +904,28 @@ export class LavalinkMusicService implements MusicService {
     }
     this.active.delete(guildId);
     this.checkpointTimes.delete(guildId);
+    await this.clearTerminalSession(guildId, revision);
     return { ok: true, value: await this.getQueue(guildId) };
+  }
+
+  /**
+   * Retires the durable session once no player remains. Without this a queue
+   * that ran to completion keeps its current entry and node assignment, so
+   * startup recovery would treat a finished session as still playable.
+   */
+  private async clearTerminalSession(guildId: string, revision: number): Promise<void> {
+    try {
+      await this.repository.checkpoint({
+        guildId,
+        expectedRevision: revision,
+        currentEntryId: null,
+        positionMs: 0,
+        checkpointedAt: new Date(this.now()),
+      });
+      await this.repository.recordNodeAssignment({ guildId, nodeId: null });
+    } catch {
+      // Best effort: the player is already gone and the queue state is durable.
+    }
   }
 
   private async ensureLease(guildId: string, nodeId: string, queueRevision: number): Promise<number> {

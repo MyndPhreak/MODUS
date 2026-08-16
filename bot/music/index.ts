@@ -8,7 +8,7 @@ import {
   type LavalinkLoadResult,
 } from "./LavalinkAdapter";
 import type { MusicPlaybackEvent } from "./LavalinkEvents";
-import { LavalinkMusicService } from "./LavalinkMusicService";
+import { LavalinkMusicService, type AdvanceQueueOptions } from "./LavalinkMusicService";
 import { CHANNEL_MUSIC_STATE, type MusicStateEvent, type RecoverGuildInput } from "./MusicRecovery";
 import type { MusicService } from "./MusicService";
 import { NodeRegistry } from "./NodeRegistry";
@@ -35,7 +35,10 @@ export interface MusicRuntime {
   readonly musicService: MusicService;
   readonly engine: MusicEngine;
   /** Moves the durable queue on after a track ended on its own. */
-  advance(guildId: string): Promise<MusicResult<MusicQueueSnapshot>>;
+  advance(
+    guildId: string,
+    options?: AdvanceQueueOptions,
+  ): Promise<MusicResult<MusicQueueSnapshot>>;
   /** Connects to Lavalink and recovers sessions this process owns. */
   start(): Promise<void>;
   shutdown(): Promise<void>;
@@ -119,8 +122,8 @@ export function createMusicService(options: CreateMusicServiceOptions): MusicRun
     musicService,
     engine: adapter,
 
-    advance(guildId: string) {
-      return musicService.advanceQueue(guildId, `advance:${guildId}:${Date.now()}`);
+    advance(guildId: string, options: AdvanceQueueOptions = {}) {
+      return musicService.advanceQueue(guildId, `advance:${guildId}:${Date.now()}`, options);
     },
 
     async start(): Promise<void> {
@@ -148,13 +151,16 @@ export function createMusicService(options: CreateMusicServiceOptions): MusicRun
   };
 }
 
-interface DormantRecoveryContext {
-  client: Client;
-  repository: MusicRepository;
-  musicService: LavalinkMusicService;
+export interface DormantRecoveryContext {
+  client: Pick<Client, "guilds">;
+  repository: Pick<MusicRepository, "listRecoverableSessions">;
+  musicService: Pick<LavalinkMusicService, "recoverOnStartup">;
   nodeRegistry: NodeRegistry;
   shardId: number;
   logger: MusicRuntimeLogger;
+  /** Injectable for tests; production waits on the real clock. */
+  sleep?: (milliseconds: number) => Promise<void>;
+  nodeWaitTimeoutMs?: number;
 }
 
 /**
@@ -162,7 +168,7 @@ interface DormantRecoveryContext {
  * guilds this process currently holds are recovered — a guild owned by another
  * shard is that shard's session to fence, not ours.
  */
-async function recoverDormantSessions(context: DormantRecoveryContext): Promise<void> {
+export async function recoverDormantSessions(context: DormantRecoveryContext): Promise<void> {
   let sessions;
   try {
     sessions = await context.repository.listRecoverableSessions();
@@ -178,13 +184,16 @@ async function recoverDormantSessions(context: DormantRecoveryContext): Promise<
     return [{
       guildId: session.guildId,
       failedNodeId: session.assignedNodeId,
+      // The node is the previous owner, not a failed one — a startup restore
+      // must never mark the node this process just connected to as down.
+      markNodeFailed: false,
       operationId: `recover:startup:${session.revision}`,
       ...(voiceChannelId ? { voiceChannelId, shardId: context.shardId } : {}),
     }];
   });
   if (owned.length === 0) return;
 
-  if (!(await waitForAvailableNode(context.nodeRegistry))) {
+  if (!(await waitForAvailableNode(context))) {
     context.logger.warn(
       `No Lavalink node became available — ${owned.length} dormant music session(s) stay queued.`,
     );
@@ -192,16 +201,26 @@ async function recoverDormantSessions(context: DormantRecoveryContext): Promise<
   }
 
   context.logger.info(`Recovering ${owned.length} dormant music session(s).`);
-  await context.musicService.recoverOnStartup(owned);
+  const results = await context.musicService.recoverOnStartup(owned);
+  for (const result of results) {
+    if (result.ok) continue;
+    context.logger.error(
+      `Startup music recovery failed for guild ${result.guildId}: ${result.errorCode ?? "unknown"}`,
+    );
+  }
 }
 
-async function waitForAvailableNode(registry: NodeRegistry): Promise<boolean> {
-  const deadline = Date.now() + NODE_WAIT_TIMEOUT_MS;
+async function waitForAvailableNode(context: DormantRecoveryContext): Promise<boolean> {
+  const sleep = context.sleep
+    ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const timeoutMs = context.nodeWaitTimeoutMs ?? NODE_WAIT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+
   while (Date.now() < deadline) {
-    if (registry.snapshots().some((node) => node.available)) return true;
-    await new Promise((resolve) => setTimeout(resolve, NODE_WAIT_INTERVAL_MS));
+    if (context.nodeRegistry.snapshots().some((node) => node.available)) return true;
+    await sleep(NODE_WAIT_INTERVAL_MS);
   }
-  return registry.snapshots().some((node) => node.available);
+  return context.nodeRegistry.snapshots().some((node) => node.available);
 }
 
 export { CHANNEL_MUSIC_STATE };
