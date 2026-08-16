@@ -1,7 +1,7 @@
 # Third-Party Licenses
 
 MODUS is licensed under the MIT License (see [LICENSE](./LICENSE)). It depends on
-826 third-party packages, which are distributed under their own licenses. This
+833 third-party packages, which are distributed under their own licenses. This
 file is generated from production dependencies across the pnpm workspace (`bot`, `web`,
 `packages/db`) via `pnpm licenses list --prod --json`.
 
@@ -10,7 +10,7 @@ Regenerate with:
 pnpm run licenses:generate
 ```
 
-## MIT (661)
+## MIT (667)
 
 - **@adonisjs/hash** `9.1.1` — Harminder Virk ([source](https://github.com/adonisjs/hash#readme))
 - **@alloc/quick-lru** `5.2.0` — Sindre Sorhus ([source](https://github.com/sindresorhus/quick-lru#readme))
@@ -57,7 +57,7 @@ pnpm run licenses:generate
 - **@emnapi/core** `2.0.0-alpha.3` — toyobayashi ([source](https://github.com/toyobayashi/emnapi#readme))
 - **@emnapi/runtime** `2.0.0-alpha.3` — toyobayashi ([source](https://github.com/toyobayashi/emnapi#readme))
 - **@emnapi/wasi-threads** `2.0.1` — toyobayashi ([source](https://github.com/toyobayashi/emnapi#readme))
-- **@esbuild/win32-x64** `0.28.1` ([source](https://github.com/evanw/esbuild#readme))
+- **@esbuild/linux-x64** `0.28.1` ([source](https://github.com/evanw/esbuild#readme))
 - **@floating-ui/core** `1.8.0` — atomiks ([source](https://floating-ui.com))
 - **@floating-ui/dom** `1.8.0` — atomiks ([source](https://floating-ui.com))
 - **@floating-ui/utils** `0.2.12` — atomiks ([source](https://floating-ui.com))
@@ -76,7 +76,9 @@ pnpm run licenses:generate
 - **@kwsites/file-exists** `1.1.1` — Steve King ([source](https://github.com/kwsites/file-exists#readme))
 - **@kwsites/promise-deferred** `1.1.1` — Steve King ([source](https://github.com/kwsites/promise-deferred#readme))
 - **@napi-rs/canvas** `0.1.100` ([source](https://github.com/Brooooooklyn/canvas#readme))
-- **@napi-rs/canvas-win32-x64-msvc** `0.1.100` ([source](https://github.com/Brooooooklyn/canvas#readme))
+- **@napi-rs/canvas-linux-x64-gnu** `0.1.100` ([source](https://github.com/Brooooooklyn/canvas#readme))
+- **@napi-rs/canvas-linux-x64-musl** `0.1.100` ([source](https://github.com/Brooooooklyn/canvas#readme))
+- **@napi-rs/lzma-linux-x64-gnu** `1.5.1` ([source](https://github.com/Brooooooklyn/lzma#readme))
 - **@napi-rs/wasm-runtime** `1.2.2` — LongYinan ([source](https://napi.rs/))
 - **@nodelib/fs.scandir** `2.1.5` ([source](https://github.com/nodelib/nodelib/tree/master#readme))
 - **@nodelib/fs.stat** `2.0.5` ([source](https://github.com/nodelib/nodelib/tree/master#readme))
@@ -95,7 +97,8 @@ pnpm run licenses:generate
 - **@nuxt/ui** `4.10.0` ([source](https://ui.nuxt.com))
 - **@nuxt/vite-builder** `4.5.1` ([source](https://nuxt.com))
 - **@nuxtjs/color-mode** `4.0.1` ([source](https://github.com/nuxt-modules/color-mode#readme))
-- **@oxc-parser/binding-win32-x64-msvc** `0.140.0` — Boshen and oxc contributors ([source](https://oxc.rs/docs/guide/usage/parser))
+- **@oxc-parser/binding-linux-x64-gnu** `0.140.0` — Boshen and oxc contributors ([source](https://oxc.rs/docs/guide/usage/parser))
+- **@oxc-parser/binding-linux-x64-musl** `0.140.0` — Boshen and oxc contributors ([source](https://oxc.rs/docs/guide/usage/parser))
 - **@oxc-project/types** `0.140.0, 0.142.0` — Boshen and oxc contributors ([source](https://oxc.rs))
 - **@parcel/watcher-wasm** `2.6.0` ([source](https://github.com/parcel-bundler/watcher#readme))
 - **@petamoriken/float16** `3.9.3` — Kenta Moriuchi ([source](https://github.com/petamoriken/float16))
@@ -109,8 +112,9 @@ pnpm run licenses:generate
 - **@poppinss/object-builder** `1.1.0` — Harminder Virk ([source](https://github.com/poppinss/object-builder#readme))
 - **@poppinss/string** `1.7.2` — Harminder Virk ([source](https://github.com/poppinss/string#readme))
 - **@poppinss/utils** `6.10.1` — Harminder Virk ([source](https://github.com/poppinss/utils#readme))
+- **@rolldown/binding-linux-x64-gnu** `1.2.1` ([source](https://rolldown.rs/))
+- **@rolldown/binding-linux-x64-musl** `1.2.1` ([source](https://rolldown.rs/))
 - **@rolldown/binding-wasm32-wasi** `1.2.1` ([source](https://rolldown.rs/))
-- **@rolldown/binding-win32-x64-msvc** `1.2.1` ([source](https://rolldown.rs/))
 - **@rolldown/pluginutils** `1.0.1` ([source](https://github.com/rolldown/plugins/tree/main/packages/pluginutils#readme))
 - **@rollup/plugin-alias** `6.0.0` — Johannes Stein ([source](https://github.com/rollup/plugins/tree/master/packages/alias#readme))
 - **@rollup/plugin-commonjs** `29.0.3` — Rich Harris ([source](https://github.com/rollup/plugins/tree/master/packages/commonjs/#readme))
@@ -120,8 +124,8 @@ pnpm run licenses:generate
 - **@rollup/plugin-replace** `6.0.3` — Rich Harris ([source](https://github.com/rollup/plugins/tree/master/packages/replace#readme))
 - **@rollup/plugin-terser** `1.0.0` — Peter Placzek ([source](https://github.com/rollup/plugins/tree/master/packages/terser#readme))
 - **@rollup/pluginutils** `5.4.0` — Rich Harris ([source](https://github.com/rollup/plugins/tree/master/packages/pluginutils#readme))
-- **@rollup/rollup-win32-x64-gnu** `4.62.4` — Lukas Taegert-Atkinson ([source](https://rollupjs.org/))
-- **@rollup/rollup-win32-x64-msvc** `4.62.4` — Lukas Taegert-Atkinson ([source](https://rollupjs.org/))
+- **@rollup/rollup-linux-x64-gnu** `4.62.4` — Lukas Taegert-Atkinson ([source](https://rollupjs.org/))
+- **@rollup/rollup-linux-x64-musl** `4.62.4` — Lukas Taegert-Atkinson ([source](https://rollupjs.org/))
 - **@sapphire/async-queue** `1.5.5` — @sapphire ([source](https://github.com/sapphiredev/utilities/tree/main/packages/async-queue))
 - **@sapphire/shapeshift** `4.0.0` — @sapphire ([source](https://www.sapphirejs.dev))
 - **@sapphire/snowflake** `3.5.5` — @sapphire ([source](https://github.com/sapphiredev/utilities/tree/main/packages/snowflake))
@@ -130,12 +134,14 @@ pnpm run licenses:generate
 - **@sindresorhus/is** `7.2.0` — Sindre Sorhus ([source](https://github.com/sindresorhus/is#readme))
 - **@sindresorhus/merge-streams** `4.0.0` — Sindre Sorhus ([source](https://github.com/sindresorhus/merge-streams#readme))
 - **@snazzah/davey** `0.1.12` — Snazzah ([source](https://github.com/Snazzah/davey#readme))
-- **@snazzah/davey-win32-x64-msvc** `0.1.12` — Snazzah ([source](https://github.com/Snazzah/davey#readme))
+- **@snazzah/davey-linux-x64-gnu** `0.1.12` — Snazzah ([source](https://github.com/Snazzah/davey#readme))
+- **@snazzah/davey-linux-x64-musl** `0.1.12` — Snazzah ([source](https://github.com/Snazzah/davey#readme))
 - **@stablelib/base64** `1.0.1` — Dmitry Chestnykh ([source](https://github.com/StableLib/stablelib/tree/master/packages/base64))
 - **@standard-schema/spec** `1.1.0` — Colin McDonnell ([source](https://standardschema.dev))
 - **@tailwindcss/node** `4.3.3` ([source](https://tailwindcss.com))
 - **@tailwindcss/oxide** `4.3.3` ([source](https://github.com/tailwindlabs/tailwindcss#readme))
-- **@tailwindcss/oxide-win32-x64-msvc** `4.3.3` ([source](https://github.com/tailwindlabs/tailwindcss#readme))
+- **@tailwindcss/oxide-linux-x64-gnu** `4.3.3` ([source](https://github.com/tailwindlabs/tailwindcss#readme))
+- **@tailwindcss/oxide-linux-x64-musl** `4.3.3` ([source](https://github.com/tailwindlabs/tailwindcss#readme))
 - **@tailwindcss/postcss** `4.3.3` ([source](https://tailwindcss.com))
 - **@tailwindcss/vite** `4.3.3` ([source](https://tailwindcss.com))
 - **@tanstack/table-core** `8.21.3` — Tanner Linsley ([source](https://tanstack.com/table))
@@ -838,15 +844,16 @@ pnpm run licenses:generate
 - **terser** `5.49.0` — Mihai Bazon ([source](https://terser.org))
 - **webidl-conversions** `3.0.1` — Domenic Denicola ([source](https://github.com/jsdom/webidl-conversions#readme))
 
+## MPL-2.0 (3)
+
+- **lightningcss** `1.32.0, 1.33.0` ([source](https://github.com/parcel-bundler/lightningcss#readme))
+- **lightningcss-linux-x64-gnu** `1.32.0, 1.33.0` ([source](https://github.com/parcel-bundler/lightningcss#readme))
+- **lightningcss-linux-x64-musl** `1.32.0, 1.33.0` ([source](https://github.com/parcel-bundler/lightningcss#readme))
+
 ## CC0-1.0 (2)
 
 - **@speed-highlight/core** `1.2.23` — matubu ([source](https://github.com/speed-highlight/core#readme))
 - **mdn-data** `2.0.28, 2.27.1` — Mozilla Developer Network ([source](https://developer.mozilla.org))
-
-## MPL-2.0 (2)
-
-- **lightningcss** `1.32.0, 1.33.0` ([source](https://github.com/parcel-bundler/lightningcss#readme))
-- **lightningcss-win32-x64-msvc** `1.32.0, 1.33.0` ([source](https://github.com/parcel-bundler/lightningcss#readme))
 
 ## BSD (2)
 
