@@ -97,8 +97,19 @@ function safeUrl(value: string | undefined): string | undefined {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
     parsed.username = "";
     parsed.password = "";
-    parsed.search = "";
     parsed.hash = "";
+
+    const host = parsed.hostname.toLowerCase();
+    if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be") {
+      const v = parsed.searchParams.get("v");
+      const list = parsed.searchParams.get("list");
+      parsed.search = "";
+      if (v) parsed.searchParams.set("v", v);
+      if (list) parsed.searchParams.set("list", list);
+    } else {
+      parsed.search = "";
+    }
+
     return parsed.toString().replace(/\/$/, parsed.pathname === "/" ? "" : "/");
   } catch {
     return undefined;
