@@ -42,6 +42,7 @@ interface PlayerState {
   queue: TrackInfo[];
   volume: number;
   repeatMode: number;
+  autoplay: boolean;
   progress: number;
   totalDuration: number;
   activeFilters: string[];
@@ -86,6 +87,7 @@ const MUTATING_ACTIONS = new Set([
   "resume",
   "stop",
   "shuffle",
+  "autoplay",
   "volume",
   "remove",
   "reorder",
@@ -123,6 +125,7 @@ export function useMusicPlayer(guildId: string) {
     queue: [],
     volume: 50,
     repeatMode: 0,
+    autoplay: false,
     progress: 0,
     totalDuration: 0,
     activeFilters: [],
@@ -285,11 +288,21 @@ export function useMusicPlayer(guildId: string) {
   const resume = () => sendAction("resume");
   const stop = () => sendAction("stop");
   const shuffle = () => sendAction("shuffle");
+  const setAutoplay = (enabled: boolean) => sendAction("autoplay", { enabled });
   const setVolume = (volume: number) => sendAction("volume", { volume });
   const removeTrack = (index: number) => sendAction("remove", { index });
   const reorderTrack = (from: number, to: number) =>
     sendAction("reorder", { from, to });
   const play = (query: string) => sendAction("play", { query });
+
+  const fetchLyrics = async (query?: string) => {
+    return await $fetch(`/api/music/lyrics`, {
+      params: {
+        guild_id: guildId,
+        ...(query ? { query } : {}),
+      },
+    });
+  };
 
   // ── Pre-queue Controls ──
   const addToPreQueue = async (query: string): Promise<any> => {
@@ -455,10 +468,13 @@ export function useMusicPlayer(guildId: string) {
     resume,
     stop,
     shuffle,
+    setAutoplay,
+    toggleAutoplay,
     setVolume,
     removeTrack,
     reorderTrack,
     play,
+    fetchLyrics,
     search,
     clearSearch,
 
