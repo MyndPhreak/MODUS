@@ -21,6 +21,13 @@ export const CHANNEL_LOGS = "modus:realtime:logs";
 export const CHANNEL_MODULES = "modus:realtime:modules";
 export const CHANNEL_GUILD_CONFIGS = "modus:realtime:guild-configs";
 export const CHANNEL_POLL_VOTES = "modus:realtime:poll-votes";
+/**
+ * Durable music player state — `{ guildId, queueRevision, nodeId, operationId,
+ * errorCode?, status?, currentEntryId?, positionMs? }`. Published by the bot's
+ * Lavalink coordinator on every command result; the payload carries canonical
+ * state only (never Lavalink encodings or signed media URLs).
+ */
+export const CHANNEL_MUSIC_STATE = "modus:realtime:music";
 
 export interface Envelope<T = unknown> {
   origin: string;

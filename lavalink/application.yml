@@ -1,0 +1,147 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MODUS — Lavalink v4 node configuration
+#
+# Consumed by the `lavalink` service in docker-compose.yml, which mounts this
+# file read-only at /opt/Lavalink/application.yml. Upstream Lavalink 4.2.2 is
+# used as-is (no MODUS fork); everything MODUS-specific lives in this file.
+#
+# Keys follow upstream's application.yml.example for 4.2.2. Environment
+# variables override anything here (LAVALINK_SERVER_PASSWORD → the key below),
+# so remote nodes can reuse this file verbatim.
+# ─────────────────────────────────────────────────────────────────────────────
+
+server: # REST and WS server
+  port: 2333
+  # Binds every interface *inside the container*. The Compose service never
+  # publishes 2333 to the host — reach the node at http://lavalink:2333 over
+  # the private `modus` network locally, and over Tailscale between hosts.
+  address: 0.0.0.0
+  http2:
+    enabled: false
+
+lavalink:
+  plugins:
+    # The built-in YouTube source is deprecated upstream and no longer updated;
+    # youtube-source replaces it. Pinned deliberately — bump this and the
+    # version referenced in INSTALLATION.md together.
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      snapshot: false
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+      snapshot: false
+  server:
+    # Injected by Docker Compose from LAVALINK_SERVER_PASSWORD. Never write a
+    # literal password here: this file is committed. The bot presents the same
+    # value as a raw `Authorization: <password>` header (Lavalink v4 does not
+    # use a `Bearer` prefix).
+    password: "${LAVALINK_SERVER_PASSWORD}"
+    sources:
+      # Required to be false — the youtube-plugin above owns YouTube and will
+      # not register if the built-in source is still enabled.
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      nico: true
+      # Off on purpose: the HTTP source would let any queued URL make the node
+      # fetch arbitrary addresses it can reach, including other services on the
+      # `modus` network. MODUS only resolves youtube / youtube-music /
+      # soundcloud identifiers.
+      http: false
+      local: false
+    filters: # MODUS persists saved filters per guild, so keep the full set
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    nonAllocatingFrameBuffer: false
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    # Player update cadence. MODUS reconciles positions from these frames after
+    # a session resume, so keep it frequent enough to bound drift.
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+    soundcloudFilterOutPreviewTracks: false
+    gc-warnings: true
+    # Note: no `ratelimit:`/`httpConfig:` blocks. MODUS does not rotate IP
+    # blocks, route extraction through proxies, or otherwise evade platform
+    # enforcement. Do not add them.
+    timeouts:
+      connectTimeoutMs: 3000
+      connectionRequestTimeoutMs: 3000
+      socketTimeoutMs: 3000
+
+  # Session resuming has no server-side key in Lavalink v4 — the client opts in
+  # per session over the REST API. MODUS enables it from bot/music/
+  # LavalinkAdapter.ts (`resume: true`, `resumeTimeout: 60`), which lets a
+  # restarted or reconnecting shard reclaim live players instead of dropping
+  # every guild's audio. Nothing to configure here; documented so the behaviour
+  # is not mistaken for a missing setting.
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    oauth:
+      enabled: true
+      skipInitialization: false
+    remoteCipher:
+      url: "https://cipher.kikkia.dev/"
+    clients:
+      - TVHTML5
+      - WEB
+      - ANDROID_VR
+      - MUSIC
+
+  lavalyrics:
+    sources:
+      - youtube
+      - spotify
+      - deezer
+
+metrics:
+  prometheus:
+    # Disabled by default: Prometheus Hotspot exports query Java's Cgroup MXBean
+    # which crashes on Unraid / hybrid-cgroup Docker hosts. MODUS tracks its
+    # own metrics via WebSocket stats frames and does not scrape this endpoint.
+    enabled: false
+    endpoint: /metrics
+
+logging:
+  file:
+    path: ./logs/
+
+  level:
+    root: INFO
+    lavalink: INFO
+
+  request:
+    enabled: true
+    includeClientInfo: true
+    # All three stay off: request headers carry the node password, and query
+    # strings and payloads carry signed media URLs and encoded tracks. None of
+    # that belongs in container logs or CI output.
+    includeHeaders: false
+    includeQueryString: false
+    includePayload: false
+    maxPayloadLength: 0
+    beforeRequest: false
+
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 7

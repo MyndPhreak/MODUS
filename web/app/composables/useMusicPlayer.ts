@@ -1,3 +1,9 @@
+interface MusicSource {
+  name: string;
+  uri?: string;
+  identifier?: string;
+}
+
 interface TrackInfo {
   title: string;
   url: string;
@@ -6,6 +12,10 @@ interface TrackInfo {
   thumbnail: string;
   author: string;
   requestedBy: string;
+  /** Durable queue entry id — stable across reorders, unlike the array index. */
+  entryId?: string;
+  requestedSource?: MusicSource;
+  playbackSource?: MusicSource;
 }
 
 interface PreQueueItem {
@@ -17,6 +27,14 @@ interface PreQueueItem {
   addedBy: string;
 }
 
+interface PlayerHealth {
+  relay: "online" | "offline";
+  nodeId: string | null;
+  status: string;
+  errorCode: string | null;
+  source: string | null;
+}
+
 interface PlayerState {
   isPlaying: boolean;
   isPaused: boolean;
@@ -24,10 +42,18 @@ interface PlayerState {
   queue: TrackInfo[];
   volume: number;
   repeatMode: number;
+  autoplay: boolean;
   progress: number;
   totalDuration: number;
   activeFilters: string[];
   voiceChannel: string | null;
+  /** Durable queue revision; echoed back on index-bound mutations. */
+  revision: number;
+  status: string;
+  nodeId: string | null;
+  currentEntryId: string | null;
+  filters: Record<string, unknown>;
+  health: PlayerHealth;
 }
 
 interface SearchResult {
@@ -36,6 +62,8 @@ interface SearchResult {
   duration: string;
   thumbnail: string;
   author: string;
+  requestedSource?: MusicSource;
+  playbackSource?: MusicSource;
 }
 
 interface SearchResponse {
@@ -48,6 +76,47 @@ interface SearchResponse {
 const POLL_INTERVAL = 5000; // 5 seconds — reduced from 3s to ease event-loop pressure on the bot
 const PROGRESS_TICK_INTERVAL = 1000; // Client-side progress estimation every 1s
 
+/**
+ * Mutations the bot dispatches as durable commands. Each carries an operation
+ * ID so a replayed request (retry, double-click, proxy retry) is applied once.
+ */
+const MUTATING_ACTIONS = new Set([
+  "play",
+  "skip",
+  "pause",
+  "resume",
+  "stop",
+  "shuffle",
+  "autoplay",
+  "volume",
+  "remove",
+  "reorder",
+]);
+
+/**
+ * Mutations whose meaning depends on the queue the user is looking at: an
+ * index only identifies the right track against the revision it came from, so
+ * these pin `expectedRevision` and the bot answers 409 if the queue moved.
+ * The rest (skip, pause, volume, …) express intent regardless of ordering and
+ * would only collect spurious conflicts from the 5s poll window.
+ */
+const REVISION_PINNED_ACTIONS = new Set(["remove", "reorder"]);
+
+/** `crypto.randomUUID` needs a secure context; LAN dashboards may not have one. */
+function newOperationId(): string {
+  const webCrypto = globalThis.crypto;
+  if (typeof webCrypto?.randomUUID === "function") return webCrypto.randomUUID();
+  return `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const offlineHealth = (): PlayerHealth => ({
+  relay: "offline",
+  nodeId: null,
+  status: "unavailable",
+  errorCode: null,
+  source: null,
+});
+
 export function useMusicPlayer(guildId: string) {
   const state = useState<PlayerState>(`music-player-${guildId}`, () => ({
     isPlaying: false,
@@ -56,10 +125,17 @@ export function useMusicPlayer(guildId: string) {
     queue: [],
     volume: 50,
     repeatMode: 0,
+    autoplay: false,
     progress: 0,
     totalDuration: 0,
     activeFilters: [],
     voiceChannel: null,
+    revision: 0,
+    status: "idle",
+    nodeId: null,
+    currentEntryId: null,
+    filters: {},
+    health: offlineHealth(),
   }));
 
   const preQueue = useState<PreQueueItem[]>(
@@ -82,6 +158,15 @@ export function useMusicPlayer(guildId: string) {
     () => connected.value && (state.value.isPlaying || state.value.isPaused),
   );
 
+  /** Durable queue revision the UI is currently rendering. */
+  const revision = computed(() => state.value.revision);
+
+  /** Relay/source health of the Lavalink player backing this guild. */
+  const health = computed<PlayerHealth>(() => state.value.health ?? offlineHealth());
+  const relayOnline = computed(() => health.value.relay === "online");
+  /** Source actually serving the current track (youtube, soundcloud, …). */
+  const playbackSource = computed(() => health.value.source);
+
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let progressTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -92,7 +177,19 @@ export function useMusicPlayer(guildId: string) {
         params: { guild_id: guildId },
       })) as PlayerState;
 
-      state.value = data;
+      // Polls and post-action refreshes can land out of order. The durable
+      // revision only ever moves forward, so an older snapshot is dropped
+      // instead of flickering a just-mutated queue back to its prior shape.
+      // An offline relay reports revision 0 and must still be applied — that
+      // is the signal the player went away, not a stale response.
+      const stale =
+        data.health?.relay !== "offline" &&
+        typeof data.revision === "number" &&
+        data.revision < state.value.revision;
+
+      if (!stale) {
+        state.value = { ...data, health: data.health ?? offlineHealth() };
+      }
       connected.value = true;
       error.value = null;
     } catch (err: any) {
@@ -149,13 +246,21 @@ export function useMusicPlayer(guildId: string) {
     actionLoading.value = true;
     error.value = null;
     try {
+      const body: Record<string, any> = {
+        guild_id: guildId,
+        action,
+        ...params,
+      };
+      if (MUTATING_ACTIONS.has(action) && !body.operationId) {
+        body.operationId = newOperationId();
+      }
+      if (REVISION_PINNED_ACTIONS.has(action) && body.expectedRevision === undefined) {
+        body.expectedRevision = state.value.revision;
+      }
+
       const result = await $fetch("/api/music/action", {
         method: "POST",
-        body: {
-          guild_id: guildId,
-          action,
-          ...params,
-        },
+        body,
       });
       // Immediately refresh state after action
       await fetchState();
@@ -166,6 +271,11 @@ export function useMusicPlayer(guildId: string) {
         err?.statusMessage ||
         err?.message ||
         "Action failed";
+      // 409 means the queue moved under this click. Resync so the next attempt
+      // is made against what the server actually holds.
+      if (err?.statusCode === 409 || err?.status === 409) {
+        await fetchState();
+      }
       throw err;
     } finally {
       actionLoading.value = false;
@@ -178,11 +288,21 @@ export function useMusicPlayer(guildId: string) {
   const resume = () => sendAction("resume");
   const stop = () => sendAction("stop");
   const shuffle = () => sendAction("shuffle");
+  const setAutoplay = (enabled: boolean) => sendAction("autoplay", { enabled });
   const setVolume = (volume: number) => sendAction("volume", { volume });
   const removeTrack = (index: number) => sendAction("remove", { index });
   const reorderTrack = (from: number, to: number) =>
     sendAction("reorder", { from, to });
   const play = (query: string) => sendAction("play", { query });
+
+  const fetchLyrics = async (query?: string) => {
+    return await $fetch(`/api/music/lyrics`, {
+      params: {
+        guild_id: guildId,
+        ...(query ? { query } : {}),
+      },
+    });
+  };
 
   // ── Pre-queue Controls ──
   const addToPreQueue = async (query: string): Promise<any> => {
@@ -336,16 +456,25 @@ export function useMusicPlayer(guildId: string) {
     connected: readonly(connected),
     isBotActive,
 
+    // Durable player state
+    revision,
+    health,
+    relayOnline,
+    playbackSource,
+
     // Live queue controls
     skip,
     pause,
     resume,
     stop,
     shuffle,
+    setAutoplay,
+    toggleAutoplay,
     setVolume,
     removeTrack,
     reorderTrack,
     play,
+    fetchLyrics,
     search,
     clearSearch,
 

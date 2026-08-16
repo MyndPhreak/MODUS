@@ -1,7 +1,4 @@
 import { Client, GatewayIntentBits, Events, Partials } from "discord.js";
-import { Player } from "discord-player";
-import { DefaultExtractors, SpotifyExtractor } from "@discord-player/extractor";
-import { YoutubeiExtractor } from "discord-player-youtubei";
 import http from "http";
 import path from "path";
 import fs from "fs";
@@ -23,11 +20,9 @@ import {
 } from "./RedisClient";
 import { EventBus } from "./EventBus";
 import { LeaderElection } from "./LeaderElection";
-import {
-  createYtDlpStreamFunction,
-  createSpotifyBridgeStreamFunction,
-} from "./lib/ytdlp-stream";
 import { registerMusicAPI } from "./MusicAPI";
+import { createMusicService } from "./music";
+import { botHealthResponse } from "./music/MusicMetrics";
 import { registerWebhookRoutes } from "./WebhookRouter";
 import { registerDocsAPI } from "./DocsAPI";
 
@@ -39,10 +34,6 @@ if (!process.env.PUBLIC_WEB_URL) {
     "[startup] PUBLIC_WEB_URL is not set — ticket close messages will omit the web transcript link.",
   );
 }
-
-// Silence verbose parsing warnings from youtubei.js
-import { Log } from "youtubei.js";
-Log.setLevel(Log.Level.ERROR);
 
 const client = new Client({
   intents: [
@@ -67,53 +58,6 @@ const client = new Client({
   ],
 });
 
-// Initialize discord-player
-const player = new Player(client, {
-  probeTimeout: 20000,
-  connectionTimeout: 20000,
-});
-
-// Load default extractors + YouTube extractor (removed from defaults in v7)
-// Load extractors before login
-async function loadExtractors() {
-  try {
-    await player.extractors.loadMulti(DefaultExtractors);
-    await player.extractors.register(YoutubeiExtractor, {
-      streamOptions: {
-        useClient: "TV_EMBEDDED",
-        highWaterMark: 1024 * 1024 * 10,
-      },
-      // Use yt-dlp for streaming — bypasses YouTube's 30-second throttle
-      createStream: createYtDlpStreamFunction,
-    } as any);
-
-    const spClientId =
-      process.env.DP_SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_ID || null;
-    const spClientSecret =
-      process.env.DP_SPOTIFY_CLIENT_SECRET ||
-      process.env.SPOTIFY_CLIENT_SECRET ||
-      null;
-
-    await player.extractors.register(SpotifyExtractor, {
-      clientId: spClientId,
-      clientSecret: spClientSecret,
-      createStream: createSpotifyBridgeStreamFunction,
-    } as any);
-
-    console.log(
-      "[Music] All extractors loaded:",
-      player.extractors.store.map((e) => e.identifier).join(", "),
-    );
-    console.log(
-      `[Music] Spotify API credentials: ${spClientId ? "✅ present" : "❌ missing"}`,
-    );
-  } catch (err) {
-    console.error("[Music] Failed to load extractors:", err);
-  }
-}
-// Expect loadExtractors to be awaited in the init flow or use top-level await if module
-// For now, we'll keep it as a promise chain or await it in client.once("ready")
-
 // Redis is optional: when REDIS_URL is unset, `clients` is null and
 // everything downstream falls back to in-process behavior (same as before).
 const redisClients: RedisClients | null = createRedisClients();
@@ -124,8 +68,33 @@ const eventBus: EventBus | null = redisClients
 const databaseService = new DatabaseService({ eventBus });
 const shardId = client.shard?.ids[0] ?? 0;
 const logger = new Logger(databaseService, shardId);
-const moduleManager = new ModuleManager(client, logger, player);
-const serverStatusService = new ServerStatusService(client, databaseService);
+const moduleManager = new ModuleManager(client, logger);
+
+// Lavalink music control plane. Built after the client, Redis, database, and
+// event bus exist; it connects and recovers dormant sessions once the gateway
+// is ready. Null when LAVALINK_NODES_JSON is unset.
+const musicRuntime = createMusicService({
+  client,
+  repository: databaseService.music,
+  redisClients,
+  eventBus,
+  shardId: typeof shardId === "number" ? shardId : 0,
+  logger: {
+    info: (message) => logger.info(message, undefined, "music"),
+    warn: (message) => logger.warn(message, undefined, "music"),
+    error: (message, error) => logger.error(message, undefined, error, "music"),
+  },
+});
+moduleManager.music = musicRuntime;
+
+// Music observability. The rollup aggregates the durable state stream every
+// command result already publishes plus live node health, so nothing on the
+// playback path has to report metrics itself.
+const musicMetrics = musicRuntime?.metrics ?? null;
+const serverStatusService = new ServerStatusService(client, databaseService, {
+  logger,
+  musicMetrics,
+});
 
 client.once("ready", async () => {
   const shardIdStr = client.shard?.ids[0] ?? "N/A";
@@ -193,7 +162,31 @@ client.once("ready", async () => {
     }
   }
 
-  await loadExtractors();
+  // Connect Lavalink and restore any session this shard owned before it
+  // stopped, so modules register their playback listeners against a live
+  // control plane.
+  if (musicRuntime) {
+    try {
+      await musicRuntime.start();
+    } catch (err) {
+      logger.error("Failed to start the music service", undefined, err, "music");
+    }
+  }
+
+  // Aggregate the cross-shard music state stream. Without Redis there is no
+  // stream to read, so the rollup falls back to this process's node health.
+  if (musicMetrics && eventBus) {
+    try {
+      await musicMetrics.observe(eventBus);
+    } catch (err) {
+      logger.warn(
+        `Music metrics could not subscribe to the state stream: ${(err as Error).message}`,
+        undefined,
+        "music",
+      );
+    }
+  }
+
   // loadModules() also runs each module's registerEvents hook (client
   // listeners, timers) — no per-module wiring needed here.
   await moduleManager.loadModules();
@@ -385,9 +378,13 @@ const basePort = parseInt(process.env.BOT_PORT || "3000");
 const shardOffset = client.shard?.ids[0] ?? 0;
 const PORT = basePort + (typeof shardOffset === "number" ? shardOffset : 0);
 
+// Liveness only. Music health rides along in the body so an operator can see
+// the control plane's state, but an unavailable Lavalink fleet never fails the
+// probe — every other module keeps serving.
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end(`OK (Shard ${shardOffset})`);
+  const health = botHealthResponse(shardOffset, musicMetrics?.health() ?? null);
+  res.writeHead(health.statusCode, { "Content-Type": "text/plain" });
+  res.end(health.body);
 });
 
 // Handle port-in-use gracefully (common during nodemon restarts)
@@ -411,7 +408,7 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 
 server.listen(PORT, () => {
   logger.info(`Health check server running on port ${PORT}`);
-  registerMusicAPI(server, client);
+  registerMusicAPI(server, client, musicRuntime);
   registerWebhookRoutes(server, client, databaseService);
   registerDocsAPI(server, moduleManager);
 });
@@ -461,13 +458,20 @@ client.on(Events.GuildDelete, async (guild) => {
 client.login(process.env.DISCORD_TOKEN);
 
 // ─── Graceful Shutdown (prevents "port in use" on nodemon restart) ────────
-function gracefulShutdown(signal: string) {
+async function gracefulShutdown(signal: string) {
   console.log(`[Bot] Received ${signal}, shutting down gracefully...`);
+
+  // Armed first so a hung shutdown step can never hold the process open.
+  setTimeout(() => process.exit(0), 2000);
 
   // Close the HTTP server first to free the port immediately
   server.close(() => {
     console.log("[Bot] HTTP server closed.");
   });
+
+  // Release guild playback leases while Redis is still open, so another
+  // process can take the sessions over instead of waiting out the lease TTL.
+  await musicRuntime?.shutdown().catch(() => {});
 
   // Destroy the Discord client connection
   client.destroy();
@@ -480,13 +484,14 @@ function gracefulShutdown(signal: string) {
   // lets the lease release via Lua CAS (inside LeaderElection.stop); without
   // this, the next leader waits the full TTL before picking up.
   closeRedisClients(redisClients).catch(() => {});
-
-  // Force exit after a short grace period
-  setTimeout(() => process.exit(0), 2000);
 }
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => {
+  void gracefulShutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  void gracefulShutdown("SIGINT");
+});
 
 // Global Error Handlers to prevent bot crashes
 process.on("unhandledRejection", (reason, promise) => {

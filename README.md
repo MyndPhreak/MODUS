@@ -31,7 +31,7 @@ Servers can bring their own API keys, set custom system prompts, adjust token li
 
 ### Music
 
-Full music player with queue management, playback controls, and audio filters. Supports YouTube and Spotify links out of the box through discord-player and yt-dlp.
+Full music player with queue management, playback controls, and audio filters. Supports YouTube and Spotify links out of the box through a Lavalink v4 control plane, with durable queues that survive a restart.
 
 **Filters:** Bass Boost, Nightcore, Vaporwave, 8D Audio, Karaoke, Tremolo, Vibrato, Lo-Fi, Phaser, Chorus, Flanger, Treble Boost.
 
@@ -100,7 +100,7 @@ SSR is disabled for dashboard routes (they require Discord OAuth), while public 
 
 | Layer | Tech |
 |-------|------|
-| Bot | Discord.js 14, discord-player, Node 22, TypeScript |
+| Bot | Discord.js 14, Lavalink 4 (Shoukaku), Node 22, TypeScript |
 | Web | Nuxt 4, nuxt-auth-utils, @nuxt/ui, Tailwind CSS, Pinia |
 | AI | Anthropic Claude, OpenAI, Groq, Google Gemini |
 | Backend | Postgres, Redis, Cloudflare R2 |

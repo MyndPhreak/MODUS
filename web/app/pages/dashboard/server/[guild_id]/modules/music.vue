@@ -165,6 +165,16 @@
             <div class="flex items-center justify-center gap-3">
               <button
                 class="player-btn p-2 rounded-full"
+                :class="{ '!text-violet-400 !bg-violet-500/20 !border-violet-500/30': playerState.autoplay }"
+                title="Autoplay (Play recommended songs when queue ends)"
+                :disabled="actionLoading"
+                @click="setAutoplayFn(!playerState.autoplay)"
+              >
+                <UIcon name="i-heroicons-sparkles" class="w-4 h-4" />
+              </button>
+
+              <button
+                class="player-btn p-2 rounded-full"
                 title="Shuffle"
                 :disabled="actionLoading"
                 @click="shuffleFn"
@@ -213,6 +223,14 @@
                 @click="stopFn"
               >
                 <UIcon name="i-heroicons-stop" class="w-4 h-4" />
+              </button>
+
+              <button
+                class="player-btn p-2 rounded-full"
+                title="Lyrics"
+                @click="openLyricsModal"
+              >
+                <UIcon name="i-heroicons-document-text" class="w-4 h-4" />
               </button>
             </div>
 
@@ -776,6 +794,36 @@
         Save Music Settings
       </UButton>
     </div>
+
+    <!-- Lyrics Modal -->
+    <UModal v-model:open="lyricsModalOpen">
+      <template #content>
+        <div class="p-6 space-y-4 max-h-[80vh] flex flex-col">
+          <div class="flex items-center justify-between border-b border-white/10 pb-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-violet-400" />
+              <h3 class="text-lg font-bold text-white">
+                {{ lyricsData?.trackTitle || playerState.currentTrack?.title || "Lyrics" }}
+              </h3>
+            </div>
+            <UBadge v-if="lyricsData?.source" color="neutral" variant="soft" size="xs">
+              {{ lyricsData.source }}
+            </UBadge>
+          </div>
+
+          <div v-if="lyricsLoading" class="flex items-center justify-center py-12">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-violet-400 animate-spin" />
+          </div>
+
+          <div
+            v-else
+            class="overflow-y-auto space-y-2 pr-2 text-sm text-gray-300 leading-relaxed custom-scrollbar whitespace-pre-wrap"
+          >
+            {{ lyricsData?.text || "No lyrics available for this track." }}
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -806,10 +854,12 @@ const {
   resume: resumeFn,
   stop: stopFn,
   shuffle: shuffleFn,
-  setVolume,
+  setAutoplay: setAutoplayFn,
+  setVolume: setVolumeFn,
   removeTrack: removeTrackFn,
   reorderTrack: reorderTrackFn,
   play: playFn,
+  fetchLyrics: fetchLyricsFn,
   search: searchFn,
   clearSearch: clearSearchFn,
   preQueue: preQueueList,
@@ -818,6 +868,28 @@ const {
   reorderPreQueue: reorderPreQueueFn,
   clearPreQueue: clearPreQueueFn,
 } = useMusicPlayer(guildId);
+
+// ── Lyrics Modal State ──
+const lyricsModalOpen = ref(false);
+const lyricsLoading = ref(false);
+const lyricsData = ref<any>(null);
+
+const openLyricsModal = async () => {
+  lyricsModalOpen.value = true;
+  lyricsLoading.value = true;
+  lyricsData.value = null;
+  try {
+    const data = await fetchLyricsFn();
+    lyricsData.value = data;
+  } catch {
+    lyricsData.value = {
+      text: "No lyrics found for the current track.",
+      trackTitle: playerState.value.currentTrack?.title,
+    };
+  } finally {
+    lyricsLoading.value = false;
+  }
+};
 
 // ── Settings ──
 const saving = ref(false);

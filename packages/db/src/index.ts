@@ -17,3 +17,4 @@ export * from "./repositories/reminders";
 export * from "./repositories/poll-templates";
 export * from "./repositories/polls";
 export * from "./repositories/event-announcements";
+export * from "./repositories/music";

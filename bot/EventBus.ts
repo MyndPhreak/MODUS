@@ -36,6 +36,16 @@ export const CHANNEL_MODULES = "modus:realtime:modules";
 export const CHANNEL_GUILD_CONFIGS = "modus:realtime:guild-configs";
 
 /**
+ * Durable music player state — `MusicStateEvent` from `music/MusicRecovery.ts`:
+ *   { guildId, queueRevision, nodeId, operationId, errorCode?, status?,
+ *     currentEntryId?, positionMs? }
+ * Published by the Lavalink coordinator on every command result, playback
+ * event, and recovery outcome; consumed by the dashboard realtime bridge so a
+ * queue mutation made on one shard reaches every open dashboard.
+ */
+export const CHANNEL_MUSIC_STATE = "modus:realtime:music";
+
+/**
  * Poll vote events — `{ guildId, channelId, messageId, answerId, voterId, added }`.
  * Published by DatabaseService.publishPollVote, consumed by the Nitro SSE
  * bridge (web/server/utils/eventbus.ts) for live dashboard vote updates.

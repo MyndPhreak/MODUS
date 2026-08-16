@@ -743,3 +743,127 @@ export const eventAnnouncements = pgTable(
 
 export type EventAnnouncement = typeof eventAnnouncements.$inferSelect;
 export type NewEventAnnouncement = typeof eventAnnouncements.$inferInsert;
+
+// ── music playback state ──────────────────────────────────────────────────
+// Lavalink owns the live player, but these rows are the recoverable source of
+// truth. Encoded Lavalink tracks and transient media URLs deliberately do not
+// belong in this schema.
+
+export interface MusicSourceData {
+  name: string;
+  uri?: string;
+  identifier?: string;
+}
+
+export interface MusicCanonicalTrackData {
+  id: string;
+  requestedInput: string;
+  requestType: "search" | "url" | "playlist" | "album" | "track";
+  title: string;
+  artists: string[];
+  album?: string;
+  durationMs?: number;
+  artworkUrl?: string;
+  isrc?: string;
+  requestedBy: string;
+  requestedAt: string;
+  requestedSource: MusicSourceData;
+  playbackSource?: MusicSourceData;
+  matchConfidence?: number;
+}
+
+export const musicSessions = pgTable(
+  "music_sessions",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id")
+      .notNull()
+      .unique("music_sessions_guild_id_unique"),
+    revision: integer("revision").notNull().default(0),
+    currentEntryId: text("current_entry_id"),
+    checkpointPositionMs: integer("checkpoint_position_ms").notNull().default(0),
+    checkpointedAt: timestamp("checkpointed_at", { withTimezone: true }),
+    volume: integer("volume").notNull().default(100),
+    repeatMode: text("repeat_mode").notNull().default("off"),
+    autoplay: boolean("autoplay").notNull().default(false),
+    filters: jsonb("filters")
+      .notNull()
+      .default(sql`'{}'::jsonb`)
+      .$type<Record<string, unknown>>(),
+    assignedNodeId: text("assigned_node_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+export type MusicSession = typeof musicSessions.$inferSelect;
+export type NewMusicSession = typeof musicSessions.$inferInsert;
+
+export const musicQueueEntries = pgTable(
+  "music_queue_entries",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => musicSessions.guildId, { onDelete: "cascade" }),
+    canonicalMetadata: jsonb("canonical_metadata")
+      .notNull()
+      .$type<MusicCanonicalTrackData>(),
+    requesterId: text("requester_id").notNull(),
+    position: integer("position").notNull(),
+    status: text("status").notNull().default("pending"),
+    matchSource: text("match_source"),
+    matchConfidence: doublePrecision("match_confidence"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildPosition: index("music_queue_entries_guild_position_idx").on(
+      t.guildId,
+      t.position,
+    ),
+  }),
+);
+
+export type MusicQueueEntryRow = typeof musicQueueEntries.$inferSelect;
+export type NewMusicQueueEntryRow = typeof musicQueueEntries.$inferInsert;
+
+export const musicOperations = pgTable(
+  "music_operations",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => musicSessions.guildId, { onDelete: "cascade" }),
+    operationId: text("operation_id").notNull(),
+    resultingRevision: integer("resulting_revision").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildOperation: uniqueIndex("music_operations_guild_operation_idx").on(
+      t.guildId,
+      t.operationId,
+    ),
+    byGuildRevision: index("music_operations_guild_revision_idx").on(
+      t.guildId,
+      t.resultingRevision,
+    ),
+  }),
+);
+
+export type MusicOperation = typeof musicOperations.$inferSelect;
+export type NewMusicOperation = typeof musicOperations.$inferInsert;

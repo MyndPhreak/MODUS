@@ -28,11 +28,10 @@ COPY bot/patches ./bot/patches
 COPY packages/db/tsconfig.json ./packages/db/
 COPY packages/db/src ./packages/db/src
 
-# Install ALL workspace dependencies with the frozen root lockfile. Running
-# install with scripts enabled lets packages like youtubei.js produce their
-# postinstall dist/ output. YOUTUBE_DL_SKIP_PYTHON_CHECK stops youtube-dl-exec
-# from failing on this stage (yt-dlp is installed via pip in stage 2).
-RUN YOUTUBE_DL_SKIP_PYTHON_CHECK=1 pnpm install --frozen-lockfile
+# Install ALL workspace dependencies with the frozen root lockfile. Scripts stay
+# enabled so native voice packages (@discordjs/opus, sodium-native) build their
+# bindings for this image.
+RUN pnpm install --frozen-lockfile
 
 # Copy bot source and compile TS → JS
 COPY bot/ ./bot/
@@ -46,19 +45,14 @@ RUN pnpm --filter bot deploy --prod --legacy /deploy/bot
 FROM node:22-slim AS production
 
 # System deps:
-#   - ffmpeg:   audio transcoding + buffered streaming
-#   - python3:  required by yt-dlp
-#   - yt-dlp:   YouTube audio URL resolution
-#   - ca-certs: HTTPS to YouTube/Discord
+#   - ffmpeg:   recording (PCM → OGG Opus) and TTS decode, spawned from PATH
+#   - ca-certs: HTTPS to Discord, R2, and the Lavalink fleet
+#
+# Music extraction and decoding belong to Lavalink now, so this image no longer
+# carries a Python media-download toolchain.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    python3 \
-    python3-pip \
-    python3-venv \
     ca-certificates \
-    && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp \
-    && apt-get purge -y python3-pip python3-venv \
-    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

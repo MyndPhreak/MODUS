@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
@@ -12,13 +13,6 @@ import {
   TextBasedChannel,
   MessageFlags,
 } from "discord.js";
-import {
-  useMainPlayer,
-  QueueRepeatMode,
-  GuildQueue,
-  QueryType,
-} from "discord-player";
-import { YoutubeiExtractor } from "discord-player-youtubei";
 import type { ModuleManager } from "../ModuleManager";
 import type { BotModule } from "../ModuleManager";
 import type { AiTool } from "../lib/aiTools";
@@ -26,99 +20,182 @@ import { buildV2Layout } from "../lib/components-v2";
 import { activeSessions as recordingActiveSessions } from "./recording";
 import { MusicSettingsSchema, type MusicSettings } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
+import type { MusicRuntime } from "../music";
+import type { MusicPlaybackEvent } from "../music/LavalinkEvents";
+import type { MusicError } from "../music/errors";
+import type {
+  CanonicalTrack,
+  MusicCommand,
+  MusicFilters,
+  MusicQueueEntry,
+  MusicQueueSnapshot,
+  MusicRepeatMode,
+  MusicResult,
+} from "../music/types";
 
 // ─── Available Audio Filters ──────────────────────────────────────────────
+//
+// Lavalink applies filters server-side, so each effect is expressed as a
+// Lavalink filter payload instead of an FFmpeg filter chain. Effects that
+// FFmpeg rendered with time-varying chains (fade, normalization) have no
+// Lavalink equivalent and map to the closest static approximation.
 
-const AVAILABLE_FILTERS: Record<
-  string,
-  { label: string; emoji: string; description: string }
-> = {
+interface FilterDefinition {
+  label: string;
+  emoji: string;
+  description: string;
+  filters: MusicFilters;
+}
+
+const AVAILABLE_FILTERS: Record<string, FilterDefinition> = {
   bassboost: {
     label: "Bass Boost",
     emoji: "🔊",
     description: "Enhances low frequencies",
+    filters: {
+      equalizer: [
+        { band: 0, gain: 0.25 },
+        { band: 1, gain: 0.2 },
+        { band: 2, gain: 0.15 },
+        { band: 3, gain: 0.1 },
+      ],
+    },
   },
   bassboost_high: {
     label: "Bass Boost (Heavy)",
     emoji: "💥",
     description: "Extreme bass enhancement",
+    filters: {
+      equalizer: [
+        { band: 0, gain: 0.6 },
+        { band: 1, gain: 0.5 },
+        { band: 2, gain: 0.4 },
+        { band: 3, gain: 0.25 },
+      ],
+    },
   },
   nightcore: {
     label: "Nightcore",
     emoji: "🌙",
     description: "Higher pitch + faster tempo",
+    filters: { timescale: { speed: 1.2, pitch: 1.2, rate: 1 } },
   },
   vaporwave: {
     label: "Vaporwave",
     emoji: "🌊",
     description: "Slowed down + lower pitch",
+    filters: { timescale: { speed: 0.85, pitch: 0.85, rate: 1 } },
   },
   "8D": {
     label: "8D Audio",
     emoji: "🎧",
     description: "Rotating spatial audio effect",
+    filters: { rotation: { rotationHz: 0.2 } },
   },
   karaoke: {
     label: "Karaoke",
     emoji: "🎤",
     description: "Reduces vocal frequencies",
+    filters: { karaoke: { level: 1, monoLevel: 1, filterBand: 220, filterWidth: 100 } },
   },
   tremolo: {
     label: "Tremolo",
     emoji: "〰️",
     description: "Wavering volume effect",
+    filters: { tremolo: { frequency: 4, depth: 0.75 } },
   },
   vibrato: {
     label: "Vibrato",
     emoji: "🎻",
     description: "Wavering pitch effect",
+    filters: { vibrato: { frequency: 4, depth: 0.75 } },
   },
   lofi: {
     label: "Lo-Fi",
     emoji: "📻",
     description: "Warm, low-fidelity sound",
+    filters: { lowPass: { smoothing: 20 } },
   },
   phaser: {
     label: "Phaser",
     emoji: "🔮",
     description: "Sweeping phase effect",
+    filters: { rotation: { rotationHz: 0.1 } },
   },
   chorus: {
     label: "Chorus",
     emoji: "👥",
     description: "Rich, layered vocal effect",
+    filters: { vibrato: { frequency: 2, depth: 0.3 } },
   },
   flanger: {
     label: "Flanger",
     emoji: "✨",
     description: "Jet-like sweeping effect",
+    filters: { vibrato: { frequency: 0.5, depth: 0.5 } },
   },
   treble: {
     label: "Treble Boost",
     emoji: "🔔",
     description: "Enhances high frequencies",
+    filters: {
+      equalizer: [
+        { band: 10, gain: 0.2 },
+        { band: 11, gain: 0.25 },
+        { band: 12, gain: 0.3 },
+        { band: 13, gain: 0.3 },
+      ],
+    },
   },
   normalizer: {
     label: "Normalizer",
     emoji: "📊",
     description: "Levels out volume differences",
+    filters: { volume: 0.95 },
   },
   fadein: {
     label: "Fade In",
     emoji: "🌅",
     description: "Gradually increases volume",
+    // Lavalink has no time-varying fade; a gentle level trim is the closest
+    // static approximation of the old FFmpeg afade chain.
+    filters: { volume: 0.85 },
   },
   surrounding: {
     label: "Surround",
     emoji: "🔈",
     description: "Spatial surround sound",
+    filters: {
+      channelMix: { leftToLeft: 0.7, leftToRight: 0.3, rightToLeft: 0.3, rightToRight: 0.7 },
+    },
   },
 };
 
+const MUSIC_UNAVAILABLE =
+  "❌ Music playback is unavailable — no Lavalink node is configured or reachable.";
+const NOTHING_PLAYING = "❌ Nothing is currently playing.";
+
 // Defaults + type are defined in lib/schemas.ts (MusicSettingsSchema)
 
-/** Module-scoped reference to ModuleManager, set during event registration */
-let _moduleManager: ModuleManager | null = null;
+/**
+ * Per-guild presentation state. The durable queue lives in Postgres; only the
+ * channel to announce into and the reply awaiting the first track are local.
+ */
+interface AnnounceContext {
+  channel: TextBasedChannel | null;
+  pendingInteraction: ChatInputCommandInteraction | null;
+  isPlaylist: boolean;
+  nowPlayingMessage: any | null;
+}
+
+const announceContexts = new Map<string, AnnounceContext>();
+
+/**
+ * Effect names currently applied per guild. Lavalink stores the merged filter
+ * payload, not the names that produced it, so the toggle view is kept here —
+ * the same lifetime the FFmpeg filter set used to have on the local queue.
+ */
+const activeFilterNames = new Map<string, string[]>();
 
 async function getSettings(
   moduleManager: ModuleManager,
@@ -132,11 +209,30 @@ async function getSettings(
   return parsed ?? MusicSettingsSchema.parse({});
 }
 
+function announceContext(guildId: string): AnnounceContext {
+  let context = announceContexts.get(guildId);
+  if (!context) {
+    context = {
+      channel: null,
+      pendingInteraction: null,
+      isPlaylist: false,
+      nowPlayingMessage: null,
+    };
+    announceContexts.set(guildId, context);
+  }
+  return context;
+}
+
 // ─── Nickname Sync ───────────────────────────────────────────────────────
 
-async function updateBotNickname(queue: GuildQueue, trackTitle?: string) {
+async function updateBotNickname(
+  moduleManager: ModuleManager,
+  guildId: string,
+  trackTitle?: string,
+) {
   try {
-    const me = queue.guild.members.me;
+    const guild = moduleManager.client.guilds.cache.get(guildId);
+    const me = guild?.members?.me;
     if (!me) return;
 
     if (trackTitle) {
@@ -153,281 +249,132 @@ async function updateBotNickname(queue: GuildQueue, trackTitle?: string) {
       await me.setNickname(null);
     }
   } catch (err) {
-    // Missing permissions — silently ignore
-    _moduleManager?.logger.warn(
-      `Could not update nickname in ${queue.guild.name}: ${(err as Error).message}`,
-      queue.guild.id,
+    moduleManager.logger.warn(
+      `Could not update nickname in ${guildId}: ${(err as Error).message}`,
+      guildId,
       "music",
     );
   }
 }
 
-// ─── Player Events (registered once globally) ────────────────────────────
-
-let eventsRegistered = false;
-
-async function registerPlayerEvents(moduleManager: ModuleManager) {
-  if (eventsRegistered) return;
-  eventsRegistered = true;
-  _moduleManager = moduleManager;
-
-  const player = useMainPlayer();
-
-  player.events.on("playerStart", async (queue: GuildQueue, track) => {
-    const metadata = queue.metadata as any;
-    const channel = metadata?.channel;
-    moduleManager.logger.info(`playerStart: "${track.title}" in ${queue.guild.name}`, queue.guild.id, "music");
-
-    // Inject FFmpeg reconnect input flags so bass-transient buffer underruns
-    // don't cause audible ducking. Without these, a momentary CDN stall causes
-    // FFmpeg to output silence rather than rebuffering, which Discord's voice
-    // gateway replays as a volume duck on the next real packet.
-    try {
-      queue.filters.ffmpeg.setInputArgs([
-        "-reconnect",
-        "1",
-        "-reconnect_streamed",
-        "1",
-        "-reconnect_delay_max",
-        "5",
-      ]);
-    } catch {
-      // setInputArgs is not available on all discord-player builds — safe to skip
+async function resetNicknameIfEnabled(
+  moduleManager: ModuleManager,
+  guildId: string,
+  trackTitle?: string,
+) {
+  try {
+    const settings = await getSettings(moduleManager, guildId);
+    if (settings.updateNickname) {
+      await updateBotNickname(moduleManager, guildId, trackTitle);
     }
+  } catch {}
+}
 
-    // Disable the PCM compressor that discord-player enables by default.
-    // A bug in the dispatcher causes the disableCompressor queue option to be
-    // ignored, resulting in a -20 dB / 4:1 compressor being applied to all
-    // audio — making louder sections sound squashed.
-    try {
-      (queue.dispatcher as any)?.compressor?.disable();
-    } catch {
-      // safe to skip if unavailable
-    }
+// ─── Music Service Plumbing ──────────────────────────────────────────────
 
-    // Update bot nickname to current track (if setting enabled)
-    try {
-      const settings = await getSettings(moduleManager, queue.guild.id);
-      if (settings.updateNickname) {
-        updateBotNickname(queue, track.title);
-      }
-    } catch {}
+function operationId(): string {
+  return randomUUID();
+}
 
-    if (!channel) return;
+function playableEntries(snapshot: MusicQueueSnapshot): MusicQueueEntry[] {
+  return snapshot.entries
+    .filter((entry) => entry.status !== "failed")
+    .sort((left, right) => left.position - right.position);
+}
 
-    // Must resolve before building the card — it mutates track.thumbnail,
-    // and the card build below reads that value.
-    await ensureSpotifyThumbnail(track);
+function currentEntry(snapshot: MusicQueueSnapshot): MusicQueueEntry | null {
+  return snapshot.entries.find((entry) => entry.id === snapshot.currentEntryId) ?? null;
+}
 
-    const v2Components = buildNowPlayingCard(track, queue, false);
+function upcomingEntries(snapshot: MusicQueueSnapshot): MusicQueueEntry[] {
+  return playableEntries(snapshot).filter((entry) => entry.id !== snapshot.currentEntryId);
+}
 
-    const pendingInteraction = metadata?.pendingInteraction;
-    if (pendingInteraction) {
-      metadata.pendingInteraction = null;
-      const msg = await pendingInteraction
-        .editReply({
-          // The initial reply set content to "🎵 Loading track...".
-          // Discord rejects V2-flagged edits that still carry non-empty
-          // content, so it must be explicitly cleared (content: null),
-          // not just omitted — omitting it leaves the old value in place.
-          content: null,
-          components: v2Components,
-          flags: MessageFlags.IsComponentsV2,
-        })
-        .catch((err: unknown) => {
-          moduleManager.logger.error(
-            "Failed to replace loading message with now-playing card",
-            queue.guild.id,
-            err,
-            "music",
-          );
-          return null;
-        });
-      if (msg) {
-        metadata.nowPlayingMessage = msg;
-      }
-    } else if (metadata?.isPlaylist && metadata?.nowPlayingMessage) {
-      await metadata.nowPlayingMessage
-        .edit({
-          components: v2Components,
-          flags: MessageFlags.IsComponentsV2,
-        })
-        .catch(() => {
-          channel
-            .send({
-              components: v2Components,
-              flags: MessageFlags.IsComponentsV2,
-            })
-            .then((msg: any) => {
-              metadata.nowPlayingMessage = msg;
-            })
-            .catch(() => {});
-        });
-    } else {
-      channel
-        .send({
-          components: v2Components,
-          flags: MessageFlags.IsComponentsV2,
-        })
-        .catch(() => {});
-    }
-  });
+/**
+ * Runs one durable mutation against the current queue revision. A conflict
+ * means another writer moved first, so the command is retried once against the
+ * revision it produced — with the same operation ID, which stays idempotent.
+ */
+async function runMutation(
+  runtime: MusicRuntime,
+  guildId: string,
+  build: (revision: number, operation: string) => MusicCommand,
+): Promise<MusicResult<MusicQueueSnapshot>> {
+  const operation = operationId();
+  let result: MusicResult<MusicQueueSnapshot> | null = null;
 
-  player.events.on("emptyQueue", async (queue: GuildQueue) => {
-    const channel = (queue.metadata as any)?.channel;
-    moduleManager.logger.info(`emptyQueue in ${queue.guild.name}`, queue.guild.id, "music");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const snapshot = await runtime.musicService.getQueue(guildId);
+    result = await runtime.musicService.execute(build(snapshot.revision, operation));
+    if (result.ok || result.error.code !== "MUSIC_CONFLICT") return result;
+  }
 
-    // Reset nickname when queue finishes (if setting enabled)
-    try {
-      const settings = await getSettings(moduleManager, queue.guild.id);
-      if (settings.updateNickname) {
-        updateBotNickname(queue);
-      }
-    } catch {}
+  return result!;
+}
 
-    if (!channel) return;
+function musicErrorMessage(error: MusicError): string {
+  switch (error.code) {
+    case "MUSIC_NO_MATCH":
+      return "❌ No matching track was found.";
+    case "MUSIC_SOURCE_UNAVAILABLE":
+      return "❌ That music source is unavailable right now — try again shortly.";
+    case "MUSIC_NODE_CAPACITY":
+      return "❌ Every music server is at capacity — try again shortly.";
+    case "MUSIC_VOICE_FAILED":
+      return "❌ Could not update the voice connection.";
+    case "MUSIC_RELAY_OFFLINE":
+      return MUSIC_UNAVAILABLE;
+    case "MUSIC_RETRY_EXHAUSTED":
+      return "❌ Playback kept failing — try again shortly.";
+    case "MUSIC_CONFLICT":
+      return "⚠️ The queue changed while that command ran — try again.";
+    default:
+      return "❌ Could not complete that music command.";
+  }
+}
 
-    const components = buildV2Layout({
-      description: "✅ Queue finished — no more tracks to play.",
-      color: 0x99aab5,
-      useContainer: true,
-    });
+function requireRuntime(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+): MusicRuntime | null {
+  const runtime = moduleManager.music;
+  if (!runtime) {
+    interaction.editReply({ content: MUSIC_UNAVAILABLE });
+    return null;
+  }
+  return runtime;
+}
 
-    channel
-      .send({ components, flags: MessageFlags.IsComponentsV2 })
-      .catch(() => {});
-  });
+function requireVoiceChannel(
+  interaction: ChatInputCommandInteraction,
+): GuildMember | null {
+  const member = interaction.member as GuildMember;
+  if (!member?.voice?.channel) {
+    interaction.editReply({ content: "❌ You need to be in a voice channel!" });
+    return null;
+  }
+  return member;
+}
 
-  player.events.on("disconnect", async (queue: GuildQueue) => {
-    moduleManager.logger.info(`disconnect in ${queue.guild.name}`, queue.guild.id, "music");
-    // Reset nickname when bot disconnects from voice (if setting enabled)
-    try {
-      const settings = await getSettings(moduleManager, queue.guild.id);
-      if (settings.updateNickname) {
-        updateBotNickname(queue);
-      }
-    } catch {}
-  });
+/** Durable replacement for the old `requireQueue` guard. */
+async function requireQueue(
+  interaction: ChatInputCommandInteraction,
+  runtime: MusicRuntime,
+  checkCurrentTrack: boolean = true,
+): Promise<MusicQueueSnapshot | null> {
+  const snapshot = await runtime.musicService.getQueue(interaction.guildId!);
 
-  player.events.on("playerError", (queue: GuildQueue, error) => {
-    moduleManager.logger.error(
-      `Player error in ${queue.guild.name}: ${error.message}`,
-      queue.guild.id,
-      error,
-      "music",
-    );
-    const channel = (queue.metadata as any)?.channel;
-    if (channel) {
-      channel
-        .send({ content: `⚠️ Player error: ${error.message}` })
-        .catch(() => {});
-    }
-  });
+  if (playableEntries(snapshot).length === 0) {
+    await interaction.editReply({ content: NOTHING_PLAYING });
+    return null;
+  }
 
-  player.events.on("error", (queue: GuildQueue, error) => {
-    moduleManager.logger.error(
-      `General error in ${queue.guild.name}: ${error.message}`,
-      queue.guild.id,
-      error,
-      "music",
-    );
-  });
+  if (checkCurrentTrack && !snapshot.currentEntryId) {
+    await interaction.editReply({ content: NOTHING_PLAYING });
+    return null;
+  }
 
-  player.events.on("playerSkip" as any, (queue: GuildQueue, track: any) => {
-    moduleManager.logger.warn(
-      `playerSkip: "${track?.title}" in ${queue.guild.name} — stream likely failed`,
-      queue.guild.id,
-      "music",
-    );
-  });
-
-  // Note: discord-player debug logging removed — too noisy for production
-
-  // ─── Realtime Filter Sync from Dashboard ─────────────────────────────
-  // The EventBus payload carries only { kind, guildId, moduleName } — the
-  // settings themselves come from a follow-up read so every subscriber
-  // sees the same authoritative value. Falls back to no-op when Redis
-  // isn't configured; the dashboard filter changes will only take effect
-  // on the next /play or on bot restart in that case.
-  await moduleManager.databaseService.subscribeToGuildConfigs(
-    async (payload: any) => {
-      try {
-        if (payload?.moduleName !== "music") return;
-
-        const guildId = payload.guildId;
-        if (!guildId) return;
-
-        const settings =
-          await moduleManager.databaseService.getModuleSettings(
-            guildId,
-            "music",
-          );
-        const newFilters: string[] = settings.activeFilters ?? [];
-
-        // Check if there's an active queue for this guild
-        const queue = player.queues.get(guildId);
-        if (!queue || !queue.currentTrack) return;
-
-        // Don't touch filters while the voice connection is still initializing
-        if (
-          !queue.connection ||
-          queue.connection.state?.status === "connecting" ||
-          queue.connection.state?.status === "signalling"
-        ) {
-          return;
-        }
-
-        // Determine which filters need toggling
-        const currentlyEnabled = queue.filters.ffmpeg.getFiltersEnabled();
-        const toEnable = newFilters.filter(
-          (f) => !currentlyEnabled.includes(f as any),
-        );
-        const toDisable = currentlyEnabled.filter(
-          (f) => !newFilters.includes(f),
-        );
-
-        const toToggle = [...toEnable, ...toDisable];
-        if (toToggle.length === 0) return;
-
-        moduleManager.logger.info(
-          `Dashboard filter sync for guild ${guildId}: +[${toEnable.join(",")}] -[${toDisable.join(",")}]`,
-          guildId,
-          "music",
-        );
-
-        await queue.filters.ffmpeg.toggle(toToggle as any[]);
-
-        // Notify the channel
-        const channel = (queue.metadata as any)?.channel;
-        if (channel) {
-          const activeDisplay =
-            newFilters.length > 0
-              ? newFilters
-                  .map((f) => {
-                    const info = AVAILABLE_FILTERS[f];
-                    return info ? `${info.emoji} ${info.label}` : f;
-                  })
-                  .join(" • ")
-              : "None";
-
-          const components = buildV2Layout({
-            title: "🎛️ Audio Effects Updated",
-            description: "Effects were changed from the dashboard.",
-            color: 0x9333ea,
-            fields: [{ name: "Active Effects", value: activeDisplay }],
-            footer: "Updated via web dashboard",
-            useContainer: true,
-          });
-
-          channel
-            .send({ components, flags: MessageFlags.IsComponentsV2 })
-            .catch(() => {});
-        }
-      } catch (err) {
-        moduleManager.logger.error("Error processing realtime filter sync", undefined, err, "music");
-      }
-    },
-  );
+  return snapshot;
 }
 
 // ─── Command Definitions ─────────────────────────────────────────────────
@@ -533,37 +480,102 @@ const filterCommand = new SlashCommandBuilder()
       ),
   );
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
+const lyricsCommand = new SlashCommandBuilder()
+  .setName("lyrics")
+  .setDescription("Get lyrics for the current song or search for a song")
+  .addStringOption((opt) =>
+    opt
+      .setName("song")
+      .setDescription("Song name or artist (leave blank for current playing song)")
+      .setRequired(false),
+  )
+  .addBooleanOption((opt) =>
+    opt
+      .setName("dm")
+      .setDescription("Send lyrics privately to your DM instead of the channel")
+      .setRequired(false),
+  );
 
-/**
- * Fallback to resolve Spotify album art via public oEmbed API if the extractor
- * failed and fell back to the default Spotify logo. Mutates track.thumbnail.
- */
-async function ensureSpotifyThumbnail(track: any) {
-  if (!track || !track.url || !track.url.includes("spotify.com/track/")) return;
-  // If it's using the generic fallback logo
-  if (
-    !track.thumbnail ||
-    track.thumbnail.includes("twitter_card-default.jpg")
-  ) {
-    try {
-      const res = await fetch(
-        `https://open.spotify.com/oembed?url=${track.url}`,
-      );
-      if (res.ok) {
-        const json = await res.json();
-        if (json.thumbnail_url) {
-          track.thumbnail = json.thumbnail_url;
-        }
-      }
-    } catch (e) {
-      _moduleManager?.logger.warn(
-        `Failed to resolve Spotify thumbnail for ${track.title}`,
-        undefined,
-        "music",
-      );
-    }
-  }
+const autoplayCommand = new SlashCommandBuilder()
+  .setName("autoplay")
+  .setDescription("Toggle smart autoplay (plays recommended tracks when queue ends)")
+  .addBooleanOption((opt) =>
+    opt
+      .setName("enabled")
+      .setDescription("Enable or disable autoplay")
+      .setRequired(true),
+  );
+
+const speedCommand = new SlashCommandBuilder()
+  .setName("speed")
+  .setDescription("Set playback speed (0.5x - 2.0x)")
+  .addNumberOption((opt) =>
+    opt
+      .setName("rate")
+      .setDescription("Playback speed multiplier (e.g. 1.25, 0.8)")
+      .setRequired(true)
+      .setMinValue(0.5)
+      .setMaxValue(2.0),
+  );
+
+const pitchCommand = new SlashCommandBuilder()
+  .setName("pitch")
+  .setDescription("Set playback pitch (0.5x - 2.0x)")
+  .addNumberOption((opt) =>
+    opt
+      .setName("level")
+      .setDescription("Pitch multiplier (e.g. 1.2, 0.9)")
+      .setRequired(true)
+      .setMinValue(0.5)
+      .setMaxValue(2.0),
+  );
+
+// ─── Presentation Helpers ────────────────────────────────────────────────
+
+interface DisplayTrack {
+  title: string;
+  artist?: string;
+  url?: string;
+  artworkUrl?: string;
+  durationMs?: number;
+  requestedBy?: string;
+}
+
+function toDisplayTrack(track: CanonicalTrack): DisplayTrack {
+  return {
+    title: track.title,
+    artist: track.artists[0],
+    url: track.requestedSource.uri ?? track.playbackSource?.uri,
+    artworkUrl: track.artworkUrl,
+    durationMs: track.durationMs,
+    requestedBy: track.requestedBy,
+  };
+}
+
+function formatDuration(milliseconds: number | undefined): string {
+  if (!milliseconds || milliseconds <= 0) return "Live";
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const padded = `${minutes.toString().padStart(hours > 0 ? 2 : 1, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
+  return hours > 0 ? `${hours}:${padded}` : padded;
+}
+
+function trackLine(track: DisplayTrack): string {
+  const title = track.url ? `[${track.title}](${track.url})` : track.title;
+  return track.artist ? `**${track.artist} — ${title}**` : `**${title}**`;
+}
+
+function buildProgressBar(positionMs: number, durationMs?: number): string | undefined {
+  if (!durationMs || durationMs <= 0) return undefined;
+  const length = 15;
+  const ratio = Math.min(1, Math.max(0, positionMs / durationMs));
+  const marker = Math.min(length - 1, Math.floor(ratio * length));
+  const bar = `${"▬".repeat(marker)}🔘${"▬".repeat(length - marker - 1)}`;
+  return `${formatDuration(positionMs)} ┃ ${bar} ┃ ${formatDuration(durationMs)}`;
 }
 
 function buildNowPlayingButtons(
@@ -585,19 +597,23 @@ function buildNowPlayingButtons(
       .setEmoji("⏹️")
       .setLabel("Stop")
       .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("music:lyrics")
+      .setEmoji("📜")
+      .setLabel("Lyrics")
+      .setStyle(ButtonStyle.Secondary),
   );
 }
 
 function buildNowPlayingCard(
-  track: { title: string; url: string; author?: string; thumbnail?: string; duration?: string; requestedBy?: { toString(): string } | null },
-  queue: GuildQueue,
+  track: DisplayTrack,
+  snapshot: MusicQueueSnapshot,
   isPaused: boolean,
   progressBar?: string,
 ): any[] {
-  const trackLine = track.author
-    ? `**${track.author} — [${track.title}](${track.url})**`
-    : `**[${track.title}](${track.url})**`;
-  const description = progressBar ? `${trackLine}\n\n${progressBar}` : trackLine;
+  const description = progressBar
+    ? `${trackLine(track)}\n\n${progressBar}`
+    : trackLine(track);
 
   // Discord's Components V2 Thumbnail accessory never scales its source
   // image down to fit its box — confirmed by testing both a hotlinked
@@ -609,17 +625,18 @@ function buildNowPlayingCard(
     title: "🎵 Now Playing",
     description,
     color: 0x5865f2,
-    mediaGallery: track.thumbnail ? [track.thumbnail] : undefined,
+    mediaGallery: track.artworkUrl ? [track.artworkUrl] : undefined,
     fields: [
-      { name: "Duration", value: track.duration || "Live", inline: true },
+      { name: "Duration", value: formatDuration(track.durationMs), inline: true },
       {
         name: "Requested by",
-        value: track.requestedBy?.toString() || "Unknown",
+        value: track.requestedBy ? `<@${track.requestedBy}>` : "Unknown",
         inline: true,
       },
-      { name: "Loop", value: loopModeToString(queue.repeatMode), inline: true },
+      { name: "Loop", value: loopModeToString(snapshot.repeatMode), inline: true },
+      { name: "Autoplay", value: snapshot.autoplay ? "✅ On" : "❌ Off", inline: true },
     ],
-    footer: `Volume: ${queue.node.volume}%`,
+    footer: `Volume: ${snapshot.volume}%`,
     components: [buildNowPlayingButtons(isPaused)],
     useContainer: true,
   });
@@ -642,26 +659,28 @@ function buildFilterStatusCard(
   });
 }
 
-function buildQueueCard(queue: GuildQueue, page: number): any[] {
+function buildQueueCard(snapshot: MusicQueueSnapshot, page: number): any[] {
   const pageSize = 10;
-  const tracks = queue.tracks.toArray();
+  const tracks = upcomingEntries(snapshot);
   const totalPages = Math.max(1, Math.ceil(tracks.length / pageSize));
   const start = page * pageSize;
   const pageTracks = tracks.slice(start, start + pageSize);
 
-  const current = queue.currentTrack;
+  const current = currentEntry(snapshot);
   const lines: string[] = [];
 
   if (current) {
+    const display = toDisplayTrack(current.track);
     lines.push(
-      `**Now Playing:** [${current.title}](${current.url}) — \`${current.duration}\`\n`,
+      `**Now Playing:** ${display.url ? `[${display.title}](${display.url})` : display.title} — \`${formatDuration(display.durationMs)}\`\n`,
     );
   }
 
   if (pageTracks.length > 0) {
-    pageTracks.forEach((track, i) => {
+    pageTracks.forEach((entry, i) => {
+      const display = toDisplayTrack(entry.track);
       lines.push(
-        `**${start + i + 1}.** [${track.title}](${track.url}) — \`${track.duration}\``,
+        `**${start + i + 1}.** ${display.url ? `[${display.title}](${display.url})` : display.title} — \`${formatDuration(display.durationMs)}\``,
       );
     });
   } else if (page > 0) {
@@ -701,131 +720,200 @@ function buildQueuePagerRow(
   );
 }
 
-function requireVoiceChannel(
-  interaction: ChatInputCommandInteraction,
-): GuildMember | null {
-  const member = interaction.member as GuildMember;
-  if (!member?.voice?.channel) {
-    interaction.editReply({ content: "❌ You need to be in a voice channel!" });
-    return null;
-  }
-  return member;
+// ─── Filter Helpers ──────────────────────────────────────────────────────
+
+function enabledFilters(guildId: string): string[] {
+  return activeFilterNames.get(guildId) ?? [];
 }
 
-function requireQueue(
-  interaction: ChatInputCommandInteraction,
-  checkCurrentTrack: boolean = true,
-): GuildQueue | null {
-  const player = useMainPlayer();
-
-  // Queue state for diagnostics is available through logger if needed
-  const queue = player.queues.get(interaction.guildId!);
-
-  if (!queue) {
-    interaction.editReply({ content: "❌ Nothing is currently playing." });
-    return null;
+function composeFilters(names: readonly string[]): MusicFilters {
+  const composed: MusicFilters = {};
+  for (const name of names) {
+    const definition = AVAILABLE_FILTERS[name];
+    if (definition) Object.assign(composed, definition.filters);
   }
+  return composed;
+}
 
+function describeFilters(names: readonly string[]): string {
+  if (names.length === 0) return "None";
+  return names
+    .map((name) => {
+      const info = AVAILABLE_FILTERS[name];
+      return info ? `${info.emoji} ${info.label}` : name;
+    })
+    .join(" • ");
+}
 
-  if (checkCurrentTrack && !queue.currentTrack) {
-    // If specific track action is requested but no track is current
-    interaction.editReply({ content: "❌ Nothing is currently playing." });
-    return null;
-  }
-
-  return queue;
+async function applyFilters(
+  runtime: MusicRuntime,
+  guildId: string,
+  names: readonly string[],
+): Promise<MusicResult<MusicQueueSnapshot>> {
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "filters",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+    filters: composeFilters(names),
+  }));
+  if (result.ok) activeFilterNames.set(guildId, [...names]);
+  return result;
 }
 
 // ─── Command Handlers ────────────────────────────────────────────────────
+
+interface EnqueueOutcome {
+  queued: number;
+  failed: number;
+  firstTrack: CanonicalTrack | null;
+  error: MusicError | null;
+  startedNewQueue: boolean;
+}
+
+/**
+ * Resolves one query through Lavalink and commits the resulting canonical
+ * tracks to the durable queue. Encoded Lavalink data stays inside the adapter.
+ */
+async function enqueueQuery(
+  runtime: MusicRuntime,
+  guildId: string,
+  voiceChannelId: string,
+  query: string,
+  requestedBy: string,
+  maxQueueSize: number,
+): Promise<EnqueueOutcome> {
+  const outcome: EnqueueOutcome = {
+    queued: 0,
+    failed: 0,
+    firstTrack: null,
+    error: null,
+    startedNewQueue: false,
+  };
+
+  const before = await runtime.musicService.getQueue(guildId);
+  outcome.startedNewQueue = playableEntries(before).length === 0;
+
+  const resolved = await runtime.engine.loadTracks({
+    guildId,
+    input: query,
+    requestedBy,
+  });
+  if (!resolved.ok) {
+    outcome.error = resolved.error;
+    return outcome;
+  }
+
+  const candidates =
+    resolved.value.kind === "playlist"
+      ? resolved.value.candidates
+      : resolved.value.candidates.slice(0, 1);
+  const room = Math.max(0, maxQueueSize - playableEntries(before).length);
+
+  for (const candidate of candidates.slice(0, room)) {
+    const result = await runMutation(runtime, guildId, (revision, operation) => ({
+      type: "play",
+      guildId,
+      operationId: operation,
+      expectedRevision: revision,
+      track: candidate.track,
+      voiceChannelId,
+    }));
+
+    if (!result.ok) {
+      outcome.error = result.error;
+      outcome.failed += 1;
+      break;
+    }
+    if (!outcome.firstTrack) outcome.firstTrack = candidate.track;
+    outcome.queued += 1;
+  }
+
+  return outcome;
+}
 
 async function handlePlay(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
   const member = requireVoiceChannel(interaction);
   if (!member) return;
 
+  const guildId = interaction.guildId!;
+
   // Block if recording is active in this guild
-  if (recordingActiveSessions.has(interaction.guildId!)) {
+  if (recordingActiveSessions.has(guildId)) {
     await interaction.editReply({
       content:
-        "\u274c A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
+        "❌ A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
     });
     return;
   }
 
   const query = interaction.options.getString("query", true);
-  const settings = await getSettings(moduleManager, interaction.guildId!);
-  const player = useMainPlayer();
+  const settings = await getSettings(moduleManager, guildId);
 
   try {
-    // Use YouTubei extractor for text queries; URLs are auto-detected regardless
-    const isUrl = /^https?:\/\//i.test(query);
-    const result = await player.play(member.voice.channel!, query, {
-      searchEngine: isUrl
-        ? QueryType.AUTO
-        : `ext:${YoutubeiExtractor.identifier}`,
-      nodeOptions: {
-        metadata: {
-          channel: interaction.channel,
-          pendingInteraction: interaction,
-        },
-        volume: settings.defaultVolume,
-        bufferingTimeout: 15_000,
-        selfDeaf: true,
-        leaveOnEmpty: true,
-        leaveOnEmptyCooldown: 60000,
-        leaveOnEnd: true,
-        leaveOnEndCooldown: 60000,
-        daveEncryption: false,
-      } as any,
-      requestedBy: interaction.user,
-    });
-
-    // Check max queue size
-    const queue = player.queues.get(interaction.guildId!);
-
-    // If the search result was a playlist, mark the queue so playerStart
-    // edits the Now Playing embed instead of sending a new one per track.
-    const searchResult = (result as any).searchResult;
-    if (
-      queue &&
-      (searchResult?.playlist || (isUrl && (searchResult?.tracks?.length ?? 0) > 1))
-    ) {
-      (queue.metadata as any).isPlaylist = true;
-    }
-
-    if (queue && queue.tracks.size > settings.maxQueueSize) {
+    const before = await runtime.musicService.getQueue(guildId);
+    if (playableEntries(before).length >= settings.maxQueueSize) {
       await interaction.editReply({
         content: `⚠️ Queue limit reached (${settings.maxQueueSize} tracks). Remove some tracks first.`,
       });
       return;
     }
 
-    const track = result.track;
+    const startingNewQueue = playableEntries(before).length === 0;
+    const context = announceContext(guildId);
+    context.channel = interaction.channel;
+    context.nowPlayingMessage = null;
+    if (startingNewQueue) {
+      context.pendingInteraction = interaction;
+      context.isPlaylist = false;
 
-    // Only show "Added to Queue" if the track was actually queued behind
-    // other tracks. When it's the first track, the playerStart event will
-    // fire and send the "Now Playing" embed — showing both is redundant.
-    const wasQueued = queue && queue.tracks.size > 0;
+      // Saved effects are committed before dispatch so the first frame already
+      // carries them, replacing the old post-start FFmpeg toggle.
+      if (settings.activeFilters && settings.activeFilters.length > 0) {
+        await applyFilters(runtime, guildId, settings.activeFilters);
+      } else {
+        activeFilterNames.set(guildId, []);
+      }
+    }
 
-    if (wasQueued) {
-      await ensureSpotifyThumbnail(track);
+    const outcome = await enqueueQuery(
+      runtime,
+      guildId,
+      member.voice.channel!.id,
+      query,
+      interaction.user.id,
+      settings.maxQueueSize,
+    );
 
+    if (outcome.queued === 0) {
+      context.pendingInteraction = null;
+      await interaction.editReply({
+        content: outcome.error
+          ? musicErrorMessage(outcome.error)
+          : `⚠️ Queue limit reached (${settings.maxQueueSize} tracks). Remove some tracks first.`,
+      });
+      return;
+    }
+
+    if (outcome.queued > 1) context.isPlaylist = true;
+
+    if (!startingNewQueue) {
+      const after = await runtime.musicService.getQueue(guildId);
+      const track = toDisplayTrack(outcome.firstTrack!);
       const components = buildV2Layout({
         title: "✅ Added to Queue",
-        description: track.author
-          ? `**${track.author} — [${track.title}](${track.url})**`
-          : `**[${track.title}](${track.url})**`,
+        description: trackLine(track),
         color: 0x57f287,
-        mediaGallery: track.thumbnail ? [track.thumbnail] : undefined,
+        mediaGallery: track.artworkUrl ? [track.artworkUrl] : undefined,
         fields: [
-          { name: "Duration", value: track.duration || "Live", inline: true },
-          {
-            name: "Position",
-            value: `#${queue.tracks.size}`,
-            inline: true,
-          },
+          { name: "Duration", value: formatDuration(track.durationMs), inline: true },
+          { name: "Position", value: `#${upcomingEntries(after).length}`, inline: true },
         ],
         useContainer: true,
       });
@@ -834,53 +922,49 @@ async function handlePlay(
         components,
         flags: MessageFlags.IsComponentsV2,
       });
-    } else {
-      // First track — show a loading indicator; the playerStart event
-      // will update this same reply with the "Now Playing" embed.
-      await interaction.editReply({ content: "🎵 Loading track..." });
+      return;
+    }
 
-      // Auto-apply saved filters for this guild when a new queue starts
-      if (
-        settings.activeFilters &&
-        settings.activeFilters.length > 0 &&
-        queue
-      ) {
-        // Apply filters asynchronously so we don't block the response
-        setTimeout(async () => {
-          try {
-            const activeQueue = player.queues.get(interaction.guildId!);
-            if (activeQueue) {
-              await activeQueue.filters.ffmpeg.toggle(
-                settings.activeFilters as any[],
-              );
-              _moduleManager?.logger.info(
-                `Auto-applied saved filters: ${settings.activeFilters.join(", ")} in ${interaction.guild?.name}`,
-                interaction.guildId ?? undefined,
-                "music",
-              );
-            }
-          } catch (err) {
-            _moduleManager?.logger.error("Failed to auto-apply filters", interaction.guildId ?? undefined, err, "music");
-          }
-        }, 2000); // Wait for playback to stabilize before applying filters
-      }
+    // First track — show a loading indicator; the track.start event replaces
+    // this same reply with the "Now Playing" card. The event may already have
+    // consumed the pending interaction, in which case the card is live.
+    if (context.pendingInteraction === interaction) {
+      await interaction.editReply({ content: "🎵 Loading track..." });
     }
   } catch (error: any) {
-    moduleManager.logger.error("Play error", interaction.guildId ?? undefined, error, "music");
+    moduleManager.logger.error("Play error", guildId, error, "music");
     await interaction.editReply({
       content: `❌ Could not play: ${error.message}`,
     });
   }
 }
 
-async function handleSkip(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction);
-  if (!queue) return;
+async function handleSkip(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  const current = queue.currentTrack;
-  queue.node.skip();
+  const snapshot = await requireQueue(interaction, runtime);
+  if (!snapshot) return;
+
+  const guildId = interaction.guildId!;
+  const current = currentEntry(snapshot);
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "skip",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
   await interaction.editReply({
-    content: `⏭️ Skipped **${current?.title || "current track"}**.`,
+    content: `⏭️ Skipped **${current?.track.title || "current track"}**.`,
   });
 }
 
@@ -888,102 +972,142 @@ async function handleStop(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  // Reset nickname before deleting queue (if setting enabled)
-  try {
-    const settings = await getSettings(moduleManager, interaction.guildId!);
-    if (settings.updateNickname) {
-      updateBotNickname(queue);
-    }
-  } catch {}
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
 
-  queue.delete();
-  // Force cleanup in case queue.delete() didn't catch everything due to metadata errors
-  try {
-    const player = useMainPlayer();
-    if (queue.guild.id) player.queues.delete(queue.guild.id);
-  } catch {}
+  const guildId = interaction.guildId!;
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "stop",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await resetNicknameIfEnabled(moduleManager, guildId);
+  activeFilterNames.delete(guildId);
+  announceContexts.delete(guildId);
 
   await interaction.editReply({
     content: "⏹️ Stopped playback and cleared the queue.",
   });
 }
 
-async function handlePause(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+async function handlePause(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  if (queue.node.isPaused()) {
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const guildId = interaction.guildId!;
+  const state = await runtime.musicService.getState(guildId);
+  if (state.status === "paused") {
     await interaction.editReply({ content: "⚠️ Already paused." });
     return;
   }
 
-  queue.node.pause();
-  await interaction.editReply({ content: "⏸️ Paused." });
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "pause",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+
+  await interaction.editReply({
+    content: result.ok ? "⏸️ Paused." : musicErrorMessage(result.error),
+  });
 }
 
-async function handleResume(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+async function handleResume(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  if (!queue.node.isPaused()) {
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const guildId = interaction.guildId!;
+  const state = await runtime.musicService.getState(guildId);
+  if (state.status !== "paused") {
     await interaction.editReply({ content: "⚠️ Not paused." });
     return;
   }
 
-  queue.node.resume();
-  await interaction.editReply({ content: "▶️ Resumed." });
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "resume",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+
+  await interaction.editReply({
+    content: result.ok ? "▶️ Resumed." : musicErrorMessage(result.error),
+  });
 }
 
-async function handleQueue(interaction: ChatInputCommandInteraction) {
-  const player = useMainPlayer();
-  const pageSize = 10;
+async function handleQueue(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  const initialQueue = player.queues.get(interaction.guildId!);
-  if (!initialQueue || (!initialQueue.isPlaying() && initialQueue.tracks.size === 0)) {
+  const pageSize = 10;
+  const guildId = interaction.guildId!;
+  const initial = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(initial).length === 0) {
     await interaction.editReply({ content: "📭 The queue is empty." });
     return;
   }
 
   let page = Math.max((interaction.options.getInteger("page") || 1) - 1, 0);
 
-  // Re-fetches the live queue on every render, since tracks can be
+  // Re-reads the durable queue on every render, since tracks can be
   // added/skipped/finished while the pager is open — a stale snapshot
   // (the pattern /help uses for its static module list) would show a
   // wrong queue within seconds.
-  const render = (disabled = false): any[] => {
-    const liveQueue = player.queues.get(interaction.guildId!);
-    if (!liveQueue) {
+  const render = async (disabled = false): Promise<any[]> => {
+    const live = await runtime.musicService.getQueue(guildId);
+    if (playableEntries(live).length === 0) {
       return buildV2Layout({
         description: "📭 The queue is empty.",
         useContainer: true,
       });
     }
-    const totalPages = Math.max(1, Math.ceil(liveQueue.tracks.size / pageSize));
+    const totalPages = Math.max(1, Math.ceil(upcomingEntries(live).length / pageSize));
     page = Math.min(page, totalPages - 1);
     return [
-      ...buildQueueCard(liveQueue, page),
+      ...buildQueueCard(live, page),
       buildQueuePagerRow(page, totalPages, disabled),
     ];
   };
 
   const reply = await interaction.editReply({
-    components: render(),
+    components: await render(),
     flags: MessageFlags.IsComponentsV2,
   });
 
   const collector = reply.createMessageComponentCollector({
-    filter: (i) => i.user.id === interaction.user.id,
+    filter: (i: any) => i.user.id === interaction.user.id,
     time: 3 * 60 * 1000,
   });
 
-  collector.on("collect", async (componentInteraction) => {
-    const liveQueue = player.queues.get(interaction.guildId!);
-    const totalPages = liveQueue
-      ? Math.max(1, Math.ceil(liveQueue.tracks.size / pageSize))
-      : 1;
+  collector?.on("collect", async (componentInteraction: any) => {
+    const live = await runtime.musicService.getQueue(guildId);
+    const totalPages = Math.max(1, Math.ceil(upcomingEntries(live).length / pageSize));
 
     if (componentInteraction.customId === "music_queue_prev") {
       page = Math.max(0, page - 1);
@@ -992,44 +1116,46 @@ async function handleQueue(interaction: ChatInputCommandInteraction) {
     }
 
     await componentInteraction.update({
-      components: render(),
+      components: await render(),
       flags: MessageFlags.IsComponentsV2,
     });
   });
 
-  collector.on("end", async () => {
+  collector?.on("end", async () => {
     try {
       await interaction.editReply({
-        components: render(true),
+        components: await render(true),
         flags: MessageFlags.IsComponentsV2,
       });
     } catch {}
   });
 }
 
-async function handleNowPlaying(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction);
-  if (!queue) return;
+async function handleNowPlaying(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  const track = queue.currentTrack;
-  if (!track) {
+  const snapshot = await requireQueue(interaction, runtime);
+  if (!snapshot) return;
+
+  const entry = currentEntry(snapshot);
+  if (!entry) {
     await interaction.editReply({ content: "❌ No track currently playing." });
     return;
   }
 
-  const progress = queue.node.createProgressBar({
-    timecodes: true,
-    length: 15,
-  });
-
-  await ensureSpotifyThumbnail(track);
+  const state = await runtime.musicService.getState(interaction.guildId!);
+  const track = toDisplayTrack(entry.track);
 
   await interaction.editReply({
     components: buildNowPlayingCard(
       track,
-      queue,
-      queue.node.isPaused(),
-      progress || undefined,
+      snapshot,
+      state.status === "paused",
+      buildProgressBar(state.positionMs, track.durationMs),
     ),
     flags: MessageFlags.IsComponentsV2,
   });
@@ -1039,99 +1165,111 @@ async function handleVolume(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const guildId = interaction.guildId!;
   const level = interaction.options.getInteger("level", true);
-  const oldVolume = queue.node.volume;
 
-  // Clear any existing fade timer to prevent conflicts
-  const metadata = queue.metadata as any;
-  if (metadata?.volumeTimer) {
-    clearInterval(metadata.volumeTimer);
-    metadata.volumeTimer = null;
-  }
-
-  // If same volume, return early
-  if (oldVolume === level) {
+  if (snapshot.volume === level) {
     await interaction.editReply({
       content: `🔊 Volume is already **${level}%**.`,
     });
     return;
   }
 
+  // Lavalink volume is a durable checkpoint, so the old client-side 2s fade
+  // (20 setVolume calls) would mean 20 durable mutations — the level is set
+  // once instead.
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "volume",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+    volume: level,
+  }));
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
   // Persist the new volume setting for future sessions
   try {
-    const settings = await getSettings(moduleManager, interaction.guildId!);
+    const settings = await getSettings(moduleManager, guildId);
     settings.defaultVolume = level;
     await moduleManager.databaseService.setModuleSettings(
-      interaction.guildId!,
+      guildId,
       "music",
       settings,
     );
   } catch (err) {
-    moduleManager.logger.error("Failed to save volume settings", interaction.guildId ?? undefined, err, "music");
+    moduleManager.logger.error("Failed to save volume settings", guildId, err, "music");
   }
 
   await interaction.editReply({
-    content: `🔊 Fading volume from **${oldVolume}%** to **${level}%**...`,
+    content: `🔊 Volume set to **${level}%**.`,
   });
-
-  const steps = 20; // 20 steps
-  const duration = 2000; // 2 seconds
-  const interval = duration / steps;
-  const stepSize = (level - oldVolume) / steps;
-
-  let currentStep = 0;
-  const timer = setInterval(() => {
-    currentStep++;
-    const newVol = Math.round(oldVolume + stepSize * currentStep);
-
-    // Safety clamp
-    const clampedVol = Math.max(0, Math.min(100, newVol));
-    queue.node.setVolume(clampedVol);
-
-    if (currentStep >= steps) {
-      clearInterval(timer);
-      if (metadata) metadata.volumeTimer = null;
-      queue.node.setVolume(level); // Ensure final value is exact
-    }
-  }, interval);
-
-  // Store timer in metadata
-  if (metadata) {
-    metadata.volumeTimer = timer;
-  }
 }
 
-async function handleShuffle(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+async function handleShuffle(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  if (queue.tracks.size < 2) {
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  if (playableEntries(snapshot).length < 2) {
     await interaction.editReply({
       content: "⚠️ Not enough tracks to shuffle.",
     });
     return;
   }
 
-  queue.tracks.shuffle();
-  await interaction.editReply({ content: "🔀 Queue shuffled!" });
+  const guildId = interaction.guildId!;
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "queue.shuffle",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+
+  await interaction.editReply({
+    content: result.ok ? "🔀 Queue shuffled!" : musicErrorMessage(result.error),
+  });
 }
 
-async function handleLoop(interaction: ChatInputCommandInteraction) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+async function handleLoop(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
-  const mode = interaction.options.getString("mode", true);
-  const modeMap: Record<string, QueueRepeatMode> = {
-    off: QueueRepeatMode.OFF,
-    track: QueueRepeatMode.TRACK,
-    queue: QueueRepeatMode.QUEUE,
-  };
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
 
-  queue.setRepeatMode(modeMap[mode]);
-  await interaction.editReply({ content: `🔁 Loop mode set to **${mode}**.` });
+  const guildId = interaction.guildId!;
+  const mode = interaction.options.getString("mode", true) as MusicRepeatMode;
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "repeat",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+    repeatMode: mode,
+  }));
+
+  await interaction.editReply({
+    content: result.ok
+      ? `🔁 Loop mode set to **${mode}**.`
+      : musicErrorMessage(result.error),
+  });
 }
 
 async function handleSettings(
@@ -1198,150 +1336,334 @@ async function handleFilter(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
-  const queue = requireQueue(interaction, false);
-  if (!queue) return;
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
 
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const guildId = interaction.guildId!;
   const effect = interaction.options.getString("effect", true);
   const shouldSave = interaction.options.getBoolean("save") ?? false;
+  const current = enabledFilters(guildId);
+
+  const persist = async (names: string[]) => {
+    if (!shouldSave) return;
+    try {
+      const settings = await getSettings(moduleManager, guildId);
+      settings.activeFilters = names;
+      await moduleManager.databaseService.setModuleSettings(
+        guildId,
+        "music",
+        settings,
+      );
+    } catch (err) {
+      moduleManager.logger.error("Failed to save filter settings", guildId, err, "music");
+    }
+  };
 
   // ── Remove All Effects ──────────────────────────────────────────────
   if (effect === "clear") {
-    try {
-      const allActive = queue.filters.ffmpeg.getFiltersEnabled();
+    if (current.length === 0) {
+      await interaction.editReply({
+        content: "ℹ️ No effects are currently active.",
+      });
+      return;
+    }
 
-      if (allActive.length === 0) {
-        await interaction.editReply({
-          content: "ℹ️ No effects are currently active.",
-        });
-        return;
-      }
+    const result = await applyFilters(runtime, guildId, []);
+    if (!result.ok) {
+      moduleManager.logger.error(
+        `Clear filters failed: ${result.error.code}`,
+        guildId,
+        result.error,
+        "music",
+      );
+      await interaction.editReply({
+        content: musicErrorMessage(result.error),
+      });
+      return;
+    }
 
-      // Toggle off every enabled filter
-      await queue.filters.ffmpeg.toggle(allActive as any[]);
+    await persist([]);
 
-      // Persist cleared state if requested
-      if (shouldSave) {
-        try {
-          const settings = await getSettings(
-            moduleManager,
-            interaction.guildId!,
-          );
-          settings.activeFilters = [];
-          await moduleManager.databaseService.setModuleSettings(
-            interaction.guildId!,
-            "music",
-            settings,
-          );
-        } catch (err) {
-          moduleManager.logger.error("Failed to save cleared filter settings", interaction.guildId ?? undefined, err, "music");
-        }
-      }
-
-      const components = buildFilterStatusCard(
+    await interaction.editReply({
+      components: buildFilterStatusCard(
         "🚫 All Effects Removed",
-        `Cleared **${allActive.length}** effect${allActive.length === 1 ? "" : "s"}.`,
+        `Cleared **${current.length}** effect${current.length === 1 ? "" : "s"}.`,
         0xed4245,
         "None",
         shouldSave,
-      );
-
-      await interaction.editReply({
-        components,
-        flags: MessageFlags.IsComponentsV2,
-      });
-    } catch (error: any) {
-      moduleManager.logger.error("Clear filters error", interaction.guildId ?? undefined, error, "music");
-      await interaction.editReply({
-        content: `❌ Failed to clear effects: ${error.message}`,
-      });
-    }
+      ),
+      flags: MessageFlags.IsComponentsV2,
+    });
     return;
   }
 
   const filterInfo = AVAILABLE_FILTERS[effect];
-
   if (!filterInfo) {
     await interaction.editReply({ content: "❌ Unknown effect." });
     return;
   }
 
-  try {
-    // Toggle the FFmpeg filter
-    await queue.filters.ffmpeg.toggle([effect as any]);
+  const isNowEnabled = !current.includes(effect);
+  const next = isNowEnabled
+    ? [...current, effect]
+    : current.filter((name) => name !== effect);
 
-    const isNowEnabled = queue.filters.ffmpeg.isEnabled(effect as any);
-    const statusText = isNowEnabled ? "enabled" : "disabled";
+  const result = await applyFilters(runtime, guildId, next);
+  if (!result.ok) {
+    moduleManager.logger.error(
+      `Filter update failed: ${result.error.code}`,
+      guildId,
+      result.error,
+      "music",
+    );
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
 
-    // Build active filters list for the response
-    const allActive = queue.filters.ffmpeg.getFiltersEnabled();
-    const activeDisplay =
-      allActive.length > 0
-        ? allActive
-            .map((f) => {
-              const info = AVAILABLE_FILTERS[f];
-              return info ? `${info.emoji} ${info.label}` : f;
-            })
-            .join(" • ")
-        : "None";
+  await persist(next);
 
-    // Save to guild settings if requested
-    if (shouldSave) {
-      try {
-        const settings = await getSettings(moduleManager, interaction.guildId!);
-        settings.activeFilters = allActive;
-        await moduleManager.databaseService.setModuleSettings(
-          interaction.guildId!,
-          "music",
-          settings,
-        );
-      } catch (err) {
-        moduleManager.logger.error("Failed to save filter settings", interaction.guildId ?? undefined, err, "music");
-      }
-    }
-
-    const components = buildFilterStatusCard(
-      `${filterInfo.emoji} ${filterInfo.label} — ${statusText}`,
+  await interaction.editReply({
+    components: buildFilterStatusCard(
+      `${filterInfo.emoji} ${filterInfo.label} — ${isNowEnabled ? "enabled" : "disabled"}`,
       filterInfo.description,
       isNowEnabled ? 0x57f287 : 0xed4245,
-      activeDisplay,
+      describeFilters(next),
       shouldSave,
-    );
+    ),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
 
+async function handleLyrics(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const songQuery = interaction.options.getString("song");
+  const sendToDm = interaction.options.getBoolean("dm") ?? false;
+
+  let query = songQuery?.trim();
+  if (!query) {
+    const snapshot = await runtime.musicService.getQueue(guildId);
+    const current = currentEntry(snapshot);
+    if (!current) {
+      await interaction.editReply({
+        content: "❌ Nothing is currently playing. Specify a song name to search: `/lyrics song:<name>`",
+      });
+      return;
+    }
+    query = `${current.track.artists[0] ?? ""} ${current.track.title}`.trim();
+  }
+
+  const lyricsRes = await runtime.musicService.getLyrics(guildId, query);
+  if (!lyricsRes.ok) {
+    await interaction.editReply({
+      content: `❌ No lyrics found for **${query}**.`,
+    });
+    return;
+  }
+
+  const lyrics = lyricsRes.value;
+  const lines = lyrics.lines.map((l) => l.text).join("\n");
+  const truncated = lines.length > 3900 ? `${lines.slice(0, 3900)}\n\n*(lyrics truncated)*` : lines;
+
+  const components = buildV2Layout({
+    title: `📜 ${lyrics.trackTitle || query}`,
+    description: `${lyrics.artist ? `**${lyrics.artist}**\n\n` : ""}${truncated || "No lyrics content available."}`,
+    footer: `Source: ${lyrics.source || "LRCLIB"} • Synced: ${lyrics.synced ? "Yes" : "No"}`,
+    color: 0x9333ea,
+    useContainer: true,
+  });
+
+  if (sendToDm) {
+    try {
+      await interaction.user.send({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
+      await interaction.editReply({
+        content: `📬 Sent lyrics for **${lyrics.trackTitle || query}** to your DMs!`,
+      });
+    } catch {
+      await interaction.editReply({
+        content: "❌ Could not send DM. Please check your Discord privacy settings.",
+      });
+    }
+  } else {
     await interaction.editReply({
       components,
       flags: MessageFlags.IsComponentsV2,
     });
-  } catch (error: any) {
-    moduleManager.logger.error("Filter error", interaction.guildId ?? undefined, error, "music");
-    await interaction.editReply({
-      content: `❌ Failed to apply filter: ${error.message}`,
-    });
   }
+}
+
+async function handleAutoplay(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const enabled = interaction.options.getBoolean("enabled", true);
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "autoplay",
+    enabled,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: `📻 Autoplay ${enabled ? "Enabled" : "Disabled"}`,
+      description: enabled
+        ? "When the queue ends, the bot will automatically find and play recommended tracks!"
+        : "Autoplay is now turned off. Playback will stop when the queue finishes.",
+      color: enabled ? 0x57f287 : 0xed4245,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
+
+async function handleSpeed(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const rate = interaction.options.getNumber("rate", true);
+
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const currentFilters = { ...(snapshot.filters ?? {}) };
+  const currentTimescale = (currentFilters.timescale as Record<string, number> | undefined) ?? {};
+
+  const updatedFilters = {
+    ...currentFilters,
+    timescale: {
+      ...currentTimescale,
+      speed: rate,
+      rate: 1,
+    },
+  };
+
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "filters",
+    filters: updatedFilters,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: "⚡ Playback Speed Updated",
+      description: `Speed set to **${rate}x** (pitch preserved).`,
+      color: 0x5865f2,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
+}
+
+async function handlePitch(
+  interaction: ChatInputCommandInteraction,
+  moduleManager: ModuleManager,
+) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
+  const guildId = interaction.guildId!;
+  const level = interaction.options.getNumber("level", true);
+
+  const snapshot = await requireQueue(interaction, runtime, false);
+  if (!snapshot) return;
+
+  const currentFilters = { ...(snapshot.filters ?? {}) };
+  const currentTimescale = (currentFilters.timescale as Record<string, number> | undefined) ?? {};
+
+  const updatedFilters = {
+    ...currentFilters,
+    timescale: {
+      ...currentTimescale,
+      pitch: level,
+    },
+  };
+
+  const result = await runtime.musicService.execute({
+    guildId,
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    type: "filters",
+    filters: updatedFilters,
+  });
+
+  if (!result.ok) {
+    await interaction.editReply({ content: musicErrorMessage(result.error) });
+    return;
+  }
+
+  await interaction.editReply({
+    components: buildV2Layout({
+      title: "🎵 Playback Pitch Updated",
+      description: `Pitch set to **${level}x**.`,
+      color: 0x5865f2,
+      useContainer: true,
+    }),
+    flags: MessageFlags.IsComponentsV2,
+  });
 }
 
 async function handlePlayQueue(
   interaction: ChatInputCommandInteraction,
   moduleManager: ModuleManager,
 ) {
+  const runtime = requireRuntime(interaction, moduleManager);
+  if (!runtime) return;
+
   const member = requireVoiceChannel(interaction);
   if (!member) return;
 
+  const guildId = interaction.guildId!;
+
   // Block if recording is active in this guild
-  if (recordingActiveSessions.has(interaction.guildId!)) {
+  if (recordingActiveSessions.has(guildId)) {
     await interaction.editReply({
       content:
-        "\u274c A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
+        "❌ A recording is currently active in this server. Please stop the recording with `/record stop` before playing music.",
     });
     return;
   }
 
-  const settings = await getSettings(moduleManager, interaction.guildId!);
-  const player = useMainPlayer();
+  const settings = await getSettings(moduleManager, guildId);
 
   try {
     // Pre-queue lives inside the music module's settings object.
     const musicSettings = await moduleManager.databaseService.getModuleSettings(
-      interaction.guildId!,
+      guildId,
       "music",
     );
     const preQueue: any[] = Array.isArray(musicSettings?.preQueue)
@@ -1360,45 +1682,44 @@ async function handlePlayQueue(
       content: `🎵 Loading **${preQueue.length}** songs from dashboard queue...`,
     });
 
+    const before = await runtime.musicService.getQueue(guildId);
+    const startingNewQueue = playableEntries(before).length === 0;
+    const context = announceContext(guildId);
+    context.channel = interaction.channel;
+    context.isPlaylist = true;
+    context.nowPlayingMessage = null;
+    if (startingNewQueue) {
+      context.pendingInteraction = null;
+      if (settings.activeFilters && settings.activeFilters.length > 0) {
+        await applyFilters(runtime, guildId, settings.activeFilters);
+      } else {
+        activeFilterNames.set(guildId, []);
+      }
+    }
+
     let loaded = 0;
     let failed = 0;
 
-    for (let i = 0; i < preQueue.length; i++) {
-      const item = preQueue[i];
-      try {
-        const trackUrl = item.url || item.title;
-        const isUrl = /^https?:\/\//i.test(trackUrl);
-        await player.play(member.voice.channel!, trackUrl, {
-          searchEngine: isUrl
-            ? QueryType.AUTO
-            : `ext:${YoutubeiExtractor.identifier}`,
-          nodeOptions: {
-            metadata: {
-              channel: interaction.channel,
-              isPlaylist: true,
-              // First track: let playerStart update the loading reply
-              ...(i === 0 && { pendingInteraction: interaction }),
-            },
-            volume: settings.defaultVolume,
-            bufferingTimeout: 15_000,
-            selfDeaf: true,
-            leaveOnEmpty: true,
-            leaveOnEmptyCooldown: 60000,
-            leaveOnEnd: true,
-            leaveOnEndCooldown: 60000,
-            daveEncryption: false,
-          } as any,
-          requestedBy: interaction.user,
-        });
-        loaded++;
-      } catch (err) {
-        moduleManager.logger.error(
-          `Failed to load pre-queue track: ${item.title}`,
-          interaction.guildId ?? undefined,
-          err,
-          "music",
-        );
-        failed++;
+    for (const item of preQueue) {
+      const outcome = await enqueueQuery(
+        runtime,
+        guildId,
+        member.voice.channel!.id,
+        item.url || item.title,
+        interaction.user.id,
+        settings.maxQueueSize,
+      );
+      loaded += outcome.queued;
+      if (outcome.queued === 0) {
+        failed += 1;
+        if (outcome.error) {
+          moduleManager.logger.error(
+            `Failed to load pre-queue track: ${item.title} (${outcome.error.code})`,
+            guildId,
+            outcome.error,
+            "music",
+          );
+        }
       }
     }
 
@@ -1407,7 +1728,7 @@ async function handlePlayQueue(
     if (musicSettings && Array.isArray(musicSettings.preQueue)) {
       const next = { ...musicSettings, preQueue: [] };
       await moduleManager.databaseService.setModuleSettings(
-        interaction.guildId!,
+        guildId,
         "music",
         next,
       );
@@ -1427,48 +1748,262 @@ async function handlePlayQueue(
       components,
       flags: MessageFlags.IsComponentsV2,
     });
-
-    // Auto-apply saved filters for new queues
-    if (settings.activeFilters && settings.activeFilters.length > 0) {
-      setTimeout(async () => {
-        try {
-          const activeQueue = player.queues.get(interaction.guildId!);
-          if (activeQueue) {
-            await activeQueue.filters.ffmpeg.toggle(
-              settings.activeFilters as any[],
-            );
-          }
-        } catch (err) {
-          _moduleManager?.logger.error("Failed to auto-apply filters", interaction.guildId ?? undefined, err, "music");
-        }
-      }, 2000);
-    }
   } catch (error: any) {
-    moduleManager.logger.error("Dashboard queue error", interaction.guildId ?? undefined, error, "music");
+    moduleManager.logger.error("Dashboard queue error", guildId, error, "music");
     await interaction.editReply({
       content: `❌ Failed to load dashboard queue: ${error.message}`,
     });
   }
 }
 
-function formatViews(views: number | undefined): string {
-  if (!views || views <= 0) return "";
-  if (views >= 1_000_000_000)
-    return `${(views / 1_000_000_000).toFixed(1)}B views`;
-  if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1)}M views`;
-  if (views >= 1_000) return `${(views / 1_000).toFixed(1)}K views`;
-  return `${views} views`;
-}
-
-function loopModeToString(mode: QueueRepeatMode): string {
+function loopModeToString(mode: MusicRepeatMode): string {
   switch (mode) {
-    case QueueRepeatMode.TRACK:
+    case "track":
       return "Track";
-    case QueueRepeatMode.QUEUE:
+    case "queue":
       return "Queue";
     default:
       return "Off";
   }
+}
+
+// ─── Playback Events ─────────────────────────────────────────────────────
+
+async function handleTrackStart(
+  moduleManager: ModuleManager,
+  runtime: MusicRuntime,
+  event: Extract<MusicPlaybackEvent, { type: "track.start" }>,
+) {
+  const guildId = event.guildId;
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const entry = currentEntry(snapshot);
+  const track: DisplayTrack = entry
+    ? toDisplayTrack(entry.track)
+    : { title: event.track.title, artist: event.track.artist, durationMs: event.track.durationMs };
+
+  moduleManager.logger.info(`track.start: "${track.title}" in ${guildId}`, guildId, "music");
+
+  await resetNicknameIfEnabled(moduleManager, guildId, track.title);
+
+  const context = announceContexts.get(guildId);
+  if (!context) return;
+
+  const components = buildNowPlayingCard(track, snapshot, false);
+  const pendingInteraction = context.pendingInteraction;
+
+  if (pendingInteraction) {
+    context.pendingInteraction = null;
+    const message = await pendingInteraction
+      .editReply({
+        // The initial reply set content to "🎵 Loading track...".
+        // Discord rejects V2-flagged edits that still carry non-empty
+        // content, so it must be explicitly cleared (content: null),
+        // not just omitted — omitting it leaves the old value in place.
+        content: null,
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      })
+      .catch((err: unknown) => {
+        moduleManager.logger.error(
+          "Failed to replace loading message with now-playing card",
+          guildId,
+          err,
+          "music",
+        );
+        return null;
+      });
+    if (message) context.nowPlayingMessage = message;
+    return;
+  }
+
+  if (!context.channel) return;
+
+  if (context.isPlaylist && context.nowPlayingMessage) {
+    await context.nowPlayingMessage
+      .edit({ components, flags: MessageFlags.IsComponentsV2 })
+      .catch(async () => {
+        const message = await (context.channel as any)
+          ?.send({ components, flags: MessageFlags.IsComponentsV2 })
+          .catch(() => null);
+        if (message) context.nowPlayingMessage = message;
+      });
+    return;
+  }
+
+  const message = await (context.channel as any)
+    ?.send({ components, flags: MessageFlags.IsComponentsV2 })
+    .catch(() => null);
+  if (message) context.nowPlayingMessage = message;
+}
+
+async function handleTrackEnd(
+  moduleManager: ModuleManager,
+  runtime: MusicRuntime,
+  event: Extract<MusicPlaybackEvent, { type: "track.end" }>,
+) {
+  const guildId = event.guildId;
+  // Only a track that ended by itself advances the queue. "stopped" and
+  // "replaced" mean a command already decided what plays next, and "cleanup"
+  // means the player is gone — advancing either one would resurrect playback.
+  if (event.reason !== "finished" && event.reason !== "loadFailed") return;
+
+  // A track that could not load is retired instead of replayed, so repeat
+  // modes cannot loop a broken source forever.
+  const advanced = await runtime.advance(guildId, {
+    trackFailed: event.reason === "loadFailed",
+  });
+
+  if (!advanced.ok) {
+    // A conflict means a concurrent command already moved the queue; anything
+    // else means playback stalled and must be visible.
+    const message = `Queue advance failed in ${guildId}: ${advanced.error.code}`;
+    if (advanced.error.code === "MUSIC_CONFLICT") {
+      moduleManager.logger.warn(message, guildId, "music");
+    } else {
+      moduleManager.logger.error(message, guildId, advanced.error, "music");
+    }
+  }
+
+  const snapshot = advanced.ok
+    ? advanced.value
+    : await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length > 0) return;
+
+  moduleManager.logger.info(`queue finished in ${guildId}`, guildId, "music");
+  await resetNicknameIfEnabled(moduleManager, guildId);
+
+  const context = announceContexts.get(guildId);
+  announceContexts.delete(guildId);
+  activeFilterNames.delete(guildId);
+  if (!context?.channel) return;
+
+  await (context.channel as any)
+    ?.send({
+      components: buildV2Layout({
+        description: "✅ Queue finished — no more tracks to play.",
+        color: 0x99aab5,
+        useContainer: true,
+      }),
+      flags: MessageFlags.IsComponentsV2,
+    })
+    .catch(() => {});
+}
+
+async function handlePlaybackFailure(
+  moduleManager: ModuleManager,
+  event: Extract<MusicPlaybackEvent, { type: "track.stuck" | "track.exception" | "voice.closed" }>,
+) {
+  const guildId = event.guildId;
+  if (event.type === "voice.closed") {
+    // The bot left (or was removed from) voice — mirror the old disconnect
+    // handler and drop the music nickname without logging a false error.
+    moduleManager.logger.info(`Voice connection closed in ${guildId}`, guildId, "music");
+    await resetNicknameIfEnabled(moduleManager, guildId);
+    return;
+  }
+
+  moduleManager.logger.error(
+    `Playback ${event.type} in ${guildId}: ${event.error.code}`,
+    guildId,
+    event.error,
+    "music",
+  );
+
+  const context = announceContexts.get(guildId);
+  await (context?.channel as any)
+    ?.send({ content: `⚠️ Player error: ${event.error.message}` })
+    .catch(() => {});
+}
+
+async function registerMusicEvents(moduleManager: ModuleManager) {
+  const runtime = moduleManager.music;
+  if (!runtime) {
+    moduleManager.logger.warn(
+      "Music service is not configured — playback events are not wired.",
+      undefined,
+      "music",
+    );
+    return;
+  }
+
+  runtime.engine.on("playback", (event: MusicPlaybackEvent) => {
+    void (async () => {
+      try {
+        if (event.type === "track.start") {
+          await handleTrackStart(moduleManager, runtime, event);
+        } else if (event.type === "track.end") {
+          await handleTrackEnd(moduleManager, runtime, event);
+        } else if (
+          event.type === "track.stuck"
+          || event.type === "track.exception"
+          || event.type === "voice.closed"
+        ) {
+          await handlePlaybackFailure(moduleManager, event);
+        }
+      } catch (err) {
+        moduleManager.logger.error("Music playback event failed", undefined, err, "music");
+      }
+    })();
+  });
+
+  // ─── Realtime Filter Sync from Dashboard ─────────────────────────────
+  // The EventBus payload carries only { kind, guildId, moduleName } — the
+  // settings themselves come from a follow-up read so every subscriber
+  // sees the same authoritative value. Falls back to no-op when Redis
+  // isn't configured; the dashboard filter changes will only take effect
+  // on the next /play or on bot restart in that case.
+  await moduleManager.databaseService.subscribeToGuildConfigs(
+    async (payload: any) => {
+      try {
+        if (payload?.moduleName !== "music") return;
+
+        const guildId = payload.guildId;
+        if (!guildId) return;
+
+        const settings = await moduleManager.databaseService.getModuleSettings(
+          guildId,
+          "music",
+        );
+        const newFilters: string[] = settings.activeFilters ?? [];
+
+        const snapshot = await runtime.musicService.getQueue(guildId);
+        if (!snapshot.currentEntryId) return;
+
+        const currentlyEnabled = enabledFilters(guildId);
+        const toEnable = newFilters.filter((f) => !currentlyEnabled.includes(f));
+        const toDisable = currentlyEnabled.filter((f) => !newFilters.includes(f));
+        if (toEnable.length === 0 && toDisable.length === 0) return;
+
+        moduleManager.logger.info(
+          `Dashboard filter sync for guild ${guildId}: +[${toEnable.join(",")}] -[${toDisable.join(",")}]`,
+          guildId,
+          "music",
+        );
+
+        const applied = await applyFilters(runtime, guildId, newFilters);
+        if (!applied.ok) return;
+
+        const context = announceContexts.get(guildId);
+        if (!context?.channel) return;
+
+        await (context.channel as any)
+          ?.send({
+            components: buildV2Layout({
+              title: "🎛️ Audio Effects Updated",
+              description: "Effects were changed from the dashboard.",
+              color: 0x9333ea,
+              fields: [{ name: "Active Effects", value: describeFilters(newFilters) }],
+              footer: "Updated via web dashboard",
+              useContainer: true,
+            }),
+            flags: MessageFlags.IsComponentsV2,
+          })
+          .catch(() => {});
+      } catch (err) {
+        moduleManager.logger.error("Error processing realtime filter sync", undefined, err, "music");
+      }
+    },
+  );
 }
 
 // ─── AI Tool Actions ─────────────────────────────────────────────────────
@@ -1512,7 +2047,8 @@ export const musicAiTools: AiTool[] = [
     name: "skip_track",
     description: "Skip the currently playing track and move to the next one.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicSkip(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicSkip(guildId, moduleManager)).message,
   },
   {
     name: "stop_music",
@@ -1525,13 +2061,15 @@ export const musicAiTools: AiTool[] = [
     name: "pause_music",
     description: "Pause the currently playing track.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicPause(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicPause(guildId, moduleManager)).message,
   },
   {
     name: "resume_music",
     description: "Resume a paused track.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicResume(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicResume(guildId, moduleManager)).message,
   },
   {
     name: "set_volume",
@@ -1554,19 +2092,22 @@ export const musicAiTools: AiTool[] = [
     description:
       "Show what is currently in the music queue, including what is playing and what is up next.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicGetQueue(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicGetQueue(guildId, moduleManager)).message,
   },
   {
     name: "get_nowplaying",
     description: "Show information about the track that is currently playing.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicGetNowPlaying(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicGetNowPlaying(guildId, moduleManager)).message,
   },
   {
     name: "shuffle_queue",
     description: "Shuffle the tracks in the music queue into a random order.",
     parameters: { type: "object", properties: {} },
-    execute: async ({ guildId }) => (await musicShuffle(guildId)).message,
+    execute: async ({ guildId, moduleManager }) =>
+      (await musicShuffle(guildId, moduleManager)).message,
   },
 ];
 
@@ -1601,7 +2142,13 @@ const musicModule: BotModule = {
     loopCommand.toJSON(),
     settingsCommand.toJSON(),
     filterCommand.toJSON(),
+    lyricsCommand.toJSON(),
+    autoplayCommand.toJSON(),
+    speedCommand.toJSON(),
+    pitchCommand.toJSON(),
   ],
+
+  registerEvents: registerMusicEvents,
 
   async autocomplete(
     interaction: AutocompleteInteraction,
@@ -1620,7 +2167,8 @@ const musicModule: BotModule = {
     }
 
     const query = focused.value;
-    if (!query || query.length < 2) {
+    const runtime = moduleManager.music;
+    if (!runtime || !query || query.length < 2) {
       try {
         await interaction.respond([]);
       } catch {
@@ -1630,27 +2178,20 @@ const musicModule: BotModule = {
     }
 
     try {
-      const player = useMainPlayer();
-      // console.log(`[Music] Autocomplete search for: "${query}"`);
-
       // Race against a 2.0s timeout to prevent "Loading options failed" (Discord 3s limit)
-      const searchPromise = player.search(query, {
-        requestedBy: interaction.user,
-        searchEngine: `ext:${YoutubeiExtractor.identifier}`,
+      const searchPromise = runtime.engine.loadTracks({
+        guildId: interaction.guildId ?? "autocomplete",
+        input: query,
+        requestedBy: interaction.user.id,
+        requestType: "search",
       });
 
-      const timeoutPromise = new Promise((_, reject) =>
+      const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Search timeout")), 2000),
       );
 
-      const result = (await Promise.race([
-        searchPromise,
-        timeoutPromise,
-      ])) as Awaited<ReturnType<typeof player.search>>;
-
-      // console.log(`[Music] Search returned ${result?.tracks?.length} tracks`);
-
-      if (!result || !result.tracks || result.tracks.length === 0) {
+      const result = await Promise.race([searchPromise, timeoutPromise]);
+      if (!result.ok || result.value.candidates.length === 0) {
         try {
           await interaction.respond([]);
         } catch {
@@ -1659,34 +2200,16 @@ const musicModule: BotModule = {
         return;
       }
 
-      // Robust view count parser
-      const getViews = (t: any) => {
-        const v = t.views;
-        if (typeof v === "number") return v;
-        if (typeof v === "string")
-          return parseInt(v.replace(/[^0-9]/g, ""), 10) || 0;
-        return 0;
-      };
-
-      // Sort by view count (most popular first)
-      const sorted = [...result.tracks].sort(
-        (a, b) => getViews(b) - getViews(a),
-      );
-
-      const choices = sorted.slice(0, 10).map((track) => {
-        const views = formatViews(getViews(track));
-        const label = views
-          ? `${track.title} — ${track.duration} • ${views}`
-          : `${track.title} — ${track.duration}`;
-
-        let safeLabel = label;
-        if (safeLabel.length > 100) {
-          safeLabel = safeLabel.substring(0, 97) + "...";
-        }
-
+      const choices = result.value.candidates.slice(0, 10).map(({ track }) => {
+        const label = `${track.title} — ${formatDuration(track.durationMs)}`;
+        // The autocomplete value is replayed through /play, so it must be a
+        // query the resolver can find again. Lavalink encodings are ephemeral
+        // and must never leave the adapter.
+        const value = track.requestedSource.uri
+          ?? [track.title, track.artists[0]].filter(Boolean).join(" — ");
         return {
-          name: safeLabel,
-          value: track.url,
+          name: label.length > 100 ? `${label.substring(0, 97)}...` : label,
+          value: value.length > 100 ? value.substring(0, 100) : value,
         };
       });
 
@@ -1695,10 +2218,10 @@ const musicModule: BotModule = {
       // 10062 = Unknown interaction — expected when Discord expires the token during rapid typing
       if (error?.code === 10062) return;
 
-      if (error.message === "Search timeout") {
-        _moduleManager?.logger.warn(`Autocomplete timed out for "${query}"`, undefined, "music");
+      if (error?.message === "Search timeout") {
+        moduleManager.logger.warn(`Autocomplete timed out for "${query}"`, undefined, "music");
       } else {
-        _moduleManager?.logger.error(
+        moduleManager.logger.error(
           "Autocomplete search error",
           undefined,
           error,
@@ -1718,16 +2241,6 @@ const musicModule: BotModule = {
     interaction: ChatInputCommandInteraction,
     moduleManager: ModuleManager,
   ) {
-    // Register player events on first use. Fire-and-forget — the registration
-    // is idempotent and the subscribe is best-effort realtime plumbing.
-    registerPlayerEvents(moduleManager).catch((err) => {
-      moduleManager.logger.warn(
-        `Failed to register music player events: ${(err as Error)?.message || err}`,
-        undefined,
-        "music",
-      );
-    });
-
     // Defer publicly — music responses should be visible to everyone
     await interaction.deferReply();
 
@@ -1740,27 +2253,35 @@ const musicModule: BotModule = {
       case "playqueue":
         return handlePlayQueue(interaction, moduleManager);
       case "skip":
-        return handleSkip(interaction);
+        return handleSkip(interaction, moduleManager);
       case "stop":
         return handleStop(interaction, moduleManager);
       case "pause":
-        return handlePause(interaction);
+        return handlePause(interaction, moduleManager);
       case "resume":
-        return handleResume(interaction);
+        return handleResume(interaction, moduleManager);
       case "queue":
-        return handleQueue(interaction);
+        return handleQueue(interaction, moduleManager);
       case "nowplaying":
-        return handleNowPlaying(interaction);
+        return handleNowPlaying(interaction, moduleManager);
       case "volume":
         return handleVolume(interaction, moduleManager);
       case "shuffle":
-        return handleShuffle(interaction);
+        return handleShuffle(interaction, moduleManager);
       case "loop":
-        return handleLoop(interaction);
+        return handleLoop(interaction, moduleManager);
       case "music-settings":
         return handleSettings(interaction, moduleManager);
       case "filter":
         return handleFilter(interaction, moduleManager);
+      case "lyrics":
+        return handleLyrics(interaction, moduleManager);
+      case "autoplay":
+        return handleAutoplay(interaction, moduleManager);
+      case "speed":
+        return handleSpeed(interaction, moduleManager);
+      case "pitch":
+        return handlePitch(interaction, moduleManager);
       default:
         await interaction.editReply({ content: "❓ Unknown command." });
     }
@@ -1771,8 +2292,8 @@ const musicModule: BotModule = {
     moduleManager: ModuleManager,
   ) {
     const action = interaction.customId.split(":")[1];
-    const player = useMainPlayer();
-    const queue = player.queues.get(interaction.guildId!);
+    const guildId = interaction.guildId!;
+    const runtime = moduleManager.music;
 
     // Require user to be in the same voice channel
     const member = interaction.member as GuildMember;
@@ -1784,9 +2305,19 @@ const musicModule: BotModule = {
       return;
     }
 
-    if (!queue || !queue.currentTrack) {
+    if (!runtime) {
       await interaction.reply({
-        content: "❌ Nothing is currently playing.",
+        content: MUSIC_UNAVAILABLE,
+        flags: [MessageFlags.Ephemeral],
+      });
+      return;
+    }
+
+    const snapshot = await runtime.musicService.getQueue(guildId);
+    const entry = currentEntry(snapshot);
+    if (!entry) {
+      await interaction.reply({
+        content: NOTHING_PLAYING,
         flags: [MessageFlags.Ephemeral],
       });
       return;
@@ -1794,27 +2325,51 @@ const musicModule: BotModule = {
 
     switch (action) {
       case "pause": {
-        if (queue.node.isPaused()) {
-          queue.node.resume();
-        } else {
-          queue.node.pause();
+        const state = await runtime.musicService.getState(guildId);
+        const shouldResume = state.status === "paused";
+        const result = await runMutation(runtime, guildId, (revision, operation) => ({
+          type: shouldResume ? "resume" : "pause",
+          guildId,
+          operationId: operation,
+          expectedRevision: revision,
+        }));
+        if (!result.ok) {
+          await interaction.reply({
+            content: musicErrorMessage(result.error),
+            flags: [MessageFlags.Ephemeral],
+          });
+          return;
         }
+
         // The whole "Now Playing" card (title/fields/footer) lives inside
         // the V2 container alongside the buttons — replacing just the
         // button row would wipe the rest of the card, so rebuild it whole.
         await interaction.update({
           components: buildNowPlayingCard(
-            queue.currentTrack,
-            queue,
-            queue.node.isPaused(),
+            toDisplayTrack(entry.track),
+            result.value,
+            !shouldResume,
           ),
           flags: MessageFlags.IsComponentsV2,
         });
         break;
       }
       case "skip": {
-        queue.node.skip();
-        // Clear the card on the old message; playerStart sends a new one
+        const result = await runMutation(runtime, guildId, (revision, operation) => ({
+          type: "skip",
+          guildId,
+          operationId: operation,
+          expectedRevision: revision,
+        }));
+        if (!result.ok) {
+          await interaction.reply({
+            content: musicErrorMessage(result.error),
+            flags: [MessageFlags.Ephemeral],
+          });
+          return;
+        }
+
+        // Clear the card on the old message; track.start sends a new one
         // for the next track. A plain content-less `components: []` would
         // leave the message with no content/embeds at all — Discord
         // rejects that as an empty message — so leave a status line. Wrap
@@ -1829,22 +2384,49 @@ const musicModule: BotModule = {
         });
         break;
       }
-      case "stop": {
-        // Reset nickname if applicable
-        try {
-          const settings = await getSettings(
-            moduleManager,
-            interaction.guildId!,
-          );
-          if (settings.updateNickname) {
-            updateBotNickname(queue);
-          }
-        } catch {}
+      case "lyrics": {
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+        const lyricsRes = await runtime.musicService.getLyrics(guildId);
+        if (!lyricsRes.ok) {
+          await interaction.editReply({
+            content: "❌ No lyrics found for the current track.",
+          });
+          return;
+        }
+        const lyrics = lyricsRes.value;
+        const lines = lyrics.lines.map((l) => l.text).join("\n");
+        const truncated = lines.length > 3900 ? `${lines.slice(0, 3900)}\n\n*(lyrics truncated)*` : lines;
 
-        queue.delete();
-        try {
-          player.queues.delete(interaction.guildId!);
-        } catch {}
+        await interaction.editReply({
+          components: buildV2Layout({
+            title: `📜 Lyrics: ${lyrics.trackTitle || entry.track.title}`,
+            description: `${lyrics.artist ? `**${lyrics.artist}**\n\n` : ""}${truncated || "No lyrics content available."}`,
+            footer: `Source: ${lyrics.source || "LRCLIB"}`,
+            color: 0x9333ea,
+            useContainer: true,
+          }),
+          flags: MessageFlags.IsComponentsV2,
+        });
+        break;
+      }
+      case "stop": {
+        const result = await runMutation(runtime, guildId, (revision, operation) => ({
+          type: "stop",
+          guildId,
+          operationId: operation,
+          expectedRevision: revision,
+        }));
+        if (!result.ok) {
+          await interaction.reply({
+            content: musicErrorMessage(result.error),
+            flags: [MessageFlags.Ephemeral],
+          });
+          return;
+        }
+
+        await resetNicknameIfEnabled(moduleManager, guildId);
+        activeFilterNames.delete(guildId);
+        announceContexts.delete(guildId);
 
         await interaction.update({
           components: buildV2Layout({
@@ -1862,13 +2444,21 @@ const musicModule: BotModule = {
 };
 
 // ─── AI Tool Action Exports ───────────────────────────────────────────────
-// Interaction-free functions called by the AI module's tool router.
-// They bypass ChatInputCommandInteraction entirely and return a plain result
-// so the AI can compose a natural-language reply from the outcome.
+// Interaction-free functions called by the AI module's tool router and by the
+// dashboard HTTP API. They return a plain result so the AI can compose a
+// natural-language reply from the outcome.
 
 export interface MusicActionResult {
   ok: boolean;
   message: string;
+}
+
+function actionRuntime(moduleManager: ModuleManager): MusicRuntime | null {
+  return moduleManager.music ?? null;
+}
+
+function unavailable(): MusicActionResult {
+  return { ok: false, message: MUSIC_UNAVAILABLE };
 }
 
 /** Play a track by search query or URL. The caller must supply the author's voice channel. */
@@ -1880,43 +2470,45 @@ export async function musicPlay(
   moduleManager: ModuleManager,
   notifyChannel?: TextBasedChannel,
 ): Promise<MusicActionResult> {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
   try {
     const settings = await getSettings(moduleManager, guildId);
-    const player = useMainPlayer();
-
-    const isUrl = /^https?:\/\//i.test(query);
-    const result = await player.play(voiceChannel, query, {
-      searchEngine: isUrl
-        ? QueryType.AUTO
-        : `ext:${YoutubeiExtractor.identifier}`,
-      nodeOptions: {
-        metadata: { channel: notifyChannel ?? null },
-        volume: settings.defaultVolume,
-        bufferingTimeout: 15_000,
-        selfDeaf: true,
-        leaveOnEmpty: true,
-        leaveOnEmptyCooldown: 60000,
-        leaveOnEnd: true,
-        leaveOnEndCooldown: 60000,
-        daveEncryption: false,
-      } as any,
-      requestedBy,
-    });
-
-    const queue = player.queues.get(guildId);
-    if (queue && queue.tracks.size > settings.maxQueueSize) {
+    const before = await runtime.musicService.getQueue(guildId);
+    if (playableEntries(before).length >= settings.maxQueueSize) {
       return {
         ok: false,
         message: `Queue limit reached (${settings.maxQueueSize} tracks). Remove some tracks first.`,
       };
     }
 
-    const track = result.track;
-    const queued = queue && queue.tracks.size > 0;
-    const verb = queued ? "Added to queue" : "Now playing";
+    const context = announceContext(guildId);
+    if (notifyChannel) context.channel = notifyChannel;
+
+    const outcome = await enqueueQuery(
+      runtime,
+      guildId,
+      voiceChannel.id,
+      query,
+      requestedBy.id,
+      settings.maxQueueSize,
+    );
+
+    if (!outcome.firstTrack) {
+      return {
+        ok: false,
+        message: outcome.error
+          ? musicErrorMessage(outcome.error)
+          : "Could not play that track.",
+      };
+    }
+
+    const track = outcome.firstTrack;
+    const verb = outcome.startedNewQueue ? "Now playing" : "Added to queue";
     return {
       ok: true,
-      message: `🎵 ${verb}: **${track.title}** by ${track.author || "Unknown"} (${track.duration || "Live"})`,
+      message: `🎵 ${verb}: **${track.title}** by ${track.artists[0] || "Unknown"} (${formatDuration(track.durationMs)})`,
     };
   } catch (err: any) {
     return {
@@ -1927,15 +2519,26 @@ export async function musicPlay(
 }
 
 /** Skip the current track. */
-export async function musicSkip(guildId: string): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue || !queue.currentTrack) {
-    return { ok: false, message: "Nothing is currently playing." };
-  }
-  const title = queue.currentTrack.title;
-  queue.node.skip();
-  return { ok: true, message: `⏭️ Skipped **${title}**.` };
+export async function musicSkip(
+  guildId: string,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const entry = currentEntry(snapshot);
+  if (!entry) return { ok: false, message: "Nothing is currently playing." };
+
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "skip",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+  if (!result.ok) return { ok: false, message: musicErrorMessage(result.error) };
+
+  return { ok: true, message: `⏭️ Skipped **${entry.track.title}**.` };
 }
 
 /** Stop playback and clear the queue. */
@@ -1943,41 +2546,105 @@ export async function musicStop(
   guildId: string,
   moduleManager: ModuleManager,
 ): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue) {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length === 0) {
     return { ok: false, message: "Nothing is currently playing." };
   }
-  try {
-    const settings = await getSettings(moduleManager, guildId);
-    if (settings.updateNickname) updateBotNickname(queue);
-  } catch {}
-  queue.delete();
-  try {
-    player.queues.delete(guildId);
-  } catch {}
+
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "stop",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+  if (!result.ok) return { ok: false, message: musicErrorMessage(result.error) };
+
+  await resetNicknameIfEnabled(moduleManager, guildId);
+  activeFilterNames.delete(guildId);
+  announceContexts.delete(guildId);
   return { ok: true, message: "⏹️ Stopped playback and cleared the queue." };
 }
 
 /** Pause the current track. */
-export async function musicPause(guildId: string): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue) return { ok: false, message: "Nothing is currently playing." };
-  if (queue.node.isPaused()) return { ok: false, message: "Already paused." };
-  queue.node.pause();
-  return { ok: true, message: "⏸️ Paused." };
+export async function musicPause(
+  guildId: string,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length === 0) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
+  const state = await runtime.musicService.getState(guildId);
+  if (state.status === "paused") return { ok: false, message: "Already paused." };
+
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "pause",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+  return result.ok
+    ? { ok: true, message: "⏸️ Paused." }
+    : { ok: false, message: musicErrorMessage(result.error) };
 }
 
 /** Resume a paused track. */
-export async function musicResume(guildId: string): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue) return { ok: false, message: "Nothing is currently playing." };
-  if (!queue.node.isPaused())
-    return { ok: false, message: "Not currently paused." };
-  queue.node.resume();
-  return { ok: true, message: "▶️ Resumed." };
+export async function musicResume(
+  guildId: string,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length === 0) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
+  const state = await runtime.musicService.getState(guildId);
+  if (state.status !== "paused") return { ok: false, message: "Not currently paused." };
+
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "resume",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+  return result.ok
+    ? { ok: true, message: "▶️ Resumed." }
+    : { ok: false, message: musicErrorMessage(result.error) };
+}
+
+/** Seek within the current track. Used by the dashboard control API. */
+export async function musicSeek(
+  guildId: string,
+  positionMs: number,
+  moduleManager: ModuleManager,
+): Promise<MusicActionResult> {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (!snapshot.currentEntryId) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
+
+  const target = Math.max(0, Math.round(positionMs));
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "seek",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+    positionMs: target,
+  }));
+  return result.ok
+    ? { ok: true, message: `⏩ Seeked to ${formatDuration(target)}.` }
+    : { ok: false, message: musicErrorMessage(result.error) };
 }
 
 /** Set the playback volume (1–100). */
@@ -1986,12 +2653,23 @@ export async function musicSetVolume(
   level: number,
   moduleManager: ModuleManager,
 ): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue) return { ok: false, message: "Nothing is currently playing." };
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length === 0) {
+    return { ok: false, message: "Nothing is currently playing." };
+  }
 
   const clamped = Math.max(1, Math.min(100, Math.round(level)));
-  queue.node.setVolume(clamped);
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "volume",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+    volume: clamped,
+  }));
+  if (!result.ok) return { ok: false, message: musicErrorMessage(result.error) };
 
   try {
     const settings = await getSettings(moduleManager, guildId);
@@ -2009,26 +2687,34 @@ export async function musicSetVolume(
 /** Return a text summary of the current queue. */
 export async function musicGetQueue(
   guildId: string,
+  moduleManager: ModuleManager,
 ): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue || (!queue.isPlaying() && queue.tracks.size === 0)) {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  if (playableEntries(snapshot).length === 0) {
     return { ok: true, message: "📭 The queue is empty." };
   }
 
-  const current = queue.currentTrack;
-  const tracks = queue.tracks.toArray().slice(0, 5); // cap at 5 for brevity
+  const current = currentEntry(snapshot);
+  const upcoming = upcomingEntries(snapshot);
+  const shown = upcoming.slice(0, 5); // cap at 5 for brevity
   const lines: string[] = [];
 
-  if (current)
-    lines.push(`**Now Playing:** ${current.title} — \`${current.duration}\``);
-  tracks.forEach((t, i) =>
-    lines.push(`**${i + 1}.** ${t.title} — \`${t.duration}\``),
+  if (current) {
+    lines.push(
+      `**Now Playing:** ${current.track.title} — \`${formatDuration(current.track.durationMs)}\``,
+    );
+  }
+  shown.forEach((entry, i) =>
+    lines.push(`**${i + 1}.** ${entry.track.title} — \`${formatDuration(entry.track.durationMs)}\``),
   );
 
-  const remaining = queue.tracks.size - tracks.length;
-  if (remaining > 0)
+  const remaining = upcoming.length - shown.length;
+  if (remaining > 0) {
     lines.push(`…and ${remaining} more track${remaining !== 1 ? "s" : ""}.`);
+  }
 
   return { ok: true, message: lines.join("\n") };
 }
@@ -2036,33 +2722,45 @@ export async function musicGetQueue(
 /** Return now-playing info as a short text summary. */
 export async function musicGetNowPlaying(
   guildId: string,
+  moduleManager: ModuleManager,
 ): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue || !queue.currentTrack) {
-    return { ok: true, message: "Nothing is currently playing." };
-  }
-  const t = queue.currentTrack;
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const entry = currentEntry(snapshot);
+  if (!entry) return { ok: true, message: "Nothing is currently playing." };
+
+  const track = entry.track;
   return {
     ok: true,
-    message: `🎵 **${t.title}** by ${t.author || "Unknown"} — \`${t.duration}\` | Volume: ${queue.node.volume}%`,
+    message: `🎵 **${track.title}** by ${track.artists[0] || "Unknown"} — \`${formatDuration(track.durationMs)}\` | Volume: ${snapshot.volume}%`,
   };
 }
 
 /** Shuffle the queue. */
 export async function musicShuffle(
   guildId: string,
+  moduleManager: ModuleManager,
 ): Promise<MusicActionResult> {
-  const player = useMainPlayer();
-  const queue = player.queues.get(guildId);
-  if (!queue || queue.tracks.size < 2) {
+  const runtime = actionRuntime(moduleManager);
+  if (!runtime) return unavailable();
+
+  const snapshot = await runtime.musicService.getQueue(guildId);
+  const playable = playableEntries(snapshot);
+  if (playable.length < 2) {
     return { ok: false, message: "Not enough tracks in the queue to shuffle." };
   }
-  queue.tracks.shuffle();
-  return {
-    ok: true,
-    message: `🔀 Queue shuffled! (${queue.tracks.size} tracks)`,
-  };
+
+  const result = await runMutation(runtime, guildId, (revision, operation) => ({
+    type: "queue.shuffle",
+    guildId,
+    operationId: operation,
+    expectedRevision: revision,
+  }));
+  return result.ok
+    ? { ok: true, message: `🔀 Queue shuffled! (${playable.length} tracks)` }
+    : { ok: false, message: musicErrorMessage(result.error) };
 }
 
 export default musicModule;
