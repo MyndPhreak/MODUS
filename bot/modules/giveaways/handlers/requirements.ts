@@ -135,12 +135,13 @@ export async function handleRoleSelect(
     ...(kind === "required" ? { requiredRoleIds: roleIds } : { blockedRoleIds: roleIds }),
   };
   await db.giveaways.update(giveawayId, { requirements });
-  await refreshGiveawayMessage(moduleManager, { ...giveaway, requirements });
 
   await interaction.reply({
     content: `✅ ${kind === "required" ? "Required" : "Blocked"} roles updated (${roleIds.length}).`,
     flags: [MessageFlags.Ephemeral],
   });
+
+  await refreshGiveawayMessage(moduleManager, { ...giveaway, requirements });
 }
 
 export async function handleAgeButton(interaction: ButtonInteraction, giveawayId: string): Promise<void> {
