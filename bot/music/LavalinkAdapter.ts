@@ -272,10 +272,10 @@ export class LavalinkAdapter extends EventEmitter {
       if (!this.#heartbeatTimer) {
         this.#heartbeatTimer = setInterval(async () => {
           if (!this.#manager || !this.#client.isReady()) return;
-          for (const node of this.#manager.nodes.values()) {
-            if ((node.state as number) !== 1 /* CONNECTED */) {
-              const config = this.#registry.snapshots().find((s) => s.id === node.name);
-              const nodeConfig = config ? this.#registry.getConfig(config.id) : undefined;
+          for (const snapshot of this.#registry.snapshots()) {
+            const node = this.#manager.nodes.get(snapshot.id);
+            if (!node || (node.state as number) !== 1 /* CONNECTED */) {
+              const nodeConfig = this.#registry.getConfig(snapshot.id);
               if (nodeConfig) {
                 try {
                   const checkUrl = `${nodeConfig.url.replace(/\/$/, "")}/version`;
@@ -283,12 +283,25 @@ export class LavalinkAdapter extends EventEmitter {
                     headers: { Authorization: nodeConfig.password },
                     signal: AbortSignal.timeout(2000),
                   });
-                  if (res.ok && (node.state as number) !== 1) {
-                    console.log(`[Music] Lavalink node "${node.name}" REST is healthy — reconnecting WebSocket...`);
-                    const nodeAny = node as any;
-                    nodeAny.cleanupWebsocket();
-                    nodeAny.state = 3 /* DISCONNECTED */;
-                    node.connect().catch(() => {});
+                  if (res.ok) {
+                    if (!this.#manager.nodes.has(snapshot.id)) {
+                      console.log(`[Music] Lavalink node "${snapshot.id}" REST is healthy — re-adding to connection pool...`);
+                      const parsed = new URL(nodeConfig.url);
+                      const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+                      this.#manager.addNode({
+                        name: nodeConfig.id,
+                        url: `${parsed.host}${path}`,
+                        auth: nodeConfig.password,
+                        secure: parsed.protocol === "https:",
+                        group: nodeConfig.region,
+                      });
+                    } else if ((node!.state as number) !== 1) {
+                      console.log(`[Music] Lavalink node "${snapshot.id}" REST is healthy — reconnecting WebSocket...`);
+                      const nodeAny = node as any;
+                      nodeAny.cleanupWebsocket();
+                      nodeAny.state = 3 /* DISCONNECTED */;
+                      node!.connect().catch(() => {});
+                    }
                   }
                 } catch {
                   // Node host is still starting up or unreachable
