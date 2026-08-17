@@ -5,6 +5,39 @@ import { drawWinners } from "./draw";
 import { buildGiveawayComponents, buildGiveawayEmbed } from "./embed";
 import type { PrizeKind } from "./embed";
 
+/** Minimal shape `dmWinners` needs — satisfied by a `giveaways.getById` row. */
+interface DmGiveaway {
+  title: string;
+  prizeKind: string;
+  prizeValue: string;
+}
+
+/**
+ * DMs each winner their prize details. A "key"-kind prizeValue is only ever
+ * revealed here — never in the public embed or announcement. Each send is
+ * individually try/caught so one winner with closed DMs doesn't block the rest.
+ * Shared by the initial draw (`drawAndAnnounce`) and `/giveaway reroll`.
+ */
+export async function dmWinners(
+  client: Client,
+  giveaway: DmGiveaway,
+  winnerIds: string[],
+  guildName: string,
+): Promise<void> {
+  for (const winnerId of winnerIds) {
+    try {
+      const user = await client.users.fetch(winnerId);
+      const prizeLine =
+        giveaway.prizeKind === "key"
+          ? `Your code: \`${giveaway.prizeValue}\``
+          : `Prize: ${giveaway.prizeValue}`;
+      await user.send(`🎉 You won **${giveaway.title}** in ${guildName}!\n${prizeLine}`);
+    } catch {
+      // DMs closed — the winner still sees the in-channel announcement.
+    }
+  }
+}
+
 /**
  * Draws winners for `giveawayId`, marks it ended, edits the live message,
  * announces in-channel, and DMs each winner the prize details (this is
@@ -60,20 +93,13 @@ export async function drawAndAnnounce(
           : `😔 **${giveaway.title}** ended with no eligible entrants.`,
       );
 
-      for (const winnerId of winnerIds) {
-        try {
-          const user = await client.users.fetch(winnerId);
-          const prizeLine =
-            giveaway.prizeKind === "key"
-              ? `Your code: \`${giveaway.prizeValue}\``
-              : `Prize: ${giveaway.prizeValue}`;
-          await user.send(
-            `🎉 You won **${giveaway.title}** in ${channel.guild.name}!\n${prizeLine}`,
-          );
-        } catch {
-          // DMs closed — the winner still sees the in-channel announcement.
-        }
-      }
+      await dmWinners(client, giveaway, winnerIds, channel.guild.name);
+    } else {
+      logger.warn(
+        `Giveaway ${giveaway.id} ended but its channel (${giveaway.channelId}) could not be resolved — winners were not announced or DMed.`,
+        giveaway.guildId,
+        "giveaways",
+      );
     }
   } catch (err) {
     logger.error("Failed to announce giveaway result", giveaway.guildId, err, "giveaways");
