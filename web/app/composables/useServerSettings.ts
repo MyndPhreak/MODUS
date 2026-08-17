@@ -104,6 +104,7 @@ export function useServerSettings(guildId: string) {
     "reaction-roles",
     "events",
     "polls",
+    "giveaways",
     "embeds",
     "tags",
     "welcome",
