@@ -23,6 +23,8 @@ import {
   TranscriptRepository,
   PollTemplateRepository,
   PollRepository,
+  GiveawayRepository,
+  GiveawayEntryRepository,
   type Database,
 } from "@modus/db";
 
@@ -44,6 +46,8 @@ export interface Repos {
   transcripts: TranscriptRepository;
   pollTemplates: PollTemplateRepository;
   polls: PollRepository;
+  giveaways: GiveawayRepository;
+  giveawayEntries: GiveawayEntryRepository;
 }
 
 let cached: Repos | null = null;
@@ -75,6 +79,8 @@ export function getRepos(): Repos | null {
       transcripts: new TranscriptRepository(db),
       pollTemplates: new PollTemplateRepository(db),
       polls: new PollRepository(db),
+      giveaways: new GiveawayRepository(db),
+      giveawayEntries: new GiveawayEntryRepository(db),
     };
     return cached;
   } catch (err) {
