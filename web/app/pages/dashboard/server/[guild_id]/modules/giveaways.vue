@@ -2,7 +2,7 @@
 const route = useRoute();
 const guildId = route.params.guild_id as string;
 
-const { state, loadChannels, loadRoles, channelOptions, roleOptions, getModuleConfig, saveModuleSettings } =
+const { state, isModuleEnabled, loadChannels, loadRoles, channelOptions, roleOptions, getModuleConfig, saveModuleSettings } =
   useServerSettings(guildId);
 const { giveaways, loading, actionLoading, error, createGiveaway, updateGiveaway, cancelGiveaway } =
   useGiveaways(guildId);
@@ -10,7 +10,12 @@ const { giveaways, loading, actionLoading, error, createGiveaway, updateGiveaway
 const hostRoleIds = ref<string[]>(getModuleConfig("giveaways").hostRoleIds ?? []);
 
 const saveHostRoles = async () => {
-  await saveModuleSettings("giveaways", { hostRoleIds: hostRoleIds.value });
+  try {
+    await saveModuleSettings("giveaways", { hostRoleIds: hostRoleIds.value });
+  } catch {
+    // saveModuleSettings surfaces failures via its own toast — this just
+    // prevents an unhandled promise rejection.
+  }
 };
 
 const showCreateForm = ref(false);
@@ -30,8 +35,14 @@ const form = reactive({
 });
 
 const submitCreate = async () => {
-  await createGiveaway({ ...form });
-  showCreateForm.value = false;
+  try {
+    await createGiveaway({ ...form });
+    showCreateForm.value = false;
+  } catch {
+    // createGiveaway re-throws after populating `error` — the banner at
+    // the top of the page already surfaces it, this just prevents an
+    // unhandled promise rejection.
+  }
 };
 
 const editing = ref<string | null>(null);
@@ -68,8 +79,12 @@ const submitEdit = async () => {
   if (!editing.value) return;
   const payload: Record<string, any> = { ...editForm };
   if (payload.duration_minutes === undefined) delete payload.duration_minutes;
-  await updateGiveaway(editing.value, payload);
-  editing.value = null;
+  try {
+    await updateGiveaway(editing.value, payload);
+    editing.value = null;
+  } catch {
+    // updateGiveaway re-throws after populating `error` — see submitCreate.
+  }
 };
 
 const cancelEdit = () => {
@@ -77,7 +92,11 @@ const cancelEdit = () => {
 };
 
 const cancel = async (id: string) => {
-  await cancelGiveaway(id);
+  try {
+    await cancelGiveaway(id);
+  } catch {
+    // cancelGiveaway re-throws after populating `error` — see submitCreate.
+  }
 };
 
 onMounted(() => {
@@ -87,9 +106,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-semibold">Giveaways</h1>
+  <div class="p-6 lg:p-8 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+      <NuxtLink
+        :to="`/dashboard/server/${guildId}/modules`"
+        class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center shrink-0"
+      >
+        <UIcon name="i-heroicons-arrow-left" class="w-5 h-5 text-gray-400" />
+      </NuxtLink>
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0"
+        >
+          <UIcon
+            name="i-heroicons-gift"
+            class="w-5 h-5 text-yellow-400"
+          />
+        </div>
+        <div>
+          <h2 class="text-xl font-bold text-white">Giveaways</h2>
+          <p class="text-xs text-gray-500">
+            Configurable giveaways with entry requirements and structured prizes
+          </p>
+        </div>
+      </div>
+      <UBadge
+        :color="isModuleEnabled('giveaways') ? 'success' : 'neutral'"
+        variant="soft"
+        class="ml-auto"
+      >
+        {{ isModuleEnabled("giveaways") ? "Module Active" : "Module Disabled" }}
+      </UBadge>
+    </div>
+
+    <div class="flex justify-end">
       <UButton icon="i-lucide-plus" @click="showCreateForm = !showCreateForm">
         {{ showCreateForm ? "Close" : "Create Giveaway" }}
       </UButton>
