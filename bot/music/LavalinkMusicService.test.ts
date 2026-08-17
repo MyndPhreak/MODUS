@@ -10,6 +10,7 @@ import type {
 import { MusicRevisionConflictError } from "@modus/db";
 import { describe, expect, it } from "vitest";
 import { MusicError } from "./errors";
+import { GuildPlaybackLeaseOwnershipError } from "./GuildPlaybackLease";
 import type {
   LavalinkLoadRequest,
   LavalinkLoadResult,
@@ -1200,5 +1201,41 @@ describe("LavalinkMusicService.recoverOnStartup", () => {
       errorCode: "MUSIC_SOURCE_UNAVAILABLE",
     }]);
     expect(nodeRegistry.snapshot("primary").available).toBe(true);
+  });
+
+  describe("playback lease heartbeat and recovery", () => {
+    it("renews lease during heartbeat for active playback", async () => {
+      const { lease, service } = setup();
+      await service.execute(playCommand());
+      lease.order.length = 0;
+
+      await service.heartbeat();
+      expect(lease.order).toContain("renew");
+      await service.shutdown();
+    });
+
+    it("re-fences and acquires when lease lapsed but local player is active", async () => {
+      const { adapter, lease, service } = setup();
+      await service.execute(playCommand());
+      lease.order.length = 0;
+
+      // Force renew to fail with GuildPlaybackLeaseOwnershipError
+      lease.renew = async () => {
+        throw new GuildPlaybackLeaseOwnershipError("guild-1");
+      };
+
+      const result = await service.execute({
+        type: "volume",
+        guildId: "guild-1",
+        operationId: "op-vol-recover",
+        expectedRevision: 2,
+        volume: 50,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(lease.order).toContain("fence");
+      expect(adapter.playerUpdates.at(-1)?.volume).toBe(50);
+      await service.shutdown();
+    });
   });
 });

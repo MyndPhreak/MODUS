@@ -42,6 +42,7 @@ import type {
 } from "./types";
 
 const DEFAULT_CHECKPOINT_INTERVAL_MS = 30_000;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 5_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 100;
 const MIN_MATCH_SCORE = 0.85;
@@ -97,6 +98,7 @@ export interface LavalinkMusicServiceOptions {
   maxAttempts?: number;
   retryDelayMs?: number;
   checkpointIntervalMs?: number;
+  heartbeatIntervalMs?: number;
   sleep?: (milliseconds: number) => Promise<void>;
   now?: () => number;
   random?: () => number;
@@ -134,6 +136,8 @@ export class LavalinkMusicService implements MusicService {
   private readonly maxAttempts: number;
   private readonly retryDelayMs: number;
   private readonly checkpointIntervalMs: number;
+  private readonly heartbeatIntervalMs: number;
+  private readonly heartbeatTimer?: ReturnType<typeof setInterval>;
   private readonly sleep: (milliseconds: number) => Promise<void>;
   private readonly now: () => number;
   private readonly random: () => number;
@@ -161,6 +165,10 @@ export class LavalinkMusicService implements MusicService {
       options.checkpointIntervalMs ?? DEFAULT_CHECKPOINT_INTERVAL_MS,
       "checkpointIntervalMs",
     );
+    this.heartbeatIntervalMs = positiveInteger(
+      options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS,
+      "heartbeatIntervalMs",
+    );
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
@@ -175,6 +183,13 @@ export class LavalinkMusicService implements MusicService {
       sleep: this.sleep,
     });
     this.adapter.on("playback", this.playbackListener);
+    const timer = setInterval(() => {
+      void this.heartbeat().catch(() => {});
+    }, this.heartbeatIntervalMs);
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+    this.heartbeatTimer = timer;
   }
 
   async execute(command: MusicCommand): Promise<MusicResult<MusicQueueSnapshot>> {
@@ -305,12 +320,36 @@ export class LavalinkMusicService implements MusicService {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.adapter.off("playback", this.playbackListener);
     await Promise.allSettled([...this.active.entries()].map(([guildId, playback]) =>
       this.lease.release(guildId, playback.fencingToken),
     ));
     this.active.clear();
     this.checkpointTimes.clear();
+  }
+
+  async heartbeat(): Promise<void> {
+    if (this.closed) return;
+    const entries = [...this.active.entries()];
+    await Promise.allSettled(
+      entries.map(async ([guildId, playback]) => {
+        const player = this.adapter.getPlayer(guildId);
+        if (!player) return;
+        try {
+          await this.lease.renew(guildId, playback.fencingToken, playback.nodeId, playback.queueRevision);
+        } catch (error) {
+          if (error instanceof GuildPlaybackLeaseOwnershipError && player.nodeId === playback.nodeId) {
+            try {
+              const newToken = await this.lease.fenceAndAcquire(guildId, playback.nodeId, playback.queueRevision);
+              playback.fencingToken = newToken;
+            } catch {
+              // Best effort: next command or recovery handles fenced ownership
+            }
+          }
+        }
+      }),
+    );
   }
 
   async handlePlaybackEvent(event: MusicPlaybackEvent): Promise<void> {
@@ -345,9 +384,13 @@ export class LavalinkMusicService implements MusicService {
     if (ownedPlayback && ownedPlayback.nodeId !== event.nodeId) return;
     if (ownedPlayback) {
       try {
-        await this.lease.assertOwner(event.guildId, ownedPlayback.fencingToken);
+        await this.lease.renew(event.guildId, ownedPlayback.fencingToken, ownedPlayback.nodeId, ownedPlayback.queueRevision);
       } catch {
-        return;
+        try {
+          await this.lease.assertOwner(event.guildId, ownedPlayback.fencingToken);
+        } catch {
+          return;
+        }
       }
     }
     const durable = await this.repository.readSnapshot(event.guildId);
@@ -1007,7 +1050,22 @@ export class LavalinkMusicService implements MusicService {
       if (active.nodeId !== nodeId) {
         throw new GuildPlaybackLeaseOwnershipError(guildId);
       }
-      return this.lease.renew(guildId, active.fencingToken, nodeId, queueRevision);
+      try {
+        const token = await this.lease.renew(guildId, active.fencingToken, nodeId, queueRevision);
+        active.queueRevision = queueRevision;
+        return token;
+      } catch (error) {
+        if (error instanceof GuildPlaybackLeaseOwnershipError) {
+          const player = this.adapter.getPlayer(guildId);
+          if (player && player.nodeId === nodeId) {
+            const newToken = await this.lease.fenceAndAcquire(guildId, nodeId, queueRevision);
+            active.fencingToken = newToken;
+            active.queueRevision = queueRevision;
+            return newToken;
+          }
+        }
+        throw error;
+      }
     }
     const fencingToken = await this.lease.acquire(guildId, nodeId, queueRevision);
     this.active.set(guildId, {
