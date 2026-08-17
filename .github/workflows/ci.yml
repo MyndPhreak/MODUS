@@ -8,7 +8,7 @@
 #               ghcr.io/<owner>/modus-web:latest          (main only)
 #
 # Also tags every build with :sha-<short-sha>. Can be triggered manually via
-# workflow_dispatch. Versioned/tagged images are still produced by
+# workflow_dispatch. Versioned/tagged images are produced by
 # docker-publish.yml when a release is merged.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,6 +29,10 @@ on:
       - "pnpm-workspace.yaml"
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   REGISTRY: ghcr.io
 
@@ -41,7 +45,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -93,7 +97,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Detect path changes
         id: filter
@@ -113,51 +117,6 @@ jobs:
               - *shared
               - "web/**"
 
-  # ── Build Bot Image (only if bot/** changed) ──────────────────────────────
-  build-bot:
-    name: Build Bot Image
-    needs: changes
-    if: ${{ needs.changes.outputs.bot == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-bot
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=sha,prefix=sha-
-
-      - name: Build and push Bot image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./bot/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   # ── Validate the pinned Lavalink node boots (bot/** or lavalink/** changed) ─
   # Starts the exact image docker-compose.yml pins, with the exact
   # lavalink/application.yml this repo ships, and proves it answers an
@@ -175,7 +134,7 @@ jobs:
       LAVALINK_IMAGE: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Assert the pinned image matches docker-compose.yml
         run: |
@@ -237,6 +196,57 @@ jobs:
         if: always()
         run: docker rm -f lavalink-ci
 
+  # ── Build Bot Image (only if bot/** changed, gated on lavalink-config) ────
+  # Excludes automated release commits from Release Please to avoid duplicate
+  # container builds, as docker-publish.yml handles release image publishing.
+  build-bot:
+    name: Build Bot Image
+    needs: [changes, lavalink-config]
+    if: >-
+      needs.changes.outputs.bot == 'true' &&
+      needs.lavalink-config.result == 'success' &&
+      !startsWith(github.event.head_commit.message || '', 'chore: release') &&
+      !startsWith(github.event.head_commit.message || '', 'chore(main): release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-bot
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=sha,prefix=sha-
+
+      - name: Build and push Bot image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./bot/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ── Typecheck the dashboard (only if web/** changed) ──────────────────────
   # Gates on the error classes that are runtime faults rather than type-strict
   # nitpicks: an identifier or module the bundle references but cannot resolve
@@ -257,7 +267,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -305,11 +315,17 @@ jobs:
 
           echo "No runtime-fatal type errors. Pre-existing type errors: ${total:-0}"
 
-  # ── Build Web Image (only if web/** changed) ──────────────────────────────
+  # ── Build Web Image (only if web/** changed, gated on typecheck-web) ──────
+  # Excludes automated release commits from Release Please to avoid duplicate
+  # container builds, as docker-publish.yml handles release image publishing.
   build-web:
     name: Build Web Image
     needs: [changes, typecheck-web]
-    if: ${{ needs.changes.outputs.web == 'true' && needs.typecheck-web.result == 'success' }}
+    if: >-
+      needs.changes.outputs.web == 'true' &&
+      needs.typecheck-web.result == 'success' &&
+      !startsWith(github.event.head_commit.message || '', 'chore: release') &&
+      !startsWith(github.event.head_commit.message || '', 'chore(main): release')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -317,7 +333,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
