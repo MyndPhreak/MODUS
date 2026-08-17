@@ -481,4 +481,12 @@ export const AlertsSettingsSchema = z.object({
 
 export type AlertsSettingsType = z.infer<typeof AlertsSettingsSchema>;
 
+// ── Giveaways ─────────────────────────────────────────────────────
+
+export const GiveawaySettingsSchema = z.object({
+  /** Roles (in addition to ManageGuild) allowed to create/manage giveaways. */
+  hostRoleIds: z.array(z.string()).default([]),
+});
+
+export type GiveawaySettingsType = z.infer<typeof GiveawaySettingsSchema>;
 

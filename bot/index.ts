@@ -11,6 +11,7 @@ import { RecordingRetentionWorker } from "./RecordingRetentionWorker";
 import { TranscriptRetentionWorker } from "./TranscriptRetentionWorker";
 import { LogRetentionWorker } from "./LogRetentionWorker";
 import { ReminderWorker } from "./ReminderWorker";
+import { GiveawayDrawWorker } from "./GiveawayDrawWorker";
 import { Logger } from "./Logger";
 
 import {
@@ -271,6 +272,33 @@ client.once("ready", async () => {
     }).start();
   } else if (typeof shardId !== "number" || shardId === 0) {
     transcriptWorker.start();
+  }
+
+  // ── Giveaway draws ───────────────────────────────────────────────────
+  // Only one shard should sweep for expired giveaways at a time.
+  const giveawayWorker = new GiveawayDrawWorker(client, databaseService, logger);
+
+  if (redisClients) {
+    const ownerId = `${process.pid}:shard-${shardId}`;
+    new LeaderElection({
+      redis: redisClients.primary,
+      key: "modus:leader:giveaway-draw",
+      ownerId,
+      onAcquired: () => {
+        logger.info(`Giveaway draw: leader election won (${ownerId})`, undefined, "giveaways");
+        giveawayWorker.start();
+      },
+      onLost: () => {
+        logger.warn(
+          `Giveaway draw: lost leader lease (${ownerId}) — stopping worker`,
+          undefined,
+          "giveaways",
+        );
+        giveawayWorker.stop();
+      },
+    }).start();
+  } else if (typeof shardId !== "number" || shardId === 0) {
+    giveawayWorker.start();
   }
 
   // Log retention sweep — the `logs` table is written to continuously by

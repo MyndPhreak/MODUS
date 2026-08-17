@@ -33,6 +33,8 @@ import {
   PollTemplateRepository,
   PollRepository,
   MusicRepository,
+  GiveawayRepository,
+  GiveawayEntryRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -70,6 +72,8 @@ export class DatabaseService {
   public readonly pollTemplates: PollTemplateRepository;
   public readonly polls: PollRepository;
   public readonly music: MusicRepository;
+  public readonly giveaways: GiveawayRepository;
+  public readonly giveawayEntries: GiveawayEntryRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -126,6 +130,8 @@ export class DatabaseService {
     this.pollTemplates = new PollTemplateRepository(db);
     this.polls = new PollRepository(db);
     this.music = new MusicRepository(db);
+    this.giveaways = new GiveawayRepository(db);
+    this.giveawayEntries = new GiveawayEntryRepository(db);
 
     // Periodic log flush. unref() so a pending timer never holds the
     // process open during shutdown — gracefulShutdown calls flushLogs().

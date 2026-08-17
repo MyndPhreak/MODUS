@@ -6,6 +6,7 @@ import {
   AutocompleteInteraction,
   ButtonInteraction,
   StringSelectMenuInteraction,
+  RoleSelectMenuInteraction,
   ModalSubmitInteraction,
   REST,
   Routes,
@@ -78,6 +79,11 @@ export interface BotModule {
   /** Optional select-menu interaction handler. customId must be prefixed with `moduleName:`. */
   handleSelectMenu?: (
     interaction: StringSelectMenuInteraction,
+    moduleManager: ModuleManager,
+  ) => Promise<void>;
+  /** Optional role-select-menu interaction handler. customId must be prefixed with `moduleName:`. */
+  handleRoleSelectMenu?: (
+    interaction: RoleSelectMenuInteraction,
     moduleManager: ModuleManager,
   ) => Promise<void>;
   /** Optional modal-submit handler. customId must be prefixed with `moduleName:`. */
@@ -328,8 +334,9 @@ export class ModuleManager {
     interaction:
       | ButtonInteraction
       | StringSelectMenuInteraction
+      | RoleSelectMenuInteraction
       | ModalSubmitInteraction,
-    handlerKey: "handleButton" | "handleSelectMenu" | "handleModal",
+    handlerKey: "handleButton" | "handleSelectMenu" | "handleRoleSelectMenu" | "handleModal",
     label: string,
   ): Promise<void> {
     const [modulePrefix] = interaction.customId.split(":");
@@ -423,6 +430,13 @@ export class ModuleManager {
         interaction,
         "handleSelectMenu",
         "select menu",
+      );
+    }
+    if (interaction.isRoleSelectMenu()) {
+      return this.dispatchComponent(
+        interaction,
+        "handleRoleSelectMenu",
+        "role select menu",
       );
     }
     if (interaction.isModalSubmit()) {
