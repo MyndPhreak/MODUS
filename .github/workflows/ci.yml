@@ -91,7 +91,6 @@ jobs:
     outputs:
       bot: ${{ steps.filter.outputs.bot }}
       web: ${{ steps.filter.outputs.web }}
-      migrations: ${{ steps.filter.outputs.migrations }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -113,8 +112,6 @@ jobs:
             web:
               - *shared
               - "web/**"
-            migrations:
-              - "packages/db/drizzle/**"
 
   # ── Build Bot Image (only if bot/** changed) ──────────────────────────────
   build-bot:
@@ -352,43 +349,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # ── Apply Database Migrations (main only, only if drizzle/** changed) ─────
-  # Runs after both images build successfully so a migration never lands
-  # ahead of the code that expects it. Additive migrations only, by
-  # convention — see docs/migration-runbook.md for the destructive-change
-  # process (those still go through a manual pnpm db:migrate).
-  migrate-db:
-    name: Apply Database Migrations
-    needs: [changes, build-bot, build-web]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.changes.outputs.migrations == 'true' &&
-      needs.changes.result == 'success' &&
-      (needs.build-bot.result == 'success' || needs.build-bot.result == 'skipped') &&
-      (needs.build-web.result == 'success' || needs.build-web.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Apply pending migrations
-        working-directory: packages/db
-        run: pnpm db:migrate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
