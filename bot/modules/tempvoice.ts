@@ -180,16 +180,24 @@ const tempvoiceModule: BotModule = {
     }
 
     const db = moduleManager.databaseService;
-    const member = interaction.member as GuildMember;
+    let member =
+      interaction.member instanceof GuildMember
+        ? interaction.member
+        : await interaction.guild?.members
+            .fetch(interaction.user.id)
+            .catch(() => null);
+
+    const hasManageChannels =
+      interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels) ||
+      interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions.has(PermissionFlagsBits.ManageChannels) ||
+      member?.permissions.has(PermissionFlagsBits.Administrator);
 
     switch (subcommand) {
       // ─── lobby ─────────────────────────────────────────────────────
       case "lobby": {
         // Admin-only
-        if (
-          !member.permissions.has(PermissionFlagsBits.ManageChannels) &&
-          !member.permissions.has(PermissionFlagsBits.Administrator)
-        ) {
+        if (!hasManageChannels) {
           await interaction.editReply(
             "❌ You need **Manage Channels** permission to set lobbies.",
           );
@@ -217,10 +225,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── remove-lobby ──────────────────────────────────────────────
       case "remove-lobby": {
-        if (
-          !member.permissions.has(PermissionFlagsBits.ManageChannels) &&
-          !member.permissions.has(PermissionFlagsBits.Administrator)
-        ) {
+        if (!hasManageChannels) {
           await interaction.editReply(
             "❌ You need **Manage Channels** permission to remove lobbies.",
           );
@@ -249,7 +254,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── rename ────────────────────────────────────────────────────────
       case "rename": {
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         if (!vc || !activeChannels.has(vc.id)) {
           await interaction.editReply(
             "❌ You must be in your temp channel to rename it.",
@@ -258,7 +263,7 @@ const tempvoiceModule: BotModule = {
         }
 
         const info = activeChannels.get(vc.id)!;
-        if (info.ownerId !== member.id) {
+        if (info.ownerId !== interaction.user.id) {
           await interaction.editReply(
             "❌ Only the channel owner can rename it.",
           );
@@ -273,7 +278,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── lock ──────────────────────────────────────────────────────
       case "lock": {
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         if (!vc || !activeChannels.has(vc.id)) {
           await interaction.editReply(
             "❌ You must be in your temp channel to lock it.",
@@ -282,7 +287,7 @@ const tempvoiceModule: BotModule = {
         }
 
         const info = activeChannels.get(vc.id)!;
-        if (info.ownerId !== member.id) {
+        if (info.ownerId !== interaction.user.id) {
           await interaction.editReply("❌ Only the channel owner can lock it.");
           return;
         }
@@ -298,7 +303,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── unlock ────────────────────────────────────────────────────
       case "unlock": {
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         if (!vc || !activeChannels.has(vc.id)) {
           await interaction.editReply(
             "❌ You must be in your temp channel to unlock it.",
@@ -307,7 +312,7 @@ const tempvoiceModule: BotModule = {
         }
 
         const info = activeChannels.get(vc.id)!;
-        if (info.ownerId !== member.id) {
+        if (info.ownerId !== interaction.user.id) {
           await interaction.editReply(
             "❌ Only the channel owner can unlock it.",
           );
@@ -325,7 +330,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── claim ─────────────────────────────────────────────────────
       case "claim": {
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         if (!vc || !activeChannels.has(vc.id)) {
           await interaction.editReply(
             "❌ You must be in a temp channel to claim it.",
@@ -345,11 +350,11 @@ const tempvoiceModule: BotModule = {
         }
 
         // Transfer ownership
-        info.ownerId = member.id;
+        info.ownerId = interaction.user.id;
         activeChannels.set(vc.id, info);
 
         try {
-          await db.updateTempChannelOwner(vc.id, member.id);
+          await db.updateTempChannelOwner(vc.id, interaction.user.id);
         } catch (err) {
           moduleManager.logger.error("Failed to update owner in Appwrite", guildId, err, "tempvoice");
         }
@@ -360,7 +365,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── info ──────────────────────────────────────────────────────
       case "info": {
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         if (!vc || !activeChannels.has(vc.id)) {
           await interaction.editReply(
             "❌ You must be in a temp channel to see its info.",
@@ -387,10 +392,7 @@ const tempvoiceModule: BotModule = {
 
       // ─── template ──────────────────────────────────────────────────
       case "template": {
-        if (
-          !member.permissions.has(PermissionFlagsBits.ManageChannels) &&
-          !member.permissions.has(PermissionFlagsBits.Administrator)
-        ) {
+        if (!hasManageChannels) {
           await interaction.editReply(
             "❌ You need **Manage Channels** permission.",
           );
@@ -402,9 +404,10 @@ const tempvoiceModule: BotModule = {
         settings.namingTemplate = pattern;
         await db.setModuleSettings(guildId, "tempvoice", settings as any);
 
+        const preview = member ? resolveChannelName(pattern, member) : pattern;
         await interaction.editReply(
           `✅ Naming template set to: \`${pattern}\`\n` +
-            `Preview: **${resolveChannelName(pattern, member)}**`,
+            `Preview: **${preview}**`,
         );
         break;
       }
@@ -412,20 +415,17 @@ const tempvoiceModule: BotModule = {
       // ─── limit (default) ───────────────────────────────────────────
       case "limit": {
         // Check if user is in their own temp channel (personal limit)
-        const vc = member.voice.channel;
+        const vc = member?.voice?.channel;
         const info = vc ? activeChannels.get(vc.id) : undefined;
 
-        if (info && info.ownerId === member.id) {
+        if (info && info.ownerId === interaction.user.id) {
           // Personal: edit the current channel's limit
           const count = interaction.options.getInteger("count", true);
           await (vc as VoiceChannel).setUserLimit(count);
           await interaction.editReply(
             `✅ User limit set to **${count === 0 ? "unlimited" : count}** for <#${vc!.id}>.`,
           );
-        } else if (
-          member.permissions.has(PermissionFlagsBits.ManageChannels) ||
-          member.permissions.has(PermissionFlagsBits.Administrator)
-        ) {
+        } else if (hasManageChannels) {
           // Admin: set server default
           const count = interaction.options.getInteger("count", true);
           const settings = await getSettings(moduleManager, guildId);
