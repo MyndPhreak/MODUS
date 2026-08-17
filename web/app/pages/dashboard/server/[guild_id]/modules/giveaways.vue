@@ -79,6 +79,8 @@ const submitEdit = async () => {
   if (!editing.value) return;
   const payload: Record<string, any> = { ...editForm };
   if (payload.duration_minutes === undefined) delete payload.duration_minutes;
+  // prize_kind is not editable (the API ignores it) — don't pretend otherwise.
+  delete payload.prize_kind;
   try {
     await updateGiveaway(editing.value, payload);
     editing.value = null;
@@ -201,8 +203,11 @@ onMounted(() => {
         <form v-if="editing === g.id" class="mt-4 space-y-3" @submit.prevent="submitEdit">
           <UInput v-model="editForm.title" placeholder="Title" required maxlength="200" />
           <UTextarea v-model="editForm.description" placeholder="Description" />
+          <!-- Prize type is fixed after creation: changing a "key" giveaway to
+               another kind would unmask its code in the public embed. -->
           <USelect
             v-model="editForm.prize_kind"
+            disabled
             :items="[
               { label: '🔑 Key / Code', value: 'key' },
               { label: '🎁 Gift', value: 'gift' },
@@ -210,7 +215,18 @@ onMounted(() => {
               { label: '🏆 Other', value: 'other' },
             ]"
           />
-          <UInput v-model="editForm.prize_value" placeholder="Prize value / code" required maxlength="500" />
+          <p class="-mt-2 text-xs text-muted">
+            Prize type can't be changed after creation — cancel and recreate instead.
+          </p>
+          <UInput
+            v-model="editForm.prize_value"
+            :placeholder="
+              editForm.prize_kind === 'key'
+                ? 'Leave blank to keep the existing code'
+                : 'Prize value / code'
+            "
+            maxlength="500"
+          />
           <UInput v-model="editForm.image_url" placeholder="Image URL" />
           <UInput v-model.number="editForm.winner_count" type="number" min="1" max="50" placeholder="Winners" />
           <UInput
