@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.19.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.19.0...modus-v1.19.1) (2026-08-17)
+
+
+### 🐛 Bug Fixes
+
+* **bot:** fall back to YouTube Music search when standard YouTube search returns empty ([36c41e4](https://github.com/MyndPhreak/MODUS/commit/36c41e43d01d9cb26a0ffef6ac9339a9c8299757))
+* **bot:** guard member voice access and permissions in tempvoice subcommands ([c39cf87](https://github.com/MyndPhreak/MODUS/commit/c39cf8721e9a57fbbfed4881ec693a588ca0f572))
+* **bot:** keep playback leases alive during music playback and handle lease expiration recovery ([f463124](https://github.com/MyndPhreak/MODUS/commit/f46312471b79e374d0405f0b35a91cdf3a087dc1))
+* **bot:** prevent duplicate v4 prefix in LavaLyrics endpoint url ([0b5481a](https://github.com/MyndPhreak/MODUS/commit/0b5481a6e372a8ca3d8611883ea6dd8d9672adfa))
+
 ## [1.19.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.18.0...modus-v1.19.0) (2026-08-17)
 
 
