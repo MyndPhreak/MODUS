@@ -321,6 +321,26 @@ describe("LavalinkAdapter", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("falls back to ytmsearch when ytsearch returns empty results", async () => {
+    const { adapter } = setup();
+    await adapter.connect();
+    const node = addNode();
+    node.rest.resolve
+      .mockResolvedValueOnce({ loadType: "empty", data: {} })
+      .mockResolvedValueOnce({ loadType: "search", data: [track()] });
+
+    const result = await adapter.loadTracks({
+      guildId: "guild-1",
+      input: "hello world",
+      requestedBy: "user-1",
+      source: "youtube",
+    });
+
+    expect(node.rest.resolve).toHaveBeenNthCalledWith(1, "ytsearch:hello world");
+    expect(node.rest.resolve).toHaveBeenNthCalledWith(2, "ytmsearch:hello world");
+    expect(result.ok).toBe(true);
+  });
+
   it("loads direct URLs without a search prefix and strips signed parameters from canonical metadata", async () => {
     const { adapter } = setup();
     await adapter.connect();

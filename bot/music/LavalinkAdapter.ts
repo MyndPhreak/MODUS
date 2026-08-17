@@ -328,7 +328,13 @@ export class LavalinkAdapter extends EventEmitter {
     const requestType = request.requestType ?? (directUrl ? "url" : "search");
 
     try {
-      const response = await selected.value.rest.resolve(identifier);
+      let response = await selected.value.rest.resolve(identifier);
+      if ((!response || response.loadType === "empty") && !directUrl && source === "youtube") {
+        const fallbackResponse = await selected.value.rest.resolve(`ytmsearch:${request.input}`);
+        if (fallbackResponse && fallbackResponse.loadType !== "empty") {
+          response = fallbackResponse;
+        }
+      }
       if (!response || response.loadType === "empty") {
         return failure("MUSIC_NO_MATCH", "No matching track was found.");
       }
