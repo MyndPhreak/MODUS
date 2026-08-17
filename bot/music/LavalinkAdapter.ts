@@ -498,7 +498,7 @@ export class LavalinkAdapter extends EventEmitter {
     if (node && node.sessionId) {
       try {
         const nodeAny = node as any;
-        const rawUrl = nodeAny.rest?.url || nodeAny.url || (nodeAny.options?.secure ? `https://${nodeAny.options?.url}` : `http://${nodeAny.options?.url}`);
+        const rawUrl = (nodeAny.rest?.url || nodeAny.url || (nodeAny.options?.secure ? `https://${nodeAny.options?.url}` : `http://${nodeAny.options?.url}`)).replace(/\/v4\/?$/, "");
         const auth = nodeAny.rest?.auth || nodeAny.auth || nodeAny.options?.auth;
         const queryParams = request.query ? `?query=${encodeURIComponent(request.query)}` : "";
         const url = `${rawUrl}/v4/sessions/${node.sessionId}/players/${request.guildId}/track/lyrics${queryParams}`;

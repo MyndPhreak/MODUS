@@ -726,4 +726,35 @@ describe("LavalinkAdapter", () => {
     manager().emit("disconnect", "primary", 0);
     expect(registry.snapshot("primary").available).toBe(false);
   });
+
+  it("queries LavaLyrics without duplicating the /v4 path prefix", async () => {
+    const { adapter } = setup();
+    await adapter.connect();
+    const node = addNode();
+    node.sessionId = "session-123";
+    (node as any).rest = { url: "http://lavalink:2333/v4", auth: "secret" };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        text: "Test lyrics",
+        lines: [{ time: 1000, text: "Test lyrics line" }],
+        source: "LavaLyrics",
+      }),
+    } as any);
+
+    const result = await adapter.getLyrics({
+      guildId: "guild-1",
+      query: "Test Song",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://lavalink:2333/v4/sessions/session-123/players/guild-1/track/lyrics?query=Test%20Song",
+      expect.objectContaining({
+        headers: { Authorization: "secret" },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    fetchSpy.mockRestore();
+  });
 });
