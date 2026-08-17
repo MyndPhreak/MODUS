@@ -70,7 +70,7 @@ describe("buildGiveawayComponents", () => {
     const [row] = buildGiveawayComponents("gw1", "active");
     const button = row.components[0] as { disabled?: boolean; custom_id: string };
     expect(button.disabled).toBe(false);
-    expect(button.custom_id).toBe("giveaway:enter:gw1");
+    expect(button.custom_id).toBe("giveaways:enter:gw1");
   });
 
   it("disables the Enter button when ended or cancelled", () => {

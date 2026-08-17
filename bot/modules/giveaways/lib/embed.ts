@@ -119,7 +119,7 @@ export function buildGiveawayComponents(
       components: [
         {
           type: ComponentType.Button,
-          custom_id: `giveaway:enter:${id}`,
+          custom_id: `giveaways:enter:${id}`,
           label: "🎉 Enter Giveaway",
           style: ButtonStyle.Primary,
           disabled: status !== "active",

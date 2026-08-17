@@ -157,21 +157,21 @@ const giveawaysModule: BotModule = {
     }
   },
 
-  // customId formats: giveaway:enter:<id> | giveaway:req-age:<id>
+  // customId formats: giveaways:enter:<id> | giveaways:req-age:<id>
   handleButton: async (interaction: ButtonInteraction, moduleManager: ModuleManager) => {
     const [, action, id] = interaction.customId.split(":");
     if (action === "enter") return handleEnter(interaction, moduleManager, id);
     if (action === "req-age") return handleAgeButton(interaction, id);
   },
 
-  // customId formats: giveaway:req-required:<id> | giveaway:req-blocked:<id>
+  // customId formats: giveaways:req-required:<id> | giveaways:req-blocked:<id>
   handleRoleSelectMenu: async (interaction: RoleSelectMenuInteraction, moduleManager: ModuleManager) => {
     const [, action, id] = interaction.customId.split(":");
     if (action === "req-required") return handleRoleSelect(interaction, moduleManager, "required", id);
     if (action === "req-blocked") return handleRoleSelect(interaction, moduleManager, "blocked", id);
   },
 
-  // customId format: giveaway:req-age-modal:<id>
+  // customId format: giveaways:req-age-modal:<id>
   handleModal: async (interaction: ModalSubmitInteraction, moduleManager: ModuleManager) => {
     const [, action, id] = interaction.customId.split(":");
     if (action === "req-age-modal") return handleAgeModal(interaction, moduleManager, id);

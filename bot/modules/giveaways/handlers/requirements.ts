@@ -91,21 +91,21 @@ export async function handleRequirementsCommand(
 
   const requiredRow = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
     new RoleSelectMenuBuilder()
-      .setCustomId(`giveaway:req-required:${giveaway.id}`)
+      .setCustomId(`giveaways:req-required:${giveaway.id}`)
       .setPlaceholder("Required roles (leave empty to clear)")
       .setMinValues(0)
       .setMaxValues(10),
   );
   const blockedRow = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
     new RoleSelectMenuBuilder()
-      .setCustomId(`giveaway:req-blocked:${giveaway.id}`)
+      .setCustomId(`giveaways:req-blocked:${giveaway.id}`)
       .setPlaceholder("Blocked roles (leave empty to clear)")
       .setMinValues(0)
       .setMaxValues(10),
   );
   const ageButtonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`giveaway:req-age:${giveaway.id}`)
+      .setCustomId(`giveaways:req-age:${giveaway.id}`)
       .setLabel("Set Age Requirements")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -146,7 +146,7 @@ export async function handleRoleSelect(
 
 export async function handleAgeButton(interaction: ButtonInteraction, giveawayId: string): Promise<void> {
   const modal = new ModalBuilder()
-    .setCustomId(`giveaway:req-age-modal:${giveawayId}`)
+    .setCustomId(`giveaways:req-age-modal:${giveawayId}`)
     .setTitle("Age Requirements");
 
   const makeRow = (input: TextInputBuilder) =>

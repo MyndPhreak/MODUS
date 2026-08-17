@@ -101,7 +101,7 @@ export function buildGiveawayComponentsJson(id: string, status: GiveawayStatus) 
       components: [
         {
           type: 2, // Button
-          custom_id: `giveaway:enter:${id}`,
+          custom_id: `giveaways:enter:${id}`,
           label: "🎉 Enter Giveaway",
           style: 1, // Primary
           disabled: status !== "active",
