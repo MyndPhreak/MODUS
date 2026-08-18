@@ -2,131 +2,109 @@
   <img src="https://modus.ppo.gg/modus2-animated.svg" alt="MODUS" width="280" />
 </p>
 
-<h3 align="center">A modular Discord bot with a web dashboard.</h3>
+<h3 align="center">A modular Discord bot with an admin web dashboard.</h3>
 
 <p align="center">
-  Music, moderation, AI, anti-raid, recordings, tickets, and more — 25+ features you can toggle per server.
+  Music, moderation, AI, events, recordings, polls, giveaways, and many more — feature modules you can toggle per server.
 </p>
 
 ---
 
 ## What is MODUS?
 
-MODUS is a Discord bot designed to replace the pile of single-purpose bots most servers end up with. Instead of running five different bots for moderation, music, welcome messages, tickets, and logging, MODUS handles all of it through independent modules that can be toggled on or off per server.
+MODUS is a modular Discord platform that combines a feature-rich bot with a Nuxt-based web dashboard. It aims to replace a collection of single-purpose bots by providing a single, extensible service for moderation, music playback, AI tools, ticketing, automated workflows, and server dashboards.
 
-It ships with a web dashboard (built on Nuxt 4) for configuring everything without touching slash commands, and uses Postgres, Redis, and Cloudflare R2 as its backend infrastructure.
+The project uses Postgres, Redis, and Cloudflare R2 for persistent storage and runs with Docker Compose for convenient self-hosting.
 
-## Features
+## Quick links
 
-### AI Chat
+- Documentation: web/docs and in-repo files
+- Changelog: [CHANGELOG.md](CHANGELOG.md) — see the full release notes (latest: 1.19.1)
+- Installation: [INSTALLATION.md](INSTALLATION.md)
+- License: [LICENSE](LICENSE) — MIT
 
-Talk to LLMs directly in Discord. Supports multiple providers and models:
+## Notable recent changes
 
-- **Anthropic** — Claude 4 Sonnet, Claude 4 Opus
-- **OpenAI** — GPT-4o, GPT-4o Mini, o3-mini
-- **Google** — Gemini 2.5 Pro, Gemini 2.5 Flash
-- **Groq** — Llama 4 Scout, Llama 4 Maverick, Qwen QwQ
+Summary of high-impact updates (see CHANGELOG.md for full history):
 
-Servers can bring their own API keys, set custom system prompts, adjust token limits, and configure per-user cooldowns. The AI module also has access to tools — it can control music playback, search the web, and more.
+- Music: migrated to a Lavalink v4 control plane with durable player state, autoplay, lyrics (LavaLyrics & LRCLIB), real-time pitch/speed controls, and improved reconnect/recovery logic.
+- Giveaways: add full giveaway lifecycle (create, draw, reroll, cancel), duration parsing, entry requirements, and admin dashboard UI.
+- Web: major welcome-image editor enhancements (multi-select, undo/redo, uploaded image layers, alignment/distribute tools, avatar shapes), a giveaways dashboard, polls/events UI, and numerous accessibility and rendering fixes.
+- Polls & Events: reusable poll templates, running polls with live tallies, scheduled events (create/edit/delete/list), and dashboard send flows.
+- Recordings & R2: multitrack recording support, R2-backed recording storage, streaming uploads, and transcript handling.
+- AI & Tools: AI chat module with multiple providers and tool integrations (web search, TTS, and more); appended system prompts and dashboard reorganization for AI features.
+- Infrastructure: Postgres/Redis/R2 migration completed with many DB migrations, improved auth, and optional native Discord OAuth for the dashboard.
 
-### Music
+## Features (high level)
 
-Full music player with queue management, playback controls, and audio filters. Supports YouTube and Spotify links out of the box through a Lavalink v4 control plane, with durable queues that survive a restart.
+- Music player with queue, filters, durable playback, and Lavalink integration
+- AI chat module with provider flexibility and tool access
+- Voice recording with per-participant tracks
+- Moderation tools (warn, ban, timeout, purge) and audit logging
+- AutoMod with flexible rule conditions and actions
+- Tickets with thread-based lifecycle and transcript generation
+- Welcome image visual editor and server-side rendering
+- Reaction roles (buttons and dropdowns)
+- Temporary voice channels (join-to-create lobbies)
+- Alerts (Twitch, YouTube, GitHub, RSS)
+- Polls, Events, Giveaways, Milestones, Verification, Triggers, and more
 
-**Filters:** Bass Boost, Nightcore, Vaporwave, 8D Audio, Karaoke, Tremolo, Vibrato, Lo-Fi, Phaser, Chorus, Flanger, Treble Boost.
-
-### Voice Recording
-
-Record voice channels with per-user multitrack output. Each participant gets their own audio track with silence-padded timing so tracks stay aligned. Configurable bitrate and duration limits.
-
-### Moderation
-
-Standard mod toolkit — warn, kick, ban, timeout, purge — with case tracking, automatic escalation (e.g. 3 warnings triggers a timeout), DM notifications, and a modlog channel.
-
-### AutoMod
-
-Rule-based content filtering with flexible conditions (regex, contains, starts with, role checks) and configurable actions (delete, warn, timeout, kick, ban, DM, log). Rules support AND/OR logic, per-rule cooldowns, and channel/role exemptions.
-
-### Tickets
-
-Deployable ticket panels with button-based creation. Tickets are created as threads with full lifecycle management — open, claim, add/remove users, set priority, and auto-generate transcripts on close. Idle tickets can be swept automatically.
-
-### Welcome Messages
-
-Canvas-rendered welcome images with a visual editor on the dashboard. Place text, images, shapes, and user avatars on a customizable background. Supports fonts, shadows, opacity, rotation, and borders.
-
-### Reaction Roles
-
-Button and dropdown-based role assignment panels. Deploy to any channel with customizable button styles and embed formatting. No emoji reactions needed.
-
-### Temporary Voice Channels
-
-Lobby-based system where joining a designated channel spawns a personal voice channel. Supports naming templates (`{username}`, `{displayname}`), user limits, and category assignment. Channels auto-delete when empty.
-
-### Alerts
-
-Monitor external platforms and post updates to Discord:
-
-- **Twitch** — Stream go-live notifications via EventSub
-- **YouTube** — New video/upload alerts
-- **GitHub** — Repository activity
-- **RSS** — Any RSS feed
-
-### Logging
-
-Audit logging with per-category toggles: message edits/deletes, member joins/leaves, role changes, channel changes, and invite tracking. Everything goes to a designated log channel with timestamped embeds.
-
-### Anti-Raid
-
-Velocity-based join flood detection. Configurable thresholds (X joins in Y seconds) with automatic channel lockdown during detected raids.
-
-### And More
-
-- **Events** — Schedule server events with timezone support
-- **Tags** — Reusable text/embed snippets with autocomplete
-- **Polls** — Native Discord polls with visual result bars
-- **Milestones** — Track and celebrate member activity milestones
-- **Verification** — Button-based gate verification with role assignment
-- **Triggers** — Receive webhooks from GitHub, Twitch, or custom sources and post formatted embeds
-- **Embeds** — Build and send custom embeds via slash command or modal
+For a full feature list and roadmap see CHANGELOG.md and the docs pages in the web dashboard.
 
 ## Web Dashboard
 
-The dashboard runs as a separate service on Nuxt 4. It connects to the same Postgres backend as the bot and leverages `nuxt-auth-utils` for Discord OAuth, letting server admins configure modules, preview welcome images, manage recordings, and monitor bot health — all through a browser.
+The dashboard is a separate Nuxt 4 application that connects to the same Postgres backend used by the bot. It provides admin pages for modules, a visual welcome image editor, polls/events management, and real-time dashboards for running polls and giveaways.
 
-SSR is disabled for dashboard routes (they require Discord OAuth), while public pages like the landing page are server-rendered.
+Public landing pages (docs, landing) are server-rendered; dashboard pages require Discord OAuth and are rendered client-side.
 
 ## Stack
 
-| Layer | Tech |
-|-------|------|
-| Bot | Discord.js 14, Lavalink 4 (Shoukaku), Node 22, TypeScript |
-| Web | Nuxt 4, nuxt-auth-utils, @nuxt/ui, Tailwind CSS, Pinia |
-| AI | Anthropic Claude, OpenAI, Groq, Google Gemini |
-| Backend | Postgres, Redis, Cloudflare R2 |
-| Infra | Docker Compose, GHCR, pnpm workspaces |
+- Bot: Discord.js 14, Lavalink 4 (Shoukaku), Node 22, TypeScript
+- Web: Nuxt 4, Pinia, Tailwind CSS
+- AI: Anthropic, OpenAI, Google Gemini, Groq (pluggable)
+- Backend: Postgres, Redis, Cloudflare R2
+- Infra: Docker Compose, pnpm workspaces, GHCR
 
-## Self-Hosting
+## Self-hosting / Quick start
 
-For detailed instructions on how to set up MODUS using Docker (with prebuilt images or from source) or for native development, please see our [Installation Guide](INSTALLATION.md).
+See INSTALLATION.md for full instructions. Quick summary:
 
-## Project Structure
+1. Copy the example environment file and set secrets (DATABASE_URL, REDIS_URL, R2 credentials, DISCORD_BOT_TOKEN, etc.).
 
-```
-bot/                    Discord bot
-  modules/              Feature plugins (auto-loaded)
-  lib/                  Shared utilities
-  ModuleManager.ts      Plugin loader and interaction router
-  DatabaseService.ts    Postgres database layer
+2. Start with Docker Compose (recommended):
 
-web/                    Nuxt 4 dashboard
-  app/pages/            File-based routing
-  app/composables/      Vue composition hooks
-  server/api/           Backend API routes
+```bash
+# from repository root
+cp .env.example .env
+# edit .env with your values
+docker compose up -d --build
 ```
 
-Modules are self-contained — drop a file in `bot/modules/` and it gets picked up automatically. No registration step required.
+3. Visit the dashboard (default: http://localhost:3000) and use Discord OAuth to register your server.
+
+Notes:
+- If you run the bot and dashboard separately in development, follow the web/README.md for dashboard dev commands.
+- For production, ensure R2, Postgres, and Redis are reachable and the Lavalink service is configured.
+
+## Contributing
+
+Contributions are welcome. Please:
+
+- Open issues for bugs or feature requests
+- Send PRs against the `main` branch — this repository uses feature branches and PR reviews
+- Follow the existing code style and tests where applicable
+
+See CONTRIBUTORS, CODE_OF_CONDUCT, and the repository issue tracker for more details.
+
+## CI / Tests
+
+The repository includes GitHub Actions for builds and tests. Please ensure your changes pass the CI checks before opening a PR.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE)
+
+
+---
+
+This README was updated to reflect recent releases — see [CHANGELOG.md](CHANGELOG.md) for full release notes and the history of changes.
