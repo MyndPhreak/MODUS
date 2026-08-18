@@ -37,10 +37,11 @@
             v-for="link in navLinks"
             :key="link.href"
             :href="link.href"
-            class="nav-link"
+            class="nav-link inline-flex items-center gap-1.5"
             @click="handleNavLinkClick($event, link.href)"
           >
-            {{ link.label }}
+            <UIcon v-if="link.icon" :name="link.icon" class="w-4 h-4" />
+            <span>{{ link.label }}</span>
           </a>
         </div>
 
@@ -57,7 +58,10 @@
             to="/login"
             class="nav-link hidden sm:inline-flex items-center gap-2"
           >
-            <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
+            <UIcon
+              name="i-heroicons-arrow-right-on-rectangle"
+              class="w-4 h-4"
+            />
             Dashboard
           </NuxtLink>
           <a
@@ -148,32 +152,33 @@ const botInviteUrl = computed(() => {
 // (e.g. /docs), let the browser navigate to "/#section" normally instead
 // of trying to scroll a section that isn't on the current page.
 const navLinks = [
-  { label: "Features", href: "/#features" },
-  { label: "Modules", href: "/#modules" },
-  { label: "Stats", href: "/#stats" },
+  { label: "Features", href: "/#features", icon: "i-lucide-sparkles" },
+  { label: "Modules", href: "/#modules", icon: "i-lucide-layout-grid" },
+  { label: "Stats", href: "/#stats", icon: "i-lucide-bar-chart-2" },
+  { label: "XP", href: "/xp", icon: "i-lucide-trophy" },
 ];
 
 const scrollToSection = (hash: string) => {
-  const id = hash.replace(/^\/?#/, '');
+  const id = hash.replace(/^\/?#/, "");
   const el = document.getElementById(id);
   if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 };
 
 const handleNavLinkClick = (event: MouseEvent, href: string) => {
-  if (route.path === '/') {
+  if (route.path === "/") {
     event.preventDefault();
     scrollToSection(href);
   }
 };
 
 const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 const handleLogoClick = (event: MouseEvent) => {
-  if (route.path === '/') {
+  if (route.path === "/") {
     event.preventDefault();
     scrollToTop();
   }

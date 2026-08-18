@@ -91,7 +91,7 @@ export function useServerSettings(guildId: string) {
     "music",
     "moderation",
     "recording",
-    "milestones",
+    "xp",
     "automod",
     "logging",
     "triggers",

@@ -459,9 +459,15 @@ const moduleList = [
     color: "rgba(168,85,247,0.2)",
   },
   {
-    name: "Milestones",
+    name: "XP & Leveling",
     icon: "i-lucide-trophy",
-    tagline: "Level-up & XP tracking",
+    tagline: "XP tracking, rank cards & leaderboards",
+    color: "rgba(99,102,241,0.2)",
+  },
+  {
+    name: "Giveaways",
+    icon: "i-lucide-gift",
+    tagline: "Prizes, raffles & entry requirements",
     color: "rgba(234,179,8,0.2)",
   },
   {
