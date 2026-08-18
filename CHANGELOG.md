@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.20.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.19.1...modus-v1.20.0) (2026-08-18)
+
+
+### ✨ Features
+
+* **api:** add XP Nitro API routes and server-side XP image renderer ([9f289a1](https://github.com/MyndPhreak/MODUS/commit/9f289a1adbb19db1d56be6960cbb425b5bbc9c11))
+* **bot:** add AI image search tool via SearXNG ([e22fb31](https://github.com/MyndPhreak/MODUS/commit/e22fb31ac9bcc6e420ab0ddc02bb4be7a722e102))
+* **bot:** add XP & leveling module; deprecate milestones ([a8c2ebc](https://github.com/MyndPhreak/MODUS/commit/a8c2ebc03dd8aad605b1151e5afd0ec037713f09))
+* **db:** add xp_users table, XP repository, and rank-cards module ([5ffc10c](https://github.com/MyndPhreak/MODUS/commit/5ffc10c0843d500edf8ae23d0a599bc1268911ff))
+* **web:** add XP leaderboard pages, rank card editor, and dashboard settings UI ([782a3f0](https://github.com/MyndPhreak/MODUS/commit/782a3f0cb89d1a7e8a569ba71dd079f2415367e5))
+* **web:** update AI module dashboard copy for image search ([c7759ed](https://github.com/MyndPhreak/MODUS/commit/c7759ed9cc90aa134ef6894ca89bf704a158359a))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** skip flat module files shadowed by directory modules ([6b16cab](https://github.com/MyndPhreak/MODUS/commit/6b16cab7d9e4b87a5a91527619d31814725fb389))
+
 ## [1.19.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.19.0...modus-v1.19.1) (2026-08-17)
 
 
