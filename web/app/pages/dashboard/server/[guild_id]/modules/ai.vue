@@ -239,8 +239,8 @@
           </UFormField>
 
           <UFormField
-            label="Tool Use — Music & Web Search"
-            hint="Let the AI control music (play/skip/pause/queue) and search the web on @mention."
+            label="Tool Use — Music, Web Search & Images"
+            hint="Let the AI control music (play/skip/pause/queue), search the web, and find images on @mention."
           >
             <USwitch
               v-model="settings.toolUseEnabled"
