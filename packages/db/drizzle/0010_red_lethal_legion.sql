@@ -1,0 +1,1 @@
+ALTER TABLE "xp_users" ADD COLUMN "hidden_from_leaderboard" boolean DEFAULT false NOT NULL;

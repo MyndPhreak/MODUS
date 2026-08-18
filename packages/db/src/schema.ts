@@ -331,6 +331,50 @@ export const milestoneUsers = pgTable(
 export type MilestoneUser = typeof milestoneUsers.$inferSelect;
 export type NewMilestoneUser = typeof milestoneUsers.$inferInsert;
 
+// ── xp_users ──────────────────────────────────────────────────────────────
+// Per-member XP, leveling, message counters, and rank tracking.
+
+export const xpUsers = pgTable(
+  "xp_users",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    userId: text("user_id").notNull(),
+    username: text("username").notNull(),
+    avatar: text("avatar"),
+    xp: integer("xp").notNull().default(0),
+    level: integer("level").notNull().default(0),
+    messageCount: integer("message_count").notNull().default(0),
+    charCount: integer("char_count").notNull().default(0),
+    lastXpGainAt: timestamp("last_xp_gain_at", { withTimezone: true }),
+    notificationPref: text("notification_pref").notNull().default("public"), // public|private|silent
+    optedIn: boolean("opted_in").notNull().default(true),
+    hiddenFromLeaderboard: boolean("hidden_from_leaderboard").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildUser: uniqueIndex("xp_users_guild_user_idx").on(
+      t.guildId,
+      t.userId,
+    ),
+    // Leaderboard: top XP per guild (opted_in only filtered at query time).
+    byGuildXp: index("xp_users_guild_xp_idx").on(
+      t.guildId,
+      t.xp.desc(),
+    ),
+  }),
+);
+
+export type XpUser = typeof xpUsers.$inferSelect;
+export type NewXpUser = typeof xpUsers.$inferInsert;
+
 // ── automod_rules ─────────────────────────────────────────────────────────
 
 export const automodRules = pgTable(

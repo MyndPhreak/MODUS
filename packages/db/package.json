@@ -22,6 +22,10 @@
       "types": "./src/welcome-images.ts",
       "default": "./dist/welcome-images.js"
     },
+    "./rank-cards": {
+      "types": "./src/rank-cards.ts",
+      "default": "./dist/rank-cards.js"
+    },
     "./repositories/recordings": {
       "types": "./src/repositories/recordings.ts",
       "default": "./dist/repositories/recordings.js"

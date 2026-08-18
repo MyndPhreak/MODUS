@@ -19,3 +19,5 @@ export * from "./repositories/polls";
 export * from "./repositories/giveaways";
 export * from "./repositories/event-announcements";
 export * from "./repositories/music";
+export * from "./repositories/xp";
+export * from "./rank-cards";
