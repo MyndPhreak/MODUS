@@ -35,6 +35,7 @@ import {
   MusicRepository,
   GiveawayRepository,
   GiveawayEntryRepository,
+  XpUserRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -61,6 +62,7 @@ export class DatabaseService {
   public readonly botStatus: BotStatusRepository;
   public readonly logs: LogRepository;
   public readonly milestones: MilestoneUserRepository;
+  public readonly xp: XpUserRepository;
   public readonly automod: AutomodRuleRepository;
   public readonly aiUsage: AIUsageLogRepository;
   public readonly tags: TagRepository;
@@ -119,6 +121,7 @@ export class DatabaseService {
     this.botStatus = new BotStatusRepository(db);
     this.logs = new LogRepository(db);
     this.milestones = new MilestoneUserRepository(db);
+    this.xp = new XpUserRepository(db);
     this.automod = new AutomodRuleRepository(db);
     this.aiUsage = new AIUsageLogRepository(db);
     this.tags = new TagRepository(db);
@@ -676,6 +679,94 @@ export class DatabaseService {
         error,
       );
       return 0;
+    }
+  }
+
+  // ── XP & Leveling ──────────────────────────────────────────────────────
+
+  async getXpUser(
+    guildId: string,
+    userId: string,
+  ): Promise<any | null> {
+    try {
+      return await this.xp.getByGuildAndUser(guildId, userId);
+    } catch (error) {
+      console.error(
+        `[DatabaseService] getXpUser(${guildId}/${userId}) failed:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async createXpUser(data: {
+    guild_id: string;
+    user_id: string;
+    username: string;
+    avatar?: string | null;
+    xp?: number;
+    level?: number;
+    message_count?: number;
+    char_count?: number;
+    last_xp_gain_at?: Date | null;
+    notification_pref?: string;
+    opted_in?: boolean;
+    hidden_from_leaderboard?: boolean;
+  }): Promise<string> {
+    return this.xp.create(data);
+  }
+
+  async updateXpUser(
+    docId: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    await this.xp.update(docId, data);
+  }
+
+  async getXpLeaderboard(
+    guildId: string,
+    limit: number,
+    offset: number,
+    search?: string,
+    excludeHidden: boolean = false,
+  ): Promise<{ users: any[]; total: number }> {
+    try {
+      return await this.xp.getLeaderboard(guildId, limit, offset, search, excludeHidden);
+    } catch (error) {
+      console.error(
+        `[DatabaseService] getXpLeaderboard failed for ${guildId}:`,
+        error,
+      );
+      return { users: [], total: 0 };
+    }
+  }
+
+  async getXpUserRank(
+    guildId: string,
+    xp: number,
+  ): Promise<number> {
+    try {
+      return await this.xp.getRank(guildId, xp);
+    } catch (error) {
+      console.error(
+        `[DatabaseService] getXpUserRank failed for ${guildId}:`,
+        error,
+      );
+      return 0;
+    }
+  }
+
+  async getGuildXpStats(
+    guildId: string,
+  ): Promise<{ totalXp: number; totalMessages: number; totalUsers: number }> {
+    try {
+      return await this.xp.getGuildStats(guildId);
+    } catch (error) {
+      console.error(
+        `[DatabaseService] getGuildXpStats failed for ${guildId}:`,
+        error,
+      );
+      return { totalXp: 0, totalMessages: 0, totalUsers: 0 };
     }
   }
 

@@ -16,6 +16,12 @@ import {
   WELCOME_IMAGE_COUNT_ERROR,
   WELCOME_IMAGE_SOURCE_ERROR,
 } from "@modus/db/welcome-images";
+import {
+  isRankCardImageProxySource,
+  MAX_RANK_CARD_IMAGE_LAYERS,
+  RANK_CARD_IMAGE_COUNT_ERROR,
+  RANK_CARD_IMAGE_SOURCE_ERROR,
+} from "@modus/db/rank-cards";
 
 // ── Recording ──────────────────────────────────────────────────────
 
@@ -181,6 +187,104 @@ export const MilestoneSettingsSchema = z.object({
 });
 
 export type MilestoneSettingsType = z.infer<typeof MilestoneSettingsSchema>;
+
+// ── XP & Leveling ──────────────────────────────────────────────────
+
+const RankCardElementSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum([
+      "text",
+      "image",
+      "rect",
+      "circle",
+      "avatar",
+      "triangle",
+      "star",
+      "line",
+      "progressbar",
+    ]),
+    x: z.number().default(0),
+    y: z.number().default(0),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    text: z.string().optional(),
+    fontSize: z.number().optional(),
+    fontFamily: z.string().optional(),
+    fontStyle: z.string().optional(),
+    fill: z.string().optional(),
+    align: z.string().optional(),
+    stroke: z.string().optional(),
+    strokeWidth: z.number().optional(),
+    cornerRadius: z.number().optional(),
+    opacity: z.number().optional(),
+    src: z.string().optional(),
+    radius: z.number().optional(),
+    borderColor: z.string().optional(),
+    borderWidth: z.number().optional(),
+    rotation: z.number().optional(),
+    shadowColor: z.string().optional(),
+    shadowBlur: z.number().optional(),
+    shadowOffsetX: z.number().optional(),
+    shadowOffsetY: z.number().optional(),
+    scaleX: z.number().optional(),
+    scaleY: z.number().optional(),
+    numPoints: z.number().optional(),
+    innerRadius: z.number().optional(),
+    outerRadius: z.number().optional(),
+    points: z.array(z.number()).optional(),
+    arrow: z.boolean().optional(),
+    avatarShape: z.enum(["circle", "square"]).optional(),
+    avatarCornerRadius: z.number().optional(),
+    trackColor: z.string().optional(),
+    trackBorderColor: z.string().optional(),
+    trackBorderWidth: z.number().optional(),
+  })
+  .superRefine((element, ctx) => {
+    if (
+      element.type === "image" &&
+      !isRankCardImageProxySource(element.src)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["src"],
+        message: RANK_CARD_IMAGE_SOURCE_ERROR,
+      });
+    }
+  });
+
+export const RankCardTemplateSchema = z.object({
+  canvasWidth: z.number().default(934),
+  canvasHeight: z.number().default(282),
+  backgroundColor: z.string().default("#0b0f19"),
+  backgroundImage: z.string().optional(),
+  elements: z
+    .array(RankCardElementSchema)
+    .default([])
+    .refine(
+      (elements) =>
+        elements.filter((element) => element.type === "image").length <=
+        MAX_RANK_CARD_IMAGE_LAYERS,
+      { message: RANK_CARD_IMAGE_COUNT_ERROR },
+    ),
+});
+
+export const XpSettingsSchema = z.object({
+  cooldownSeconds: z.number().default(60),
+  minXpPerMessage: z.number().default(15),
+  maxXpPerMessage: z.number().default(25),
+  minMessageLength: z.number().default(5),
+  announcementChannel: z.string().nullish().default(""),
+  levelUpMessage: z
+    .string()
+    .default("🎉 Congratulations {user}, you leveled up to **Level {level}**!"),
+  leaderboardVisibility: z.enum(["private", "unlisted", "public"]).default("private"),
+  cardTemplate: RankCardTemplateSchema.optional(),
+  excludedChannelIds: z.array(z.string()).default([]),
+  excludedRoleIds: z.array(z.string()).default([]),
+});
+
+export type XpSettingsType = z.infer<typeof XpSettingsSchema>;
 
 // ── Logging ────────────────────────────────────────────────────────
 

@@ -431,16 +431,9 @@ function buildLeaderboardButtons(
 
 const milestonesModule: BotModule = {
   name: "milestones",
-  registerEvents: registerMilestoneEvents,
+  hidden: true,
   description:
-    "Track character milestones, earn achievements, and climb the leaderboard!",
-  meta: {
-    displayName: "Milestones",
-    category: "engagement",
-    icon: "i-lucide-trophy",
-    color: "amber",
-    tags: ["xp", "levels", "rewards", "leaderboard", "rank", "activity"],
-  },
+    "Legacy character milestones tracker (deprecated in favor of XP module).",
   deferReply: true,
 
   data: new SlashCommandBuilder()
