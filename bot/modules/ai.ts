@@ -465,6 +465,68 @@ async function performWebSearch(
   });
 }
 
+async function performImageSearch(query: string): Promise<string> {
+  const baseUrl = process.env.SEARXNG_URL?.replace(/\/$/, "");
+  if (!baseUrl) throw new Error("SEARXNG_URL not configured");
+
+  const searchUrl = buildSearchUrl(baseUrl, query, "images");
+  const parsed = new URL(searchUrl);
+  const requester = parsed.protocol === "https:" ? https : http;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
+    const req = requester.get(
+      searchUrl,
+      { headers: { "Accept": "application/json" } },
+      (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          res.resume();
+          done(() => reject(new Error(`SearXNG returned HTTP ${res.statusCode}`)));
+          return;
+        }
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            const rawResults: any[] = json.results ?? [];
+            const results = rawResults.slice(0, 6);
+            if (!results.length) {
+              done(() => resolve("No images found."));
+              return;
+            }
+            const formatted = results
+              .map((r, i) => {
+                let directUrl = r.img_src || r.thumbnail_src || r.thumbnail || r.url || "";
+                if (directUrl.startsWith("/")) {
+                  directUrl = `${baseUrl}${directUrl}`;
+                }
+                const parts = [`[Image ${i + 1}] ${r.title || "Untitled"}`];
+                if (directUrl) parts.push(`Direct Image URL: ${directUrl}`);
+                if (r.url && r.url !== directUrl) parts.push(`Source: ${r.url}`);
+                if (r.resolution) parts.push(`Resolution: ${r.resolution}`);
+                return parts.join("\n");
+              })
+              .join("\n\n");
+            done(() => resolve(formatted));
+          } catch {
+            done(() => reject(new Error(
+              "SearXNG returned a non-JSON response. Enable JSON format in SearXNG settings.yml: search.formats: [html, json]"
+            )));
+          }
+        });
+      },
+    );
+    req.on("error", (err) => done(() => reject(err)));
+    req.setTimeout(8000, () => {
+      req.destroy();
+      done(() => reject(new Error("Search request timed out after 8s")));
+    });
+  });
+}
+
 // ── Rate Limiting ──────────────────────────────────────────────────
 // In-memory cooldown map: "guildId:userId" → last call timestamp (ms)
 
@@ -520,7 +582,7 @@ const aiCoreTools: AiTool[] = [
   {
     name: "web_search",
     description:
-      "Search the web for current, real-time information (recent events, news, prices, live scores, facts). For headlines or 'latest' questions, set category='news' and recency='day'. Use category='general' for stock prices, sports scores, and factual lookups. ALWAYS include the location or country in the query when the question is location-specific. (For weather, use get_weather instead.)",
+      "Search the web for current, real-time information (recent events, news, prices, live scores, facts). For headlines or 'latest' questions, set category='news' and recency='day'. Use category='general' for stock prices, sports scores, and factual lookups. ALWAYS include the location or country in the query when the question is location-specific. (For weather, use get_weather instead. For pictures or images, use image_search instead.)",
     parameters: {
       type: "object",
       properties: {
@@ -561,6 +623,31 @@ const aiCoreTools: AiTool[] = [
       if (category === "news" && results === "No results found.") {
         results = await performWebSearch(query, "general", timeRange);
       }
+      return results.slice(0, 3200);
+    },
+  },
+  {
+    name: "image_search",
+    description:
+      "Search the web for images, photos, illustrations, diagrams, or memes. Use this when the user asks to see a picture, photo, or image of something (e.g. 'show me a picture of...', 'find a photo of...'). Returns matching images with direct image URLs.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query describing the image to find.",
+        },
+      },
+      required: ["query"],
+    },
+    isAvailable: () => !!process.env.SEARXNG_URL,
+    execute: async ({ args }) => {
+      const query = (args.query as string) || "";
+      if (!query) return "❌ I need an image search query to look something up.";
+      if (!process.env.SEARXNG_URL) {
+        return "❌ Image search isn't configured. The bot owner needs to set `SEARXNG_URL` to a running SearXNG instance.";
+      }
+      const results = await performImageSearch(query);
       return results.slice(0, 3200);
     },
   },
@@ -652,7 +739,7 @@ const aiModule: BotModule = {
             `Cooldown: \`${merged.rateLimitSeconds}s\` per user`,
             `DM responses: ${merged.respondToDMs ? "✅" : "❌"}`,
             `Tool use: ${merged.toolUseEnabled ? "✅" : "❌"}`,
-            `Web search: ${merged.toolUseEnabled && process.env.SEARXNG_URL ? "✅" : "❌"}`,
+            `Web & Image search: ${merged.toolUseEnabled && process.env.SEARXNG_URL ? "✅" : "❌"}`,
           ].join("\n"),
         );
         break;
