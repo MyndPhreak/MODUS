@@ -37,7 +37,7 @@ Music playback needs one extra secret shared between the bot and its Lavalink no
 
 ## Music Relay (Lavalink)
 
-Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` plugin, pinned to snapshot commit `02f536d9` for SABR and PoToken support) configured by [lavalink/application.yml](lavalink/application.yml).
+Music playback runs on [Lavalink](https://lavalink.dev) v4 rather than inside the bot process. MODUS owns the queue, permissions, and recovery; the Lavalink node only extracts, decodes, and streams audio into Discord voice. `docker-compose.yml` ships a pinned `lavalink` service (Lavalink `4.2.2` + the `youtube-source` plugin, pinned to tagged release `1.18.2`) configured by [lavalink/application.yml](lavalink/application.yml).
 
 ### 1. Set the node password
 
@@ -72,6 +72,9 @@ To rotate it, replace the value in both files and restart both services (`docker
 Add more objects to the array to spread guilds across several nodes.
 
 ### 3. YouTube access tokens (poToken)
+
+> [!NOTE]
+> Currently unused. [lavalink/application.yml](lavalink/application.yml)'s `clients:` list is `TV`, `TVHTML5_SIMPLY`, `MWEB`, `ANDROID_VR` — none of which need a poToken (only `WEB`/`WEBEMBEDDED` do). Kept below for when `WEB` goes back in.
 
 YouTube challenges unauthenticated extraction, and `youtube-source` answers it with a **poToken / visitorData** pair. Both are rotating session credentials, so they live in the environment rather than in the committed `lavalink/application.yml`. Add them to the **repo-root** `.env` (Compose passes them to the node):
 

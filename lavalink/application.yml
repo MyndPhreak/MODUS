@@ -22,13 +22,16 @@ server: # REST and WS server
 lavalink:
   plugins:
     # The built-in YouTube source is deprecated upstream and no longer updated;
-    # youtube-source replaces it. Pinned to a snapshot commit deliberately (the
-    # SABR + PoToken work is not in a tagged release yet) — bump this, the
-    # version referenced in INSTALLATION.md, and the `clients:` list below
-    # together, since valid client names change between builds.
-    - dependency: "dev.lavalink.youtube:youtube-plugin:02f536d9ac05b4bb0f91dedc19f964f30fc18559"
-      snapshot: true
-    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+    # youtube-source replaces it. Pinned to a tagged release now that SABR +
+    # PoToken support has shipped in one — bump this, the version referenced
+    # in INSTALLATION.md, and the `clients:` list below together, since valid
+    # client names change between builds. Check latest at
+    # https://github.com/lavalink-devs/youtube-source/releases
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      snapshot: false
+    # Unconfigured placeholder: no `plugins.lavasrc:` block below yet, so this
+    # is inert until Spotify/Apple Music/etc. source credentials are wired up.
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       snapshot: false
   server:
     # Injected by Docker Compose from LAVALINK_SERVER_PASSWORD. Never write a
@@ -102,20 +105,13 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     oauth:
-      enabled: false
-    # No `pot:` block here on purpose. A poToken/visitorData pair is a rotating
-    # YouTube session credential — it expires, and this file is committed, so it
-    # must never hold a literal. Supply it through the environment instead:
-    #
-    #   PLUGINS_YOUTUBE_POT_TOKEN=…
-    #   PLUGINS_YOUTUBE_POT_VISITORDATA=…
-    #
-    # Spring's relaxed binding maps those onto plugins.youtube.pot.*. Leaving
-    # them unset is safe: `pot` stays null and the plugin skips it. Do NOT write
-    # `token: "${VAR:}"` as a workaround — the plugin only null-checks, so an
-    # empty default would apply a blank poToken instead of applying none.
-    # Mint a pair with youtube-source's token generator; both values must come
-    # from the same browser session. See INSTALLATION.md → "Music Relay".
+      enabled: false   # flip to true once the aged account is ready to link
+    # No `pot:` block here on purpose — none of the clients below (TV,
+    # TVHTML5_SIMPLY, MWEB, ANDROID_VR) require a poToken; only WEB and
+    # WEBEMBEDDED do, and neither is in the client list. If WEB goes back in,
+    # supply the pair via PLUGINS_YOUTUBE_POT_TOKEN / PLUGINS_YOUTUBE_POT_VISITORDATA
+    # in the environment (see docker-compose.yml and INSTALLATION.md → "Music
+    # Relay") — never a literal here, since this file is committed.
     remoteCipher:
       # Signature deciphering is delegated to this third-party host, which puts
       # it in the critical path of every YouTube playback. Self-host
@@ -124,28 +120,23 @@ plugins:
       # server you use requires one.
       url: "https://cipher.kikkia.dev/"
       userAgent: "modus-lavalink"
-    # Verified against ClientProviderV4 at the pinned plugin commit. The only
-    # valid names are ANDROID, ANDROID_MUSIC, ANDROID_VR, IOS, MUSIC, TV, WEB,
-    # WEBEMBEDDED, MWEB, TVHTML5_SIMPLY — anything else is not an error, it is
-    # logged as "Failed to resolve … into a Client" and silently dropped. Order
-    # is fallback order. ANDROID_VR sits behind the WEB pair on purpose: the
-    # poToken only applies to WEB and WEBEMBEDDED, so a stale token would
-    # otherwise take out every client except MUSIC.
+    # Verified against ClientProviderV4 at 1.18.2. The only valid names are
+    # ANDROID, ANDROID_MUSIC, ANDROID_VR, IOS, MUSIC, TV, WEB, WEBEMBEDDED,
+    # MWEB, TVHTML5_SIMPLY — anything else is not an error, it is logged as
+    # "Failed to resolve … into a Client" and silently dropped. Order is
+    # fallback order. Deliberately avoids WEB/WEBEMBEDDED/MUSIC so nothing
+    # here needs a poToken; TV needs OAuth (see plugins.youtube.oauth above)
+    # and covers sign-in-required playback once that's wired up.
     clients:
-      - MUSIC
-      - WEBEMBEDDED
-      - WEB
-      - ANDROID_VR
-      - MWEB
+      - TV
       - TVHTML5_SIMPLY
-
-  lavalyrics:
-    # Only providers backed by a loaded plugin do anything here. youtube-source
-    # supplies `youtube`; `spotify`/`deezer` would need LavaSrc, which MODUS
-    # does not ship, so listing them only implies coverage that does not exist.
-    # Non-YouTube lyrics fall back to LRCLIB in bot/music/lyrics.ts.
-    sources:
-      - youtube
+      - MWEB
+      - ANDROID_VR
+  # No `lavalyrics:` plugin loaded — /lyrics always resolves via the LRCLIB
+  # fallback in bot/music/lyrics.ts (LavalinkAdapter.getLyrics tries the node's
+  # lyrics REST endpoint first, which 404s with no lavalyrics-plugin, then
+  # falls through). Re-add com.github.topi314.lavalyrics:lavalyrics-plugin
+  # above and a `lavalyrics.sources:` block here if that's not good enough.
 
 metrics:
   prometheus:
