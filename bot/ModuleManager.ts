@@ -165,14 +165,11 @@ export class ModuleManager {
       fs.mkdirSync(this.modulesPath);
     }
 
-    // Collect flat files (legacy single-file modules)
-    const flatFiles = fs
-      .readdirSync(this.modulesPath)
-      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
-      .map((f) => path.join(this.modulesPath, f));
-
     // Collect index entry-points from subdirectory modules (e.g. modules/tickets/index.ts)
     const subdirEntries = fs.readdirSync(this.modulesPath, { withFileTypes: true });
+    const subdirNames = new Set(
+      subdirEntries.filter((e) => e.isDirectory()).map((e) => e.name.toLowerCase()),
+    );
     const subdirFiles: string[] = [];
     for (const entry of subdirEntries) {
       if (!entry.isDirectory()) continue;
@@ -184,6 +181,13 @@ export class ModuleManager {
         }
       }
     }
+
+    // Collect flat files (legacy single-file modules), ignoring any shadowed by a directory module
+    const flatFiles = fs
+      .readdirSync(this.modulesPath)
+      .filter((f) => (f.endsWith(".ts") || f.endsWith(".js")) && !f.endsWith(".d.ts"))
+      .filter((f) => !subdirNames.has(f.replace(/\.(ts|js)$/, "").toLowerCase()))
+      .map((f) => path.join(this.modulesPath, f));
 
     const files = [...flatFiles, ...subdirFiles];
 
