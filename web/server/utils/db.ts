@@ -25,6 +25,7 @@ import {
   PollRepository,
   GiveawayRepository,
   GiveawayEntryRepository,
+  XpUserRepository,
   type Database,
 } from "@modus/db";
 
@@ -37,6 +38,7 @@ export interface Repos {
   botStatus: BotStatusRepository;
   logs: LogRepository;
   milestones: MilestoneUserRepository;
+  xp: XpUserRepository;
   automod: AutomodRuleRepository;
   aiUsage: AIUsageLogRepository;
   tags: TagRepository;
@@ -70,6 +72,7 @@ export function getRepos(): Repos | null {
       botStatus: new BotStatusRepository(db),
       logs: new LogRepository(db),
       milestones: new MilestoneUserRepository(db),
+      xp: new XpUserRepository(db),
       automod: new AutomodRuleRepository(db),
       aiUsage: new AIUsageLogRepository(db),
       tags: new TagRepository(db),

@@ -102,6 +102,21 @@ export function extractWelcomeBgKey(
   return match && match[1] === guildId ? key : null;
 }
 
+const XP_BG_URL_PREFIX = "/api/xp/bg/";
+const XP_BG_KEY_RE = /^xp\/(\d{10,})\/[a-f0-9]{16}\.[a-z0-9]+$/;
+
+export function extractXpBgKey(
+  backgroundImage: string | null | undefined,
+  guildId: string,
+): string | null {
+  if (!backgroundImage || !backgroundImage.startsWith(XP_BG_URL_PREFIX)) {
+    return null;
+  }
+  const key = backgroundImage.slice(XP_BG_URL_PREFIX.length);
+  const match = XP_BG_KEY_RE.exec(key);
+  return match && match[1] === guildId ? key : null;
+}
+
 export async function presignGet(
   key: string,
   ttlSeconds?: number,
