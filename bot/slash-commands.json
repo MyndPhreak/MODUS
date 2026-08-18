@@ -845,6 +845,68 @@
     "type": 1
   },
   {
+    "options": [
+      {
+        "type": 3,
+        "name": "song",
+        "description": "Song name or artist (leave blank for current playing song)",
+        "required": false
+      },
+      {
+        "name": "dm",
+        "description": "Send lyrics privately to your DM instead of the channel",
+        "required": false,
+        "type": 5
+      }
+    ],
+    "name": "lyrics",
+    "description": "Get lyrics for the current song or search for a song",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "name": "enabled",
+        "description": "Enable or disable autoplay",
+        "required": true,
+        "type": 5
+      }
+    ],
+    "name": "autoplay",
+    "description": "Toggle smart autoplay (plays recommended tracks when queue ends)",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "max_value": 2,
+        "min_value": 0.5,
+        "type": 10,
+        "name": "rate",
+        "description": "Playback speed multiplier (e.g. 1.25, 0.8)",
+        "required": true
+      }
+    ],
+    "name": "speed",
+    "description": "Set playback speed (0.5x - 2.0x)",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "max_value": 2,
+        "min_value": 0.5,
+        "type": 10,
+        "name": "level",
+        "description": "Pitch multiplier (e.g. 1.2, 0.9)",
+        "required": true
+      }
+    ],
+    "name": "pitch",
+    "description": "Set playback pitch (0.5x - 2.0x)",
+    "type": 1
+  },
+  {
     "options": [],
     "name": "ping",
     "description": "Replies with Pong and latency metrics!",
@@ -1221,51 +1283,6 @@
     "options": [
       {
         "type": 1,
-        "name": "config",
-        "description": "Set up the ticketing panel",
-        "options": [
-          {
-            "channel_types": [
-              0
-            ],
-            "name": "channel",
-            "description": "Channel to post the ticket panel",
-            "required": true,
-            "type": 7
-          },
-          {
-            "channel_types": [
-              4
-            ],
-            "name": "category",
-            "description": "Category where tickets will be created",
-            "required": true,
-            "type": 7
-          },
-          {
-            "name": "staff_role",
-            "description": "Role that can view and claim tickets",
-            "required": true,
-            "type": 8
-          }
-        ]
-      },
-      {
-        "type": 1,
-        "name": "disable",
-        "description": "Disable the ticketing system",
-        "options": []
-      }
-    ],
-    "name": "tickets",
-    "description": "Configure the ticketing system",
-    "default_member_permissions": "8",
-    "type": 1
-  },
-  {
-    "options": [
-      {
-        "type": 1,
         "name": "create",
         "description": "Create a new webhook trigger",
         "options": [
@@ -1493,7 +1510,8 @@
         "options": [
           {
             "channel_types": [
-              0
+              0,
+              5
             ],
             "name": "channel",
             "description": "The channel to send welcome images to",
@@ -1517,6 +1535,147 @@
     ],
     "name": "welcome",
     "description": "Configure the welcome image module",
+    "type": 1
+  },
+  {
+    "options": [
+      {
+        "type": 1,
+        "name": "create",
+        "description": "Start a new giveaway",
+        "options": [
+          {
+            "channel_types": [
+              0
+            ],
+            "name": "channel",
+            "description": "Channel to post the giveaway in",
+            "required": true,
+            "type": 7
+          },
+          {
+            "type": 3,
+            "name": "title",
+            "description": "Giveaway title",
+            "required": true,
+            "max_length": 200
+          },
+          {
+            "type": 3,
+            "name": "duration",
+            "description": "When it ends (e.g. 'in 1 hour', '3 days')",
+            "required": true
+          },
+          {
+            "type": 3,
+            "choices": [
+              {
+                "name": "🔑 Key / Code",
+                "value": "key"
+              },
+              {
+                "name": "🎁 Gift",
+                "value": "gift"
+              },
+              {
+                "name": "📦 Physical Item",
+                "value": "physical"
+              },
+              {
+                "name": "🏆 Other",
+                "value": "other"
+              }
+            ],
+            "name": "prize_kind",
+            "description": "Type of prize",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "prize_value",
+            "description": "The code, or a description of the prize",
+            "required": true,
+            "max_length": 500
+          },
+          {
+            "max_value": 50,
+            "min_value": 1,
+            "type": 4,
+            "name": "winners",
+            "description": "Number of winners (default 1)",
+            "required": false
+          },
+          {
+            "type": 3,
+            "name": "description",
+            "description": "Extra details shown in the embed",
+            "required": false,
+            "max_length": 1000
+          },
+          {
+            "type": 3,
+            "name": "image_url",
+            "description": "Image URL shown in the embed (ignored for Key/Code prizes)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "requirements",
+        "description": "Configure entry requirements for a giveaway",
+        "options": [
+          {
+            "type": 3,
+            "name": "message_id",
+            "description": "The giveaway's message ID",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "end",
+        "description": "End a giveaway early and draw winners",
+        "options": [
+          {
+            "type": 3,
+            "name": "message_id",
+            "description": "The giveaway's message ID",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "reroll",
+        "description": "Redraw winner(s) for an ended giveaway",
+        "options": [
+          {
+            "type": 3,
+            "name": "message_id",
+            "description": "The giveaway's message ID",
+            "required": true
+          },
+          {
+            "max_value": 50,
+            "min_value": 1,
+            "type": 4,
+            "name": "count",
+            "description": "How many new winners to draw (default 1)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "list",
+        "description": "List active giveaways in this server",
+        "options": []
+      }
+    ],
+    "name": "giveaway",
+    "description": "Create and manage giveaways",
     "type": 1
   },
   {
