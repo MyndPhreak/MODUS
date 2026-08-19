@@ -13,6 +13,7 @@ import {
   getResolvedDiscordId,
   requireAuthedUserId,
 } from "../../utils/session";
+import { fetchGuildMemberRoleIds } from "../../utils/discord";
 import { canManageGuild } from "#shared/discord-permissions";
 
 export default defineEventHandler(async (event) => {
@@ -77,18 +78,8 @@ export default defineEventHandler(async (event) => {
     if (dashboardRoles.length > 0) {
       const discordUid = await getResolvedDiscordId(event);
       if (discordUid) {
-        const botToken = config.discordBotToken as string;
-        if (botToken) {
-          const member: any = await $fetch(
-            `https://discord.com/api/v10/guilds/${guild_id}/members/${discordUid}`,
-            { headers: { Authorization: `Bot ${botToken}` } },
-          ).catch(() => null);
-          if (member?.roles) {
-            hasDashboardRole = member.roles.some((r: string) =>
-              dashboardRoles.includes(r),
-            );
-          }
-        }
+        const memberRoleIds = await fetchGuildMemberRoleIds(guild_id, discordUid);
+        hasDashboardRole = memberRoleIds.some((r) => dashboardRoles.includes(r));
       }
     }
 
