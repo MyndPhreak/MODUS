@@ -10,7 +10,7 @@
  */
 import { validateWelcomeImageElements } from "@modus/db/welcome-images";
 import { getRepos } from "../../../utils/db";
-import { requireGuildManager } from "../../../utils/session";
+import { requireModuleAccess } from "../../../utils/session";
 import { deleteR2Object, extractWelcomeBgKey } from "../../../utils/r2";
 
 export default defineEventHandler(async (event) => {
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, moduleName);
 
   const body = await readBody<{
     enabled?: boolean;
