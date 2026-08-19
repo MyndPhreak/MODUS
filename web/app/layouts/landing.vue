@@ -167,7 +167,9 @@ const scrollToSection = (hash: string) => {
 };
 
 const handleNavLinkClick = (event: MouseEvent, href: string) => {
-  if (route.path === "/") {
+  // Only intercept hash-anchor links (e.g. "/#features") when on the homepage.
+  // Clean path links like "/xp" should navigate normally.
+  if (route.path === "/" && href.includes("#")) {
     event.preventDefault();
     scrollToSection(href);
   }

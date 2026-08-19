@@ -199,9 +199,9 @@
       class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end pt-4"
     >
       <!-- 2nd Place (Silver) -->
-      <div
+      <NuxtLink
+        :to="`/xp/${guildId}/${podium[1]?.userId}`"
         class="order-2 md:order-1 relative rounded-2xl p-6 border border-slate-400/20 bg-gradient-to-b from-slate-800/40 via-slate-900/60 to-zinc-950/80 backdrop-blur-xl space-y-4 text-center cursor-pointer hover:scale-[1.02] transition-all shadow-xl hover:shadow-slate-500/10"
-        @click="openUserCard(podium[1])"
       >
         <div
           class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-slate-400/20 border border-slate-400/40 text-slate-300 text-xs font-bold flex items-center gap-1"
@@ -237,12 +237,12 @@
             {{ (podium[1]?.level || 0) + 1 }}
           </p>
         </div>
-      </div>
+      </NuxtLink>
 
       <!-- 1st Place (Gold) -->
-      <div
+      <NuxtLink
+        :to="`/xp/${guildId}/${podium[0]?.userId}`"
         class="order-1 md:order-2 relative rounded-2xl p-8 border border-amber-400/30 bg-gradient-to-b from-amber-900/30 via-zinc-900/80 to-zinc-950/90 backdrop-blur-2xl space-y-5 text-center cursor-pointer hover:scale-[1.03] transition-all shadow-2xl shadow-amber-500/10 hover:shadow-amber-500/20 md:-translate-y-4"
-        @click="openUserCard(podium[0])"
       >
         <div
           class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 text-sm font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
@@ -280,12 +280,12 @@
             {{ (podium[0]?.level || 0) + 1 }}
           </p>
         </div>
-      </div>
+      </NuxtLink>
 
       <!-- 3rd Place (Bronze) -->
-      <div
+      <NuxtLink
+        :to="`/xp/${guildId}/${podium[2]?.userId}`"
         class="order-3 relative rounded-2xl p-6 border border-amber-700/30 bg-gradient-to-b from-amber-950/30 via-zinc-900/60 to-zinc-950/80 backdrop-blur-xl space-y-4 text-center cursor-pointer hover:scale-[1.02] transition-all shadow-xl hover:shadow-amber-900/10"
-        @click="openUserCard(podium[2])"
       >
         <div
           class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-amber-700/20 border border-amber-700/40 text-amber-500 text-xs font-bold flex items-center gap-1"
@@ -321,7 +321,7 @@
             {{ (podium[2]?.level || 0) + 1 }}
           </p>
         </div>
-      </div>
+      </NuxtLink>
     </div>
 
     <!-- MAIN LEADERBOARD CARD -->
@@ -354,11 +354,11 @@
 
       <!-- Leaderboard List / Table -->
       <div class="space-y-2">
-        <div
+        <NuxtLink
           v-for="user in data?.users"
           :key="user.id"
+          :to="`/xp/${guildId}/${user.userId}`"
           class="flex items-center gap-4 p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-pointer group"
-          @click="openUserCard(user)"
         >
           <!-- Rank Badge -->
           <div
@@ -437,7 +437,7 @@
             name="i-heroicons-chevron-right"
             class="w-4 h-4 text-zinc-600 group-hover:text-white transition-colors shrink-0"
           />
-        </div>
+        </NuxtLink>
 
         <div
           v-if="!data?.users?.length"
