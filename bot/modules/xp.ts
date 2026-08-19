@@ -59,6 +59,10 @@ function cacheKey(guildId: string, userId: string): string {
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://localhost:3000";
 const RENDER_API_KEY = process.env.RENDER_API_KEY || "";
+// PUBLIC_WEB_URL is the externally accessible dashboard URL used in Discord
+// Link buttons. It must be a valid https:// URL. Falls back to DASHBOARD_URL
+// so local dev (where both point to localhost) still works without extra config.
+const PUBLIC_URL = process.env.PUBLIC_WEB_URL || DASHBOARD_URL;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -142,7 +146,7 @@ async function sendXpOptInPrompt(message: Message) {
 
   const guildId = guild.id;
   const userId = author.id;
-  const leaderboardUrl = `${DASHBOARD_URL}/xp/${guildId}`;
+  const leaderboardUrl = `${PUBLIC_URL}/xp/${guildId}`;
 
   const embed = new EmbedBuilder()
     .setColor(0x6366f1)
@@ -360,7 +364,7 @@ function buildLeaderboardEmbed(
     embed.setDescription(lines.join("\n\n"));
   }
 
-  const webUrl = `${DASHBOARD_URL}/xp/${guildId}`;
+  const webUrl = `${PUBLIC_URL}/xp/${guildId}`;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`xp:lb-prev:${guildId}:${page}`)
@@ -523,7 +527,7 @@ const xpModule: BotModule = {
           name: `rank-${targetUser.username}.png`,
         });
 
-        const webUrl = `${DASHBOARD_URL}/xp/${guildId}`;
+        const webUrl = `${PUBLIC_URL}/xp/${guildId}`;
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
             .setLabel("View Full Leaderboard")
@@ -647,7 +651,7 @@ const xpModule: BotModule = {
           })
           .setTimestamp();
 
-        const webUrl = `${DASHBOARD_URL}/xp/${guildId}`;
+        const webUrl = `${PUBLIC_URL}/xp/${guildId}`;
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
             .setLabel("View Web Leaderboard")
