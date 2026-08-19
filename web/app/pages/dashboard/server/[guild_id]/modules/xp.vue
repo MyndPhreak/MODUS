@@ -480,18 +480,18 @@
     <!-- ======================================================== -->
     <!-- RANK CARD DESIGNER TAB                                   -->
     <!-- ======================================================== -->
-    <div v-else class="h-[740px] flex flex-col">
-      <RankCardEditor
-        :guild-id="guildId"
-        v-model="settings.cardTemplate"
-        @save="save"
-      />
-    </div>
+    <RankCardEditor
+      v-else
+      :guild-id="guildId"
+      v-model="settings.cardTemplate"
+      class="h-full"
+      @save="save"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import RankCardEditor from "~/components/RankCardEditor.vue";
 import {
   DEFAULT_RANK_CARD_TEMPLATE,
@@ -509,8 +509,17 @@ const {
   loadChannels,
   channelOptions,
 } = useServerSettings(guildId);
+const { setFullBleed, reset: resetPageChrome } = usePageChrome();
 
 const activeTab = ref<"general" | "card">("general");
+
+watch(activeTab, (tab) => {
+  if (tab === "card") {
+    setFullBleed(true);
+  } else {
+    resetPageChrome();
+  }
+});
 const saving = ref(false);
 const calcLevel = ref(10);
 
@@ -607,5 +616,9 @@ onMounted(() => {
     };
   }
   loadChannels();
+});
+
+onUnmounted(() => {
+  resetPageChrome();
 });
 </script>

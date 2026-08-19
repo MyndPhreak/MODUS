@@ -109,7 +109,10 @@
                     v-if="bgUploading"
                     class="text-[10px] text-zinc-500 flex items-center gap-1"
                   >
-                    <UIcon name="i-heroicons-arrow-path" class="animate-spin text-xs" />
+                    <UIcon
+                      name="i-heroicons-arrow-path"
+                      class="animate-spin text-xs"
+                    />
                   </span>
                 </div>
               </div>
@@ -188,9 +191,9 @@
     </div>
 
     <!-- MAIN EDITOR AREA -->
-    <div class="flex-1 flex min-h-0 gap-px bg-slate-950/80">
+    <div class="flex-1 flex min-h-0 gap-px rce-glass-panel">
       <!-- LEFT PANEL: Presets, Tools + Layers -->
-      <div class="w-72 shrink-0 flex flex-col rce-glass-panel rounded-2xl">
+      <div class="w-72 shrink-0 flex flex-col rounded-2xl">
         <!-- Preset Themes -->
         <div class="p-2 border-b border-white/10">
           <p class="rce-panel-label mb-2">Presets</p>
@@ -200,15 +203,14 @@
               :key="preset.name"
               :text="preset.name"
             >
-              <button
-                class="rce-preset-btn"
-                @click="applyPreset(preset)"
-              >
+              <button class="rce-preset-btn" @click="applyPreset(preset)">
                 <div
                   class="rce-preset-swatch"
                   :style="{ background: preset.preview }"
                 />
-                <span class="text-[9px] truncate text-zinc-300">{{ preset.name }}</span>
+                <span class="text-[9px] truncate text-zinc-300">{{
+                  preset.name
+                }}</span>
               </button>
             </UTooltip>
           </div>
@@ -222,7 +224,11 @@
               v-for="t in toolTypes"
               :key="t.type"
               class="rce-tool-row"
-              @click="t.type === 'image' ? imageUploadInput?.click() : addElement(t.type)"
+              @click="
+                t.type === 'image'
+                  ? imageUploadInput?.click()
+                  : addElement(t.type)
+              "
             >
               <UIcon :name="t.icon" class="text-lg shrink-0" :class="t.color" />
               <span class="text-sm font-medium">{{ t.label }}</span>
@@ -240,7 +246,9 @@
 
         <!-- Layers List -->
         <div class="flex-1 flex flex-col min-h-0">
-          <div class="flex items-center justify-between p-2 border-b border-white/10">
+          <div
+            class="flex items-center justify-between p-2 border-b border-white/10"
+          >
             <p class="rce-panel-label">Layers</p>
             <div class="flex items-center gap-1">
               <UTooltip text="Move up">
@@ -270,7 +278,10 @@
                   aria-label="Duplicate"
                   @click="duplicateSelectedElement"
                 >
-                  <UIcon name="i-heroicons-document-duplicate" class="text-sm" />
+                  <UIcon
+                    name="i-heroicons-document-duplicate"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Delete">
@@ -324,13 +335,20 @@
       <div
         class="flex-1 flex [align-items:safe_center] [justify-content:safe_center] bg-[#131722] overflow-auto relative"
         ref="canvasWrap"
-        :class="{ 'cursor-grab': isSpaceHeld && !isPanning, 'cursor-grabbing': isPanning }"
+        :class="{
+          'cursor-grab': isSpaceHeld && !isPanning,
+          'cursor-grabbing': isPanning,
+        }"
         @wheel.prevent="handleWheelZoom"
         @mousedown="handlePanStart"
         @mousemove="handlePanMove"
         @mouseup="handlePanEnd"
         @mouseleave="handlePanEnd"
-        @contextmenu="(e: MouseEvent) => { if (isSpaceHeld) e.preventDefault(); }"
+        @contextmenu="
+          (e: MouseEvent) => {
+            if (isSpaceHeld) e.preventDefault();
+          }
+        "
       >
         <!-- Checkerboard under canvas -->
         <div
@@ -448,7 +466,14 @@
                         width: (el.width || 500) * 0.65,
                         height: el.height || 18,
                         cornerRadius: el.cornerRadius || 9,
-                        ...gradientFillProps(el.fill, 0, 0, (el.width || 500) * 0.65, el.height || 18, '#6366f1'),
+                        ...gradientFillProps(
+                          el.fill,
+                          0,
+                          0,
+                          (el.width || 500) * 0.65,
+                          el.height || 18,
+                          '#6366f1',
+                        ),
                         opacity: el.opacity ?? 1,
                       }"
                     />
@@ -589,8 +614,10 @@
                         :config="{
                           x: -(el.radius || 56) - (el.borderWidth || 0),
                           y: -(el.radius || 56) - (el.borderWidth || 0),
-                          width: ((el.radius || 56) + (el.borderWidth || 0)) * 2,
-                          height: ((el.radius || 56) + (el.borderWidth || 0)) * 2,
+                          width:
+                            ((el.radius || 56) + (el.borderWidth || 0)) * 2,
+                          height:
+                            ((el.radius || 56) + (el.borderWidth || 0)) * 2,
                           cornerRadius: el.avatarCornerRadius ?? 0,
                           fill: el.borderColor || '#818cf8',
                           opacity: el.opacity ?? 1,
@@ -654,7 +681,12 @@
                     nodes: transformerNodes,
                     enabledAnchors:
                       selectedElement?.type === 'avatar'
-                        ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+                        ? [
+                            'top-left',
+                            'top-right',
+                            'bottom-left',
+                            'bottom-right',
+                          ]
                         : selectedElement?.type === 'text'
                           ? ['middle-left', 'middle-right']
                           : [
@@ -668,16 +700,23 @@
                               'bottom-center',
                             ],
                     keepRatio:
-                      selectedElement?.type === 'avatar' || selectedElement?.type === 'image'
+                      selectedElement?.type === 'avatar' ||
+                      selectedElement?.type === 'image'
                         ? true
                         : selectedElementIds.size > 1
                           ? true
                           : selectedElement?.type !== 'circle',
                     shiftBehavior:
-                      selectedElement?.type === 'image' ? 'inverted' : 'default',
+                      selectedElement?.type === 'image'
+                        ? 'inverted'
+                        : 'default',
                     rotateEnabled: true,
                     rotationSnaps: isShiftHeld
-                      ? [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345]
+                      ? [
+                          0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165,
+                          180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330,
+                          345,
+                        ]
                       : [],
                     borderStroke: '#6366f1',
                     borderStrokeWidth: 2,
@@ -709,8 +748,13 @@
             </v-stage>
           </div>
           <template #fallback>
-            <div class="flex items-center justify-center py-20 text-zinc-500 text-sm">
-              <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin mr-2" />
+            <div
+              class="flex items-center justify-center py-20 text-zinc-500 text-sm"
+            >
+              <UIcon
+                name="i-heroicons-arrow-path"
+                class="w-5 h-5 animate-spin mr-2"
+              />
               Loading Canvas…
             </div>
           </template>
@@ -722,7 +766,9 @@
         <!-- Single Selection Properties -->
         <div v-if="selectedElement" class="flex flex-col">
           <!-- Header -->
-          <div class="flex items-center justify-between p-2 border-b border-white/10">
+          <div
+            class="flex items-center justify-between p-2 border-b border-white/10"
+          >
             <div class="flex items-center gap-1.5">
               <UIcon
                 :name="elementTypeIcon(selectedElement.type)"
@@ -762,7 +808,10 @@
                   aria-label="Align center"
                   @click="alignLayers('center-h')"
                 >
-                  <UIcon name="i-lucide-align-center-vertical" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-center-vertical"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align right">
@@ -780,7 +829,10 @@
                   aria-label="Align top"
                   @click="alignLayers('top')"
                 >
-                  <UIcon name="i-lucide-align-start-horizontal" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-start-horizontal"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align middle">
@@ -789,7 +841,10 @@
                   aria-label="Align middle"
                   @click="alignLayers('middle-v')"
                 >
-                  <UIcon name="i-lucide-align-center-horizontal" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-center-horizontal"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align bottom">
@@ -929,7 +984,10 @@
                 </div>
               </template>
               <div
-                v-if="selectedElement.type === 'rect' || selectedElement.type === 'progressbar'"
+                v-if="
+                  selectedElement.type === 'rect' ||
+                  selectedElement.type === 'progressbar'
+                "
                 class="rce-prop-row col-span-2"
               >
                 <span class="rce-prop-label">Corner Radius</span>
@@ -1023,7 +1081,10 @@
           </div>
 
           <!-- Progress Bar Specifics -->
-          <div v-if="selectedElement.type === 'progressbar'" class="rce-prop-section">
+          <div
+            v-if="selectedElement.type === 'progressbar'"
+            class="rce-prop-section"
+          >
             <p class="rce-prop-title">Progress Track</p>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
@@ -1032,13 +1093,23 @@
                   <button
                     type="button"
                     class="rce-color-chip-lg cursor-pointer"
-                    :style="{ background: swatchPreview(selectedElement.trackColor || 'rgba(255,255,255,0.08)') }"
+                    :style="{
+                      background: swatchPreview(
+                        selectedElement.trackColor || 'rgba(255,255,255,0.08)',
+                      ),
+                    }"
                   />
                   <template #content>
                     <GradientPicker
-                      :model-value="selectedElement.trackColor || 'rgba(255,255,255,0.08)'"
+                      :model-value="
+                        selectedElement.trackColor || 'rgba(255,255,255,0.08)'
+                      "
                       :allow-radial="false"
-                      @update:model-value="(v: string) => { if (selectedElement) selectedElement.trackColor = v; }"
+                      @update:model-value="
+                        (v: string) => {
+                          if (selectedElement) selectedElement.trackColor = v;
+                        }
+                      "
                     />
                   </template>
                 </UPopover>
@@ -1054,7 +1125,10 @@
               color="neutral"
               variant="outline"
               block
-              @click="replacingImageId = selectedElement!.id; imageUploadInput?.click()"
+              @click="
+                replacingImageId = selectedElement!.id;
+                imageUploadInput?.click();
+              "
             />
           </div>
 
@@ -1068,7 +1142,11 @@
                   :value="selectedElement.shadowColor || '#000000'"
                   type="color"
                   class="rce-color-chip-lg cursor-pointer"
-                  @input="selectedElement.shadowColor = ($event.target as HTMLInputElement).value"
+                  @input="
+                    selectedElement.shadowColor = (
+                      $event.target as HTMLInputElement
+                    ).value
+                  "
                 />
               </div>
               <div class="rce-prop-row">
@@ -1183,12 +1261,18 @@
           </div>
 
           <!-- Avatar Shape & Border -->
-          <div v-if="selectedElement.type === 'avatar'" class="rce-prop-section">
+          <div
+            v-if="selectedElement.type === 'avatar'"
+            class="rce-prop-section"
+          >
             <p class="rce-prop-title">Avatar Shape</p>
             <div class="flex gap-1">
               <button
                 class="rce-tool-btn-sm flex-1"
-                :class="{ 'rce-layer-active': (selectedElement.avatarShape ?? 'circle') === 'circle' }"
+                :class="{
+                  'rce-layer-active':
+                    (selectedElement.avatarShape ?? 'circle') === 'circle',
+                }"
                 aria-label="Circle"
                 @click="selectedElement.avatarShape = 'circle'"
               >
@@ -1196,7 +1280,9 @@
               </button>
               <button
                 class="rce-tool-btn-sm flex-1"
-                :class="{ 'rce-layer-active': selectedElement.avatarShape === 'square' }"
+                :class="{
+                  'rce-layer-active': selectedElement.avatarShape === 'square',
+                }"
                 aria-label="Square"
                 @click="selectedElement.avatarShape = 'square'"
               >
@@ -1217,12 +1303,17 @@
             </div>
           </div>
 
-          <div v-if="selectedElement.type === 'avatar'" class="rce-prop-section">
+          <div
+            v-if="selectedElement.type === 'avatar'"
+            class="rce-prop-section"
+          >
             <p class="rce-prop-title">Avatar Border</p>
             <div class="flex items-center gap-2">
               <div
                 class="rce-color-chip-lg"
-                :style="{ background: selectedElement.borderColor || '#818cf8' }"
+                :style="{
+                  background: selectedElement.borderColor || '#818cf8',
+                }"
                 @click="($refs.borderColor as HTMLInputElement).click()"
               />
               <input
@@ -1263,7 +1354,9 @@
         <!-- Multi-Selection Properties -->
         <div v-else-if="selectedElementIds.size > 1" class="flex flex-col">
           <!-- Header -->
-          <div class="flex items-center justify-between p-2 border-b border-white/10">
+          <div
+            class="flex items-center justify-between p-2 border-b border-white/10"
+          >
             <span class="text-xs font-medium text-zinc-300">
               {{ selectedElementIds.size }} layers selected
             </span>
@@ -1274,7 +1367,10 @@
                   aria-label="Duplicate selection"
                   @click="duplicateSelectedElement"
                 >
-                  <UIcon name="i-heroicons-document-duplicate" class="text-sm" />
+                  <UIcon
+                    name="i-heroicons-document-duplicate"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Delete selection">
@@ -1308,7 +1404,10 @@
                   aria-label="Align center"
                   @click="alignLayers('center-h')"
                 >
-                  <UIcon name="i-lucide-align-center-vertical" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-center-vertical"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align right">
@@ -1326,7 +1425,10 @@
                   aria-label="Align top"
                   @click="alignLayers('top')"
                 >
-                  <UIcon name="i-lucide-align-start-horizontal" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-start-horizontal"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align middle">
@@ -1335,7 +1437,10 @@
                   aria-label="Align middle"
                   @click="alignLayers('middle-v')"
                 >
-                  <UIcon name="i-lucide-align-center-horizontal" class="text-sm" />
+                  <UIcon
+                    name="i-lucide-align-center-horizontal"
+                    class="text-sm"
+                  />
                 </button>
               </UTooltip>
               <UTooltip text="Align bottom">
@@ -1390,7 +1495,10 @@
                   class="rce-num-input w-full"
                   @change="
                     (e: any) =>
-                      applyGroupMove(Number(e.target.value), groupBounds?.y ?? 0)
+                      applyGroupMove(
+                        Number(e.target.value),
+                        groupBounds?.y ?? 0,
+                      )
                   "
                 />
               </div>
@@ -1402,7 +1510,10 @@
                   class="rce-num-input w-full"
                   @change="
                     (e: any) =>
-                      applyGroupMove(groupBounds?.x ?? 0, Number(e.target.value))
+                      applyGroupMove(
+                        groupBounds?.x ?? 0,
+                        Number(e.target.value),
+                      )
                   "
                 />
               </div>
@@ -1415,7 +1526,10 @@
                   class="rce-num-input w-full"
                   @change="
                     (e: any) =>
-                      applyGroupScale(Number(e.target.value), groupBounds?.height ?? 1)
+                      applyGroupScale(
+                        Number(e.target.value),
+                        groupBounds?.height ?? 1,
+                      )
                   "
                 />
               </div>
@@ -1428,7 +1542,10 @@
                   class="rce-num-input w-full"
                   @change="
                     (e: any) =>
-                      applyGroupScale(groupBounds?.width ?? 1, Number(e.target.value))
+                      applyGroupScale(
+                        groupBounds?.width ?? 1,
+                        Number(e.target.value),
+                      )
                   "
                 />
               </div>
@@ -1947,7 +2064,9 @@ const template = ref<RankCardTemplate>(
 
 const selectedElementIds = ref<Set<string>>(new Set());
 const selectedElementId = computed(() =>
-  selectedElementIds.value.size === 1 ? [...selectedElementIds.value][0]! : null,
+  selectedElementIds.value.size === 1
+    ? [...selectedElementIds.value][0]!
+    : null,
 );
 
 const saving = ref(false);
@@ -2238,11 +2357,10 @@ function syncElementImages(elements: RankCardElement[]) {
   elements.forEach(loadElementImage);
 }
 
-watch(
-  () => template.value.elements,
-  syncElementImages,
-  { deep: true, immediate: true },
-);
+watch(() => template.value.elements, syncElementImages, {
+  deep: true,
+  immediate: true,
+});
 
 function loadLocalImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -2279,7 +2397,10 @@ function handleImageFileSelection(event: Event) {
   }
 }
 
-async function uploadImageLayer(file: File, replaceElement?: RankCardElement): Promise<void> {
+async function uploadImageLayer(
+  file: File,
+  replaceElement?: RankCardElement,
+): Promise<void> {
   if (file.size > MAX_IMAGE_LAYER_SIZE) {
     toast.add({
       title: "Image too large",
@@ -2501,7 +2622,8 @@ const transformerNodes = computed(() => {
     if (!stage) return [];
     return [...selectedElementIds.value]
       .filter(
-        (id) => template.value.elements.find((el) => el.id === id)?.type !== "line",
+        (id) =>
+          template.value.elements.find((el) => el.id === id)?.type !== "line",
       )
       .map((id) => stage.findOne(`.${id}`))
       .filter((node): node is NonNullable<typeof node> => Boolean(node));
@@ -2513,7 +2635,10 @@ const transformerNodes = computed(() => {
 const hoveredElementId = ref<string | null>(null);
 
 const hoveredElementRect = computed(() => {
-  if (!hoveredElementId.value || hoveredElementId.value === selectedElementId.value)
+  if (
+    !hoveredElementId.value ||
+    hoveredElementId.value === selectedElementId.value
+  )
     return null;
   if (!stageRef.value) return null;
   try {
@@ -2647,7 +2772,13 @@ const alignmentBounds = computed(() => {
   return null;
 });
 
-type AlignDirection = "left" | "center-h" | "right" | "top" | "middle-v" | "bottom";
+type AlignDirection =
+  | "left"
+  | "center-h"
+  | "right"
+  | "top"
+  | "middle-v"
+  | "bottom";
 
 function alignLayers(direction: AlignDirection) {
   const bounds = alignmentBounds.value;
@@ -2738,7 +2869,9 @@ function scaleElementSize(el: RankCardElement, sx: number, sy: number) {
       el.radius = Math.round(Math.max(5, (el.radius ?? 56) * ((sx + sy) / 2)));
       break;
     case "text":
-      el.fontSize = Math.round(Math.max(6, (el.fontSize ?? 24) * ((sx + sy) / 2)));
+      el.fontSize = Math.round(
+        Math.max(6, (el.fontSize ?? 24) * ((sx + sy) / 2)),
+      );
       break;
     case "line":
       el.points = (el.points ?? [-60, 0, 60, 0]).map((p, i) =>
@@ -2920,7 +3053,8 @@ function textConfig(el: RankCardElement) {
   return {
     x: el.x,
     y: el.y,
-    offsetX: el.align === "center" ? width / 2 : el.align === "right" ? width : 0,
+    offsetX:
+      el.align === "center" ? width / 2 : el.align === "right" ? width : 0,
     offsetY: fontSize / 2,
     width,
     text: previewText(el.text || ""),
@@ -3203,9 +3337,13 @@ function deleteSelectedElement() {
 function duplicateSelectedElement() {
   if (selectedElementIds.value.size === 0) return;
   const imageDuplicates = [...selectedElementIds.value].filter(
-    (id) => template.value.elements.find((el) => el.id === id)?.type === "image",
+    (id) =>
+      template.value.elements.find((el) => el.id === id)?.type === "image",
   ).length;
-  if (imageLayerCount(template.value.elements) + imageDuplicates > MAX_IMAGE_LAYERS) {
+  if (
+    imageLayerCount(template.value.elements) + imageDuplicates >
+    MAX_IMAGE_LAYERS
+  ) {
     toast.add({
       title: "Image layer limit reached",
       description: "A rank card template can contain up to 10 images.",
@@ -3479,8 +3617,8 @@ onUnmounted(() => {
     system-ui,
     -apple-system,
     sans-serif;
-  background: #0b0f19;
   color: #cbd5e1;
+  border-radius: 16px;
 }
 
 .rce-glass-panel {
@@ -3489,6 +3627,7 @@ onUnmounted(() => {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  border-radius: 16px;
 }
 
 /* ── Toolbar ── */
