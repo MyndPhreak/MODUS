@@ -4,7 +4,7 @@
  *
  * Query params: guild_id
  */
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "events");
 
   const botToken = config.discordBotToken as string;
   if (!botToken) {

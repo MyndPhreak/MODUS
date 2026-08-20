@@ -22,6 +22,20 @@
       <UButton to="/dashboard" color="primary">Back to Dashboard</UButton>
     </div>
 
+    <!-- Module-scoped user hitting a page outside their grant -->
+    <div v-else-if="state.guild && !canAccessActiveTab" class="text-center py-20">
+      <UIcon
+        name="i-heroicons-lock-closed"
+        class="w-16 h-16 text-red-500 mx-auto mb-4"
+      />
+      <h1 class="text-3xl font-bold mb-2">Access Denied</h1>
+      <p class="text-gray-500 mb-8">
+        You don't have access to this page. Ask a server admin to grant your
+        role access to this module.
+      </p>
+      <UButton :to="accessDeniedBackTo" color="primary">Back to Dashboard</UButton>
+    </div>
+
     <!-- Content: Child Pages -->
     <NuxtPage v-else-if="state.guild" />
   </div>
@@ -48,28 +62,52 @@ const activeTab = computed(() => {
   return "modules";
 });
 
+const canAccessActiveTab = computed(() => {
+  if (state.value.accessibleModules === null) return true;
+  if (["logs", "modules", "identity"].includes(activeTab.value)) return false;
+  return state.value.accessibleModules.includes(activeTab.value);
+});
+
+// Access-denied escape hatch: admins land on the modules grid; module-scoped
+// users would just bounce off that same grid (it's admin-only), so send them
+// to the first module they actually have access to. Not every module has a
+// real settings page, so prefer the first accessible module that does;
+// fall back to the plain first entry if none of them do.
+const accessDeniedBackTo = computed(() => {
+  if (state.value.accessibleModules === null) {
+    return `${basePath}/modules`;
+  }
+  const target =
+    state.value.accessibleModules.find((m) => hasModuleSettings(m)) ??
+    state.value.accessibleModules[0];
+  return `${basePath}/modules/${target}`;
+});
+
 // Sidebar tab definitions — route-based, grouped by category
 const sidebarTabs = computed(() => {
-  const staticTabs = [
-    {
-      id: "logs",
-      label: "Server Logs",
-      icon: "i-lucide-file-text",
-      to: `${basePath}/logs`,
-    },
-    {
-      id: "modules",
-      label: "Modules",
-      icon: "i-lucide-layout-grid",
-      to: `${basePath}/modules`,
-    },
-    {
-      id: "identity",
-      label: "Bot Identity",
-      icon: "i-lucide-bot",
-      to: `${basePath}/identity`,
-    },
-  ];
+  const staticTabs =
+    state.value.accessibleModules === null
+      ? [
+          {
+            id: "logs",
+            label: "Server Logs",
+            icon: "i-lucide-file-text",
+            to: `${basePath}/logs`,
+          },
+          {
+            id: "modules",
+            label: "Modules",
+            icon: "i-lucide-layout-grid",
+            to: `${basePath}/modules`,
+          },
+          {
+            id: "identity",
+            label: "Bot Identity",
+            icon: "i-lucide-bot",
+            to: `${basePath}/identity`,
+          },
+        ]
+      : [];
 
   const moduleTabs: Array<{
     id: string;
@@ -82,6 +120,11 @@ const sidebarTabs = computed(() => {
   for (const cat of MODULE_CATEGORIES) {
     const catModules = state.value.modules
       .filter((m) => hasModuleSettings(m.name) && getModuleDisplay(m).category === cat.key)
+      .filter(
+        (m) =>
+          state.value.accessibleModules === null ||
+          state.value.accessibleModules.includes(m.name.toLowerCase()),
+      )
       .sort((a, b) =>
         getModuleDisplay(a).displayName.localeCompare(getModuleDisplay(b).displayName),
       );

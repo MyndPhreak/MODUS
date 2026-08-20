@@ -8,7 +8,7 @@
  * exempt_channels, cooldown, created_by.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const { userId } = await requireGuildManager(event, body.guild_id);
+  const { userId } = await requireModuleAccess(event, body.guild_id, "automod");
 
   const repos = getRepos();
   if (!repos) {

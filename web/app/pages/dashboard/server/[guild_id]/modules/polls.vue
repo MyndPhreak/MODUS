@@ -1,5 +1,7 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="polls" />
+
     <!-- Header -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -238,7 +240,7 @@
               <p class="text-sm font-medium text-white flex-1">{{ poll.question }}</p>
               <UBadge color="neutral" variant="soft" size="xs">{{ poll.source }}</UBadge>
               <UButton
-                v-if="state.isServerOwnerOrAdmin"
+                v-if="state.isServerOwnerOrAdmin || state.accessibleModules?.includes('polls')"
                 color="error"
                 variant="ghost"
                 size="xs"

@@ -2,7 +2,7 @@
  * List tags for a guild.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -15,7 +15,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  try {
+    await requireModuleAccess(event, guildId, "tags");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, guildId, "embeds");
+  }
 
   const repos = getRepos();
   if (!repos) {

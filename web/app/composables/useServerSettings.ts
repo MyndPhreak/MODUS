@@ -50,6 +50,10 @@ export interface ServerSettingsState {
   unauthorized: boolean;
   dashboardRoleIds: string[];
   isServerOwnerOrAdmin: boolean;
+  /** Module names this user may access when NOT a full admin; null when
+   *  isServerOwnerOrAdmin is true (no restriction) or access hasn't been
+   *  resolved yet. */
+  accessibleModules: string[] | null;
 }
 
 
@@ -69,6 +73,7 @@ export function useServerSettings(guildId: string) {
       unauthorized: false,
       dashboardRoleIds: [],
       isServerOwnerOrAdmin: false,
+      accessibleModules: null,
     }),
   );
 
@@ -368,6 +373,26 @@ export function useServerSettings(guildId: string) {
         return;
       } catch {
         // Not a Discord admin and no matching dashboard role.
+      }
+
+      // Not a manager and no whole-dashboard promotion — check for
+      // module-scoped access before giving up.
+      try {
+        const access = await $fetch<{ modules: string[] }>(
+          "/api/servers/module-access",
+          { params: { guild_id: guildId } },
+        );
+        if (access.modules.length > 0) {
+          state.value.accessibleModules = access.modules;
+          state.value.guild = {
+            id: serverDoc.guild_id,
+            name: serverDoc.name,
+            icon: serverDoc.icon,
+          };
+          return;
+        }
+      } catch {
+        // No module-scoped access either.
       }
 
       state.value.unauthorized = true;

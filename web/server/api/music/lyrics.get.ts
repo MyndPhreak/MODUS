@@ -1,5 +1,5 @@
 // Proxy: GET /api/music/lyrics?guild_id=...&query=...
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "music");
 
   const config = useRuntimeConfig();
   const botUrl = (config.public.botUrl as string) || "http://localhost:3005";

@@ -1,6 +1,6 @@
 // Proxy: GET /api/music/state?guild_id=...
 // Fetches the current player state from the bot's HTTP API
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing guild_id" });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "music");
 
   const config = useRuntimeConfig();
   const botUrl = (config.public.botUrl as string) || "http://localhost:3005";

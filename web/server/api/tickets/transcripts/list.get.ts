@@ -3,7 +3,7 @@
  *
  * Returns the 25 most-recent transcripts for a guild. Guild-admin only.
  */
-import { requireGuildManager } from "../../../utils/session";
+import { requireModuleAccess } from "../../../utils/session";
 import { getRepos } from "../../../utils/db";
 
 export default defineEventHandler(async (event) => {
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "tickets");
 
   const repos = getRepos();
   if (!repos) {

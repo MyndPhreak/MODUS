@@ -1,6 +1,6 @@
 /** Update a poll template. Body: { template_id, data: {...partial fields} } */
 import { getRepos } from "../../../utils/db";
-import { requireGuildManager } from "../../../utils/session";
+import { requireModuleAccess } from "../../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
   if (!existing) {
     throw createError({ statusCode: 404, statusMessage: "Template not found." });
   }
-  await requireGuildManager(event, existing.guildId);
+  await requireModuleAccess(event, existing.guildId, "polls");
 
   try {
     const template = await repos.pollTemplates.update(body.template_id, {

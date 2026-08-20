@@ -1,5 +1,7 @@
 <template>
   <div class="p-6 lg:p-8 space-y-8 w-full">
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="xp" />
+
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
       <div class="flex items-center gap-4">

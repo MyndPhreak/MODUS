@@ -7,7 +7,7 @@
  * Body: { guild_id, id }
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 import { buildGiveawayComponentsJson, buildGiveawayEmbedJson } from "./_embed";
 import type { PrizeKind } from "./_embed";
 
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing required fields: guild_id, id." });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "giveaways");
 
   const repos = getRepos();
   if (!repos) {

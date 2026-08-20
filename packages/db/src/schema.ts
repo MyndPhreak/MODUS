@@ -250,6 +250,42 @@ export const guildConfigs = pgTable(
 export type GuildConfig = typeof guildConfigs.$inferSelect;
 export type NewGuildConfig = typeof guildConfigs.$inferInsert;
 
+// ── module_access ────────────────────────────────────────────────────────
+// Per-(guild, module) dashboard RBAC grant. A role in `role_ids` may access
+// and edit that module's dashboard config page without being a full admin
+// (servers.admin_user_ids). Absent row = no non-admin role has access.
+
+export const moduleAccess = pgTable(
+  "module_access",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    moduleName: text("module_name").notNull(),
+    roleIds: text("role_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byGuildModule: uniqueIndex("module_access_guild_module_idx").on(
+      t.guildId,
+      t.moduleName,
+    ),
+    byGuild: index("module_access_guild_id_idx").on(t.guildId),
+  }),
+);
+
+export type ModuleAccess = typeof moduleAccess.$inferSelect;
+export type NewModuleAccess = typeof moduleAccess.$inferInsert;
+
 // ── bot_status ────────────────────────────────────────────────────────────
 // Per-shard heartbeat. Document ID was `shard-<n>` in Appwrite; we preserve
 // that as the primary key so cross-shard upserts remain stable.

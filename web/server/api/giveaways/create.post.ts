@@ -9,7 +9,7 @@
  *         min_server_age_days? }
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 import { buildGiveawayComponentsJson, buildGiveawayEmbedJson } from "./_embed";
 import type { PrizeKind } from "./_embed";
 
@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "winner_count must be an integer between 1 and 50." });
   }
 
-  const identity = await requireGuildManager(event, guildId);
+  const identity = await requireModuleAccess(event, guildId, "giveaways");
 
   const repos = getRepos();
   if (!repos) {
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the channel belongs to the authorized guild — same check every
-  // other write route in this codebase performs (requireGuildManager only
+  // other write route in this codebase performs (requireModuleAccess only
   // proves the caller manages guild_id, not that channel_id lives inside it).
   let channelGuildId: string | undefined;
   try {

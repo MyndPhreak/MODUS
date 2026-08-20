@@ -14,6 +14,7 @@
  */
 import type { H3Event } from "h3";
 import { getRepos } from "./db";
+import { fetchGuildMemberRoleIds } from "./discord";
 
 // ── Session shape ────────────────────────────────────────────────────────
 
@@ -138,6 +139,82 @@ export async function requireGuildManager(
     });
   }
   return identity;
+}
+
+/**
+ * Require the caller to either manage the guild (requireGuildManager) OR
+ * have a Discord role listed in that module's `module_access` grant.
+ * Lets a server owner delegate one module's config page to staff without
+ * making them a full dashboard admin. 403 when neither condition holds.
+ */
+export async function requireModuleAccess(
+  event: H3Event,
+  guildId: string,
+  moduleName: string,
+): Promise<AuthedIdentity> {
+  try {
+    return await requireGuildManager(event, guildId);
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+  }
+
+  const identity = await requireAuthedUserId(event);
+  const repos = getRepos();
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
+  }
+
+  const roleIds = await repos.moduleAccess.getRoleIds(
+    guildId,
+    moduleName.toLowerCase(),
+  );
+  if (roleIds.length > 0) {
+    const memberRoleIds = await fetchGuildMemberRoleIds(guildId, identity.userId);
+    if (memberRoleIds.some((r) => roleIds.includes(r))) {
+      return identity;
+    }
+  }
+
+  throw createError({
+    statusCode: 403,
+    statusMessage: "You don't have access to this module.",
+  });
+}
+
+/**
+ * Every module the caller may access in this guild: `"all"` for a full
+ * manager (requireGuildManager passes), otherwise the list of module names
+ * whose `module_access` grant intersects the caller's live Discord roles.
+ * Used to filter the dashboard sidebar and the bulk guild-configs read.
+ */
+export async function getAccessibleModules(
+  event: H3Event,
+  guildId: string,
+): Promise<"all" | string[]> {
+  try {
+    await requireGuildManager(event, guildId);
+    return "all";
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+  }
+
+  const identity = await requireAuthedUserId(event);
+  const repos = getRepos();
+  if (!repos) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+    });
+  }
+
+  const grants = await repos.moduleAccess.getAllForGuild(guildId);
+  const memberRoleIds = await fetchGuildMemberRoleIds(guildId, identity.userId);
+  return Object.entries(grants)
+    .filter(([, roleIds]) => roleIds.some((r) => memberRoleIds.includes(r)))
+    .map(([moduleName]) => moduleName);
 }
 
 /** Return the Discord UID of the caller, or null when unauthenticated. */

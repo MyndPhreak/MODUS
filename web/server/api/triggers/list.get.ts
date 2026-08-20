@@ -1,6 +1,6 @@
 /** List triggers for a guild. */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   // Trigger docs include the webhook secret, so this must be gated to guild
   // managers.
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "triggers");
 
   const repos = getRepos();
   if (!repos) {

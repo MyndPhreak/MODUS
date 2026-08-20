@@ -8,7 +8,7 @@
  * that the caller has any relationship to `guild_id`).
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 interface DiscordPollAnswerCount {
   id: number;
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "polls");
 
   const repos = getRepos();
   if (!repos) {

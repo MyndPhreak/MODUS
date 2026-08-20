@@ -1,7 +1,7 @@
 // Proxy: POST /api/music/action
 // Forwards control actions (skip, pause, resume, stop, shuffle, play, volume, remove, reorder, search)
 // to the bot's HTTP API
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guild_id);
+  await requireModuleAccess(event, guild_id, "music");
 
   const validActions = [
     "skip",

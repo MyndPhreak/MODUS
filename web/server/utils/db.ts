@@ -11,6 +11,7 @@ import {
   GuildConfigRepository,
   ServerRepository,
   ModuleRepository,
+  ModuleAccessRepository,
   BotStatusRepository,
   LogRepository,
   MilestoneUserRepository,
@@ -33,6 +34,7 @@ export interface Repos {
   db: Database;
   recordings: RecordingRepository;
   guildConfigs: GuildConfigRepository;
+  moduleAccess: ModuleAccessRepository;
   servers: ServerRepository;
   modules: ModuleRepository;
   botStatus: BotStatusRepository;
@@ -67,6 +69,7 @@ export function getRepos(): Repos | null {
       db,
       recordings: new RecordingRepository(db),
       guildConfigs: new GuildConfigRepository(db),
+      moduleAccess: new ModuleAccessRepository(db),
       servers: new ServerRepository(db),
       modules: new ModuleRepository(db),
       botStatus: new BotStatusRepository(db),

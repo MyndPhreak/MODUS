@@ -1,6 +1,6 @@
 /** List tracks for a recording. */
 import { getRecordingRepo } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   if (!recording) {
     throw createError({ statusCode: 404, statusMessage: "Recording not found." });
   }
-  await requireGuildManager(event, recording.guild_id);
+  await requireModuleAccess(event, recording.guild_id, "recording");
 
   try {
     return await repo.listTracks(recordingId);

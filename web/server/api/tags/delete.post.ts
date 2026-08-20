@@ -4,7 +4,7 @@
  * POST body: { tag_id, guild_id }
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -33,7 +33,12 @@ export default defineEventHandler(async (event) => {
   if (!existing) {
     throw createError({ statusCode: 404, statusMessage: "Tag not found." });
   }
-  await requireGuildManager(event, existing.guild_id);
+  try {
+    await requireModuleAccess(event, existing.guild_id, "tags");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, existing.guild_id, "embeds");
+  }
 
   try {
     await repos.tags.delete(tag_id);
