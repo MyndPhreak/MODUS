@@ -5,7 +5,7 @@
  * Query params:
  *   - guild_id: The Discord guild ID
  */
-import { requireGuildManager } from "../../utils/session";
+import { getAccessibleModules } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -19,7 +19,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  const accessibleModules = await getAccessibleModules(event, guildId);
+  if (accessibleModules !== "all" && accessibleModules.length === 0) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "You don't manage this server.",
+    });
+  }
 
   const botToken = config.discordBotToken as string;
   if (!botToken) {
