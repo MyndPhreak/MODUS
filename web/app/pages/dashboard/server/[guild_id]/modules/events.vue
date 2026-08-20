@@ -1,7 +1,5 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="events" />
-
     <!-- Header -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -204,6 +202,8 @@
         </div>
       </div>
     </div>
+
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="events" />
 
     <!-- Day detail / create / edit modal -->
     <UModal v-model:open="showDayModal" :title="selectedDateLabel">

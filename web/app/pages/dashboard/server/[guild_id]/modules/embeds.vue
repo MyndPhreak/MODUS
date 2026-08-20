@@ -1,7 +1,5 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="embeds" />
-
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
@@ -265,6 +263,8 @@
         </div>
       </div>
     </div>
+
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="embeds" />
 
     <!-- ═══ Save Dialog (Preset or Tag) ═══ -->
     <UModal v-model:open="saveOpen">

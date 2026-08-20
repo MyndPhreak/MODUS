@@ -1,7 +1,5 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="verification" />
-
     <!-- Header -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -324,6 +322,8 @@
         </p>
       </div>
     </div>
+
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="verification" />
 
     <!-- Save -->
     <div class="flex justify-end gap-3">

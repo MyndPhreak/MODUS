@@ -1,7 +1,4 @@
 <template>
-  <div class="p-6 lg:p-8">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="welcome" />
-  </div>
   <!-- Full-bleed: no padding wrapper so the editor fills edge-to-edge -->
   <WelcomeEditor
     :guild-id="guildId"
@@ -9,6 +6,9 @@
     :channels-loading="channelsLoading"
     class="h-full"
   />
+  <div class="p-6 lg:p-8">
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="welcome" />
+  </div>
 </template>
 
 <script setup lang="ts">

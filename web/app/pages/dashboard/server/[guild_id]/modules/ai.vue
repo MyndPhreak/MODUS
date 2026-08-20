@@ -1,7 +1,5 @@
 <template>
   <div class="space-y-8">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="ai" />
-
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-4">
@@ -563,6 +561,8 @@
         </div>
       </div>
     </UCard>
+
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="ai" />
 
     <!-- Save Button -->
     <div class="flex justify-end">

@@ -1,7 +1,5 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
-    <DashboardModuleAccessSection :guild-id="guildId" module-name="alerts" />
-
     <!-- Header -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -251,6 +249,8 @@
 
       </div>
     </div>
+
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="alerts" />
 
     <!-- Save Button -->
     <div class="flex justify-end">
