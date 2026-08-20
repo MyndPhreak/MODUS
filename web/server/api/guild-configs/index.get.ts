@@ -6,7 +6,7 @@
  * state and rehydrate settings editors.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { getAccessibleModules } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -18,9 +18,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Module settings can carry secrets (e.g. the AI module's aiApiKey), so
-  // this must be scoped to managers of the guild — not any logged-in user.
-  await requireGuildManager(event, guildId);
+  // Module settings can carry secrets (e.g. the AI module's aiApiKey), so a
+  // module-scoped caller must only see rows for modules they're actually
+  // granted — not the full guild dump a manager gets.
+  const accessibleModules = await getAccessibleModules(event, guildId);
 
   const repos = getRepos();
   if (!repos) {
@@ -31,7 +32,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await repos.guildConfigs.listByGuild(guildId);
+    const rows = await repos.guildConfigs.listByGuild(guildId);
+    if (accessibleModules === "all") return rows;
+    return rows.filter((r) => accessibleModules.includes(r.moduleName));
   } catch (error: any) {
     console.error(
       `[GuildConfigs API] list failed for ${guildId}:`,
