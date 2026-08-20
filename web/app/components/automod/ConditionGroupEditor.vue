@@ -1,13 +1,24 @@
 <template>
-  <div class="rounded-xl border p-4 space-y-3" :class="containerClass">
+  <div
+    class="rounded-xl border p-4 space-y-3"
+    :class="containerClass"
+    :style="railStyle"
+  >
     <!-- Group Header -->
     <div class="flex items-center gap-2 flex-wrap">
-      <!-- Depth indicator dot -->
+      <!-- Depth indicator dot + label -->
       <div
         v-if="depth > 0"
-        class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-        :class="dotClass"
-      />
+        class="flex items-center gap-1 flex-shrink-0"
+      >
+        <div
+          class="w-1.5 h-1.5 rounded-full"
+          :style="{ backgroundColor: railColor }"
+        />
+        <span class="text-[9px] font-semibold text-gray-500"
+          >depth {{ depth }}</span
+        >
+      </div>
       <!-- AND / OR toggle -->
       <div
         class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5"
@@ -221,18 +232,28 @@ const emit = defineEmits<{
 }>();
 
 // ── Visual theming based on nesting depth ──
-const containerClass = computed(() => {
-  if (props.depth === 0) return "border-white/10 bg-white/[0.02]";
-  if (props.depth === 1) return "border-blue-500/25 bg-blue-500/[0.04]";
-  if (props.depth === 2) return "border-amber-500/25 bg-amber-500/[0.04]";
-  return "border-purple-500/25 bg-purple-500/[0.04]";
-});
+// Cycles indigo → purple → teal for depth 1, 2, 3, 4(=indigo again), ...
+const RAIL_COLORS = ["#6366f1", "#a855f7", "#14b8a6"];
 
-const dotClass = computed(() => {
-  if (props.depth === 1) return "bg-blue-400";
-  if (props.depth === 2) return "bg-amber-400";
-  return "bg-purple-400";
-});
+const railColor = computed(() =>
+  props.depth > 0
+    ? RAIL_COLORS[(props.depth - 1) % RAIL_COLORS.length]
+    : undefined,
+);
+
+const containerClass = computed(() =>
+  props.depth === 0 ? "border-white/10 bg-white/[0.02]" : "bg-white/[0.03]",
+);
+
+const railStyle = computed(() =>
+  props.depth > 0
+    ? {
+        borderLeft: `3px dashed ${railColor.value}`,
+        marginLeft: "6px",
+        paddingLeft: "10px",
+      }
+    : {},
+);
 
 // Show column headers only when at least one plain condition exists
 const hasPlainConditions = computed(() =>
