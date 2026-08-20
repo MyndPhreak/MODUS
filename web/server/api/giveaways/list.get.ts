@@ -2,7 +2,7 @@
  * List giveaways for a guild, most recent first, with live entrant counts.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing guild_id query parameter." });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "giveaways");
 
   const repos = getRepos();
   if (!repos) {
