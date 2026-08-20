@@ -407,6 +407,23 @@
                           autoresize
                           size="md"
                         />
+                        <p class="text-[10px] text-gray-600">
+                          Use
+                          <code class="bg-white/5 px-1 rounded">{user}</code>
+                          and
+                          <code class="bg-white/5 px-1 rounded">{channel}</code>
+                          as placeholders.
+                        </p>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-gray-400"
+                          >Image URL <span class="text-gray-600">(optional)</span></label
+                        >
+                        <UInput
+                          v-model="action.params.image_url"
+                          placeholder="https://example.com/image.png"
+                          size="md"
+                        />
                       </div>
                     </template>
 
@@ -552,6 +569,70 @@
                           as placeholders.
                         </p>
                       </div>
+                      <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-gray-400"
+                          >Image URL <span class="text-gray-600">(optional)</span></label
+                        >
+                        <UInput
+                          v-model="action.params.image_url"
+                          placeholder="https://example.com/image.png"
+                          size="md"
+                        />
+                      </div>
+                    </template>
+
+                    <!-- ── Reply to Message: reply text + optional image ── -->
+                    <template v-if="action.type === 'reply_to_message'">
+                      <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-gray-400"
+                          >Reply text</label
+                        >
+                        <UTextarea
+                          v-model="action.params.message"
+                          placeholder="⚠️ This message was flagged by AutoMod."
+                          :rows="3"
+                          autoresize
+                          size="md"
+                        />
+                        <p class="text-[10px] text-gray-600">
+                          Use
+                          <code class="bg-white/5 px-1 rounded">{user}</code>
+                          and
+                          <code class="bg-white/5 px-1 rounded">{channel}</code>
+                          as placeholders.
+                        </p>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-gray-400"
+                          >Image URL <span class="text-gray-600">(optional)</span></label
+                        >
+                        <UInput
+                          v-model="action.params.image_url"
+                          placeholder="https://example.com/image.png"
+                          size="md"
+                        />
+                      </div>
+                    </template>
+
+                    <!-- ── Add Reaction: emoji input ── -->
+                    <template v-if="action.type === 'add_reaction'">
+                      <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-gray-400"
+                          >Emoji</label
+                        >
+                        <UInput
+                          v-model="action.params.emoji"
+                          placeholder="⚠️ or a custom emoji ID like :name:1234567890"
+                          size="md"
+                        />
+                        <p class="text-[10px] text-gray-600">
+                          A unicode emoji, or a custom emoji in
+                          <code class="bg-white/5 px-1 rounded"
+                            >name:id</code
+                          >
+                          format.
+                        </p>
+                      </div>
                     </template>
 
                     <!-- ── Add / Remove Role: searchable full-width selector ── -->
@@ -587,6 +668,21 @@
                         </p>
                       </div>
                     </template>
+
+                    <!-- ── Delay: generic to every action type ── -->
+                    <div class="space-y-1">
+                      <label class="text-[11px] font-medium text-gray-400"
+                        >Delay before running
+                        <span class="text-gray-600">(optional, seconds)</span></label
+                      >
+                      <UInput
+                        v-model.number="action.delaySeconds"
+                        type="number"
+                        :min="0"
+                        placeholder="0"
+                        size="md"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -795,6 +891,7 @@ const deletingRule = ref<any>(null);
 interface ActionForm {
   type: string;
   params: Record<string, any>;
+  delaySeconds?: number;
 }
 
 const defaultConditions = () => ({
@@ -827,6 +924,10 @@ const form = ref({
 const triggerOptions = [
   { label: "💬 Message Created", value: "message_create" },
   { label: "✏️ Message Edited", value: "message_edit" },
+  { label: "🗑️ Message Deleted", value: "message_delete" },
+  { label: "🚪 Member Joined", value: "member_join" },
+  { label: "📝 Member Updated", value: "member_update" },
+  { label: "😀 Reaction Added", value: "reaction_add" },
 ];
 
 const actionOptions = [
@@ -837,6 +938,8 @@ const actionOptions = [
   { label: "🔨 Ban User", value: "ban_user" },
   { label: "💬 DM User", value: "dm_user" },
   { label: "📢 Send Channel Message", value: "send_channel_message" },
+  { label: "↩️ Reply to Message", value: "reply_to_message" },
+  { label: "😀 Add Reaction", value: "add_reaction" },
   { label: "➕ Add Role", value: "add_role" },
   { label: "➖ Remove Role", value: "remove_role" },
   { label: "📋 Log to Mod Log", value: "log_to_modlog" },
@@ -875,6 +978,14 @@ const triggerIcon = (trigger: string) => {
       return "i-heroicons-chat-bubble-left";
     case "message_edit":
       return "i-heroicons-pencil";
+    case "message_delete":
+      return "i-heroicons-trash";
+    case "member_join":
+      return "i-heroicons-arrow-right-on-rectangle";
+    case "member_update":
+      return "i-heroicons-identification";
+    case "reaction_add":
+      return "i-heroicons-face-smile";
     default:
       return "i-heroicons-bolt";
   }
@@ -886,6 +997,14 @@ const triggerLabel = (trigger: string) => {
       return "Fires on: Message Created";
     case "message_edit":
       return "Fires on: Message Edited";
+    case "message_delete":
+      return "Fires on: Message Deleted";
+    case "member_join":
+      return "Fires on: Member Joined";
+    case "member_update":
+      return "Fires on: Nickname/Avatar Changed";
+    case "reaction_add":
+      return "Fires on: Reaction Added";
     default:
       return `Fires on: ${trigger}`;
   }
@@ -901,6 +1020,8 @@ const actionChipClass = (type: string) => {
     dm_user: "bg-sky-500/10 border-sky-500/25 text-sky-300",
     send_channel_message:
       "bg-indigo-500/10 border-indigo-500/25 text-indigo-300",
+    reply_to_message: "bg-teal-500/10 border-teal-500/25 text-teal-300",
+    add_reaction: "bg-yellow-500/10 border-yellow-500/25 text-yellow-300",
     add_role: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300",
     remove_role: "bg-gray-500/10 border-gray-500/25 text-gray-400",
     log_to_modlog: "bg-purple-500/10 border-purple-500/25 text-purple-300",
@@ -917,6 +1038,8 @@ const actionAccentBar = (type: string) => {
     ban_user: "bg-red-600",
     dm_user: "bg-sky-500",
     send_channel_message: "bg-indigo-500",
+    reply_to_message: "bg-teal-500",
+    add_reaction: "bg-yellow-500",
     add_role: "bg-emerald-500",
     remove_role: "bg-gray-500",
     log_to_modlog: "bg-purple-500",
@@ -933,6 +1056,8 @@ const actionIcon = (type: string) => {
     ban_user: "i-heroicons-no-symbol",
     dm_user: "i-heroicons-envelope",
     send_channel_message: "i-heroicons-chat-bubble-left-right",
+    reply_to_message: "i-heroicons-arrow-uturn-left",
+    add_reaction: "i-heroicons-face-smile",
     add_role: "i-heroicons-plus-circle",
     remove_role: "i-heroicons-minus-circle",
     log_to_modlog: "i-heroicons-clipboard-document-list",
@@ -949,6 +1074,8 @@ const actionLabel = (type: string) => {
     ban_user: "Ban",
     dm_user: "DM",
     send_channel_message: "Post Message",
+    reply_to_message: "Reply",
+    add_reaction: "Add Reaction",
     add_role: "Add Role",
     remove_role: "Remove Role",
     log_to_modlog: "Log",
@@ -1034,7 +1161,7 @@ const openEditModal = (rule: any) => {
     if (a.type === "ban_user" && params.delete_days === undefined) {
       params.delete_days = 0;
     }
-    return { type: a.type, params };
+    return { type: a.type, params, delaySeconds: a.delaySeconds };
   });
   const exemptRoles = rule.exempt_roles ? JSON.parse(rule.exempt_roles) : [];
   const exemptChannels = rule.exempt_channels
@@ -1111,6 +1238,9 @@ const saveRule = async () => {
         return {
           type: a.type,
           ...(hasParams ? { params: cleanParams } : {}),
+          ...(a.delaySeconds && a.delaySeconds > 0
+            ? { delaySeconds: a.delaySeconds }
+            : {}),
         };
       }),
     ),

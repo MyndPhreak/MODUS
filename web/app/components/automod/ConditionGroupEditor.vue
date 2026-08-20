@@ -265,6 +265,14 @@ const fieldOptions = [
   { label: "Channel ID", value: "channel.id" },
   { label: "Channel Name", value: "channel.name" },
   { label: "Is NSFW", value: "channel.is_nsfw" },
+  // Member (member_update trigger only)
+  { label: "Nickname Changed", value: "member.nickname_changed" },
+  { label: "Old Nickname", value: "member.old_nickname" },
+  { label: "New Nickname", value: "member.new_nickname" },
+  { label: "Avatar Changed", value: "member.avatar_changed" },
+  // Reaction (reaction_add trigger only)
+  { label: "Reaction Emoji", value: "reaction.emoji" },
+  { label: "Reaction Count", value: "reaction.count" },
 ];
 
 const operatorOptions = [
