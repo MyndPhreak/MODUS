@@ -12,9 +12,10 @@
  * across every guild, so it is additionally restricted to bot admins.
  * The `poll-votes` channel carries per-guild data (including which Discord
  * user voted) across every guild the bot serves, so it requires a
- * `guild_id` query param and guild-manager access, and every published
- * payload is filtered server-side to that guild before being written to
- * the stream — it is never a fleet-wide firehose to the client.
+ * `guild_id` query param and `polls` module access (the channel feeds the
+ * polls dashboard page's live vote counts), and every published payload is
+ * filtered server-side to that guild before being written to the stream —
+ * it is never a fleet-wide firehose to the client.
  *
  * Heartbeat comments every 25s keep the connection alive through proxy
  * idle timeouts. The client (EventSource) reconnects automatically if
@@ -71,7 +72,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: "Missing guild_id query parameter.",
       });
     }
-    await requireModuleAccess(event, guildId, "events");
+    await requireModuleAccess(event, guildId, "polls");
     scopedGuildId = guildId;
   } else {
     await requireAuthedUserId(event);
