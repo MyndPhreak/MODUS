@@ -399,6 +399,14 @@
                           placeholder="https://example.com/image.png"
                           size="md"
                         />
+                        <img
+                          v-if="action.params.image_url"
+                          :src="action.params.image_url"
+                          class="h-16 rounded-lg border border-white/10 object-cover"
+                          alt="Preview"
+                          @error="($event.target as HTMLImageElement).style.display = 'none'"
+                          @load="($event.target as HTMLImageElement).style.display = ''"
+                        />
                       </div>
                     </template>
 
@@ -553,6 +561,14 @@
                           placeholder="https://example.com/image.png"
                           size="md"
                         />
+                        <img
+                          v-if="action.params.image_url"
+                          :src="action.params.image_url"
+                          class="h-16 rounded-lg border border-white/10 object-cover"
+                          alt="Preview"
+                          @error="($event.target as HTMLImageElement).style.display = 'none'"
+                          @load="($event.target as HTMLImageElement).style.display = ''"
+                        />
                       </div>
                     </template>
 
@@ -585,6 +601,14 @@
                           v-model="action.params.image_url"
                           placeholder="https://example.com/image.png"
                           size="md"
+                        />
+                        <img
+                          v-if="action.params.image_url"
+                          :src="action.params.image_url"
+                          class="h-16 rounded-lg border border-white/10 object-cover"
+                          alt="Preview"
+                          @error="($event.target as HTMLImageElement).style.display = 'none'"
+                          @load="($event.target as HTMLImageElement).style.display = ''"
                         />
                       </div>
                     </template>
