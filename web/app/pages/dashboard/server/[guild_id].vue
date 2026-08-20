@@ -70,12 +70,18 @@ const canAccessActiveTab = computed(() => {
 
 // Access-denied escape hatch: admins land on the modules grid; module-scoped
 // users would just bounce off that same grid (it's admin-only), so send them
-// to the first module they actually have access to.
-const accessDeniedBackTo = computed(() =>
-  state.value.accessibleModules === null
-    ? `${basePath}/modules`
-    : `${basePath}/modules/${state.value.accessibleModules[0]}`,
-);
+// to the first module they actually have access to. Not every module has a
+// real settings page, so prefer the first accessible module that does;
+// fall back to the plain first entry if none of them do.
+const accessDeniedBackTo = computed(() => {
+  if (state.value.accessibleModules === null) {
+    return `${basePath}/modules`;
+  }
+  const target =
+    state.value.accessibleModules.find((m) => hasModuleSettings(m)) ??
+    state.value.accessibleModules[0];
+  return `${basePath}/modules/${target}`;
+});
 
 // Sidebar tab definitions — route-based, grouped by category
 const sidebarTabs = computed(() => {
