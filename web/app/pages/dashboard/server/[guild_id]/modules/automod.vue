@@ -279,7 +279,19 @@
 
             </div>
 
+            <QuickCreateForm
+              v-if="quickCreateMode"
+              ref="quickCreateRef"
+              :trigger-groups="triggerGroups"
+              :action-options="actionOptions"
+              @promote="
+                (payload) => {
+                  promoteToFullEditor(payload);
+                }
+              "
+            />
             <RuleTimeline
+              v-else
               v-model:trigger="form.trigger"
               v-model:conditions="form.conditions"
               v-model:actions="form.actions"
@@ -516,6 +528,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import RuleTimeline from "~/components/automod/RuleTimeline.vue";
+import QuickCreateForm from "~/components/automod/QuickCreateForm.vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -538,6 +551,8 @@ const showModal = ref(false);
 const showDeleteModal = ref(false);
 const editingRule = ref<any>(null);
 const deletingRule = ref<any>(null);
+const quickCreateMode = ref(true);
+const quickCreateRef = ref<InstanceType<typeof QuickCreateForm> | null>(null);
 
 // ── Form ──
 interface ActionForm {
@@ -777,6 +792,7 @@ const fetchRules = async () => {
 
 const openCreateModal = () => {
   editingRule.value = null;
+  quickCreateMode.value = true;
   form.value = {
     name: "",
     trigger: "message_create",
@@ -792,8 +808,20 @@ const openCreateModal = () => {
   showModal.value = true;
 };
 
+const promoteToFullEditor = (payload: {
+  trigger: string;
+  conditions: typeof form.value.conditions;
+  actions: ActionForm[];
+}) => {
+  form.value.trigger = payload.trigger;
+  form.value.conditions = payload.conditions;
+  form.value.actions = payload.actions;
+  quickCreateMode.value = false;
+};
+
 const openEditModal = (rule: any) => {
   editingRule.value = rule;
+  quickCreateMode.value = false;
   const conditions = JSON.parse(rule.conditions);
   const actions = JSON.parse(rule.actions).map((a: any) => {
     const params = a.params ?? {};
@@ -840,6 +868,11 @@ const saveRule = async () => {
     });
     return;
   }
+
+  if (quickCreateMode.value) {
+    quickCreateRef.value?.promote();
+  }
+
   if (form.value.actions.length === 0) {
     toast.add({
       title: "Validation",
