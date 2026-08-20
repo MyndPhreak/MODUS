@@ -108,7 +108,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the channel belongs to the authorized guild (same check as
-  // send-embed.post.ts — requireGuildManager only proves the caller manages
+  // send-embed.post.ts — requireModuleAccess only proves the caller manages
   // guild_id, not that channel_id lives inside it).
   let channelGuildId: string | undefined;
   try {

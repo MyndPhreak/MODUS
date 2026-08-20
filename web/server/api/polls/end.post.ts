@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the channel belongs to the authorized guild — same check every
-  // other poll-writing route in this feature performs (requireGuildManager
+  // other poll-writing route in this feature performs (requireModuleAccess
   // only proves the caller manages guild_id, not that channel_id lives
   // inside it).
   let channelGuildId: string | undefined;

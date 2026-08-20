@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the channel belongs to the authorized guild — same check every
-  // other write route in this codebase performs (requireGuildManager only
+  // other write route in this codebase performs (requireModuleAccess only
   // proves the caller manages guild_id, not that channel_id lives inside it).
   let channelGuildId: string | undefined;
   try {
