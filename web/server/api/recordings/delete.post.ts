@@ -8,7 +8,7 @@
  */
 import { deleteR2Object, getR2, looksLikeR2Key } from "../../utils/r2";
 import { getRecordingRepo } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 async function removeFile(fileId: string) {
   if (getR2() && looksLikeR2Key(fileId)) {
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
 
     // Authorize against the recording's true owning guild — never trust the
     // guild_id from the body alone for the permission decision.
-    await requireGuildManager(event, existing.guild_id);
+    await requireModuleAccess(event, existing.guild_id, "recording");
 
     const tracks = await repo.listTracks(recordingId);
 

@@ -16,7 +16,7 @@ import {
   guildIdFromRecordingKey,
   looksLikeR2Key,
 } from "../../utils/r2";
-import { requireAuthedUserId, requireGuildManager } from "../../utils/session";
+import { requireAuthedUserId, requireModuleAccess } from "../../utils/session";
 
 const ANNOUNCE_PREFIX = "announce/";
 
@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: "fileId is not a recording object key.",
       });
     }
-    await requireGuildManager(event, ownerGuildId);
+    await requireModuleAccess(event, ownerGuildId, "recording");
   }
 
   if (!getR2()) {

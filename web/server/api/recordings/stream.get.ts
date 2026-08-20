@@ -12,7 +12,7 @@ import {
   looksLikeR2Key,
   presignGet,
 } from "../../utils/r2";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
       statusMessage: "file_id is not a recording object key.",
     });
   }
-  await requireGuildManager(event, ownerGuildId);
+  await requireModuleAccess(event, ownerGuildId, "recording");
 
   if (!getR2()) {
     throw createError({
