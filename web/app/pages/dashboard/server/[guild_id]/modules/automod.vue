@@ -711,14 +711,26 @@
                         form.cooldown === 0 ? "None" : `${form.cooldown}s`
                       }}</span>
                     </label>
-                    <USlider
-                      v-model="form.cooldown"
-                      :min="0"
-                      :max="300"
-                      :step="5"
-                    />
+                    <div class="flex items-center gap-3">
+                      <USlider
+                        v-model="form.cooldown"
+                        :min="0"
+                        :max="3600"
+                        :step="5"
+                        class="flex-1"
+                      />
+                      <UInput
+                        v-model.number="form.cooldown"
+                        type="number"
+                        :min="0"
+                        :max="3600"
+                        size="sm"
+                        class="w-20"
+                      />
+                    </div>
                     <p class="text-[11px] text-gray-500">
-                      Seconds between re-triggers per user. Prevents rule spam.
+                      Seconds between re-triggers per user (max 1 hour).
+                      Prevents rule spam.
                     </p>
                   </div>
 
@@ -730,14 +742,25 @@
                         form.priority
                       }}</span>
                     </label>
-                    <USlider
-                      v-model="form.priority"
-                      :min="0"
-                      :max="100"
-                      :step="1"
-                    />
+                    <div class="flex items-center gap-3">
+                      <USlider
+                        v-model="form.priority"
+                        :min="0"
+                        :max="10"
+                        :step="1"
+                        class="flex-1"
+                      />
+                      <UInput
+                        v-model.number="form.priority"
+                        type="number"
+                        :min="0"
+                        :max="10"
+                        size="sm"
+                        class="w-20"
+                      />
+                    </div>
                     <p class="text-[11px] text-gray-500">
-                      Lower = higher priority. Rules run in order.
+                      0 (highest) – 10 (lowest). Lower runs first.
                     </p>
                   </div>
 
