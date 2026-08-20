@@ -784,6 +784,25 @@
                       placeholder="Role IDs, comma separated"
                       size="md"
                     />
+                    <div
+                      v-if="roleOptions.length > 0 && form.exemptRoles.length > 0"
+                      class="flex flex-wrap gap-1.5"
+                    >
+                      <span
+                        v-for="id in form.exemptRoles"
+                        :key="id"
+                        class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-300"
+                      >
+                        {{ roleLabel(id) }}
+                        <button
+                          type="button"
+                          class="text-gray-500 hover:text-red-400"
+                          @click="removeExemptRole(id)"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </div>
                     <p class="text-[11px] text-gray-500">
                       These roles bypass this rule entirely.
                     </p>
@@ -809,6 +828,25 @@
                       placeholder="Channel IDs, comma separated"
                       size="md"
                     />
+                    <div
+                      v-if="channelOptions.length > 0 && form.exemptChannels.length > 0"
+                      class="flex flex-wrap gap-1.5"
+                    >
+                      <span
+                        v-for="id in form.exemptChannels"
+                        :key="id"
+                        class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-300"
+                      >
+                        #{{ channelLabel(id) }}
+                        <button
+                          type="button"
+                          class="text-gray-500 hover:text-red-400"
+                          @click="removeExemptChannel(id)"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </div>
                     <p class="text-[11px] text-gray-500">
                       This rule won't fire in these channels.
                     </p>
@@ -1104,6 +1142,22 @@ const actionLabel = (type: string) => {
     log_to_modlog: "Log",
   };
   return labels[type] ?? type;
+};
+
+const roleLabel = (id: string) =>
+  roleOptions.value.find((r) => r.value === id)?.label ?? id;
+
+const channelLabel = (id: string) =>
+  channelOptions.value.find((c) => c.value === id)?.label ?? id;
+
+const removeExemptRole = (id: string) => {
+  form.value.exemptRoles = form.value.exemptRoles.filter((r) => r !== id);
+};
+
+const removeExemptChannel = (id: string) => {
+  form.value.exemptChannels = form.value.exemptChannels.filter(
+    (c) => c !== id,
+  );
 };
 
 const parseActions = (rule: any): ActionForm[] => {
