@@ -279,38 +279,15 @@
 
             </div>
 
-            <!-- ── Trigger (slim row, not a full card) ── -->
-            <TriggerNode v-model="form.trigger" :groups="triggerGroups" />
-
-            <!-- ── Section: Conditions (IF) ── -->
-            <div
-              class="relative overflow-hidden rounded-xl border border-blue-500/20 bg-blue-500/[0.03] p-4 space-y-3"
-            >
-              <div class="flex items-center gap-2 mb-1">
-                <div
-                  class="p-1 rounded-md bg-blue-500/10 border border-blue-500/20"
-                >
-                  <UIcon
-                    name="i-heroicons-funnel"
-                    class="text-blue-400 text-sm"
-                  />
-                </div>
-                <span
-                  class="text-xs font-semibold text-blue-300 uppercase tracking-wider"
-                  >Conditions</span
-                >
-                <span class="text-xs text-gray-600 ml-1"
-                  >— IF these are true…</span
-                >
-              </div>
-              <ConditionGroupEditor v-model="form.conditions" :depth="0" />
-            </div>
-
-            <ActionsNode
-              v-model="form.actions"
+            <RuleTimeline
+              v-model:trigger="form.trigger"
+              v-model:conditions="form.conditions"
+              v-model:actions="form.actions"
+              :trigger-groups="triggerGroups"
               :action-options="actionOptions"
               :channel-options="channelOptions"
               :role-options="roleOptions"
+              :trigger-label="triggerLabel"
             />
 
             <!-- ── Section: Advanced (collapsible) ── -->
@@ -538,9 +515,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import ActionsNode from "~/components/automod/ActionsNode.vue";
-import ConditionGroupEditor from "~/components/automod/ConditionGroupEditor.vue";
-import TriggerNode from "~/components/automod/TriggerNode.vue";
+import RuleTimeline from "~/components/automod/RuleTimeline.vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
