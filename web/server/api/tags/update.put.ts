@@ -5,7 +5,7 @@
  *   - tag_id, guild_id, name?, content?, embed_data?, allowed_roles?
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
   if (!existing) {
     throw createError({ statusCode: 404, statusMessage: "Tag not found." });
   }
-  await requireGuildManager(event, existing.guild_id);
+  await requireModuleAccess(event, existing.guild_id, "tags");
 
   try {
     await repos.tags.update(tag_id, normalized);

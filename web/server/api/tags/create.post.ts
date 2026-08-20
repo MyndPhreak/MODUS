@@ -5,7 +5,7 @@
  *   - guild_id, name, content?, embed_data?, allowed_roles?, created_by?
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 function slugify(name: string): string {
   return String(name)
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guild_id);
+  await requireModuleAccess(event, guild_id, "tags");
 
   const slug = slugify(name);
   if (!slug) {
