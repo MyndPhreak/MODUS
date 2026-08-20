@@ -1,5 +1,7 @@
 <template>
   <div class="p-6 lg:p-8 space-y-6">
+    <DashboardModuleAccessSection :guild-id="guildId" module-name="tags" />
+
     <!-- Header -->
     <div class="flex items-center justify-between mb-2">
       <div>
