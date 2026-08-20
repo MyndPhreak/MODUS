@@ -238,7 +238,7 @@
               <p class="text-sm font-medium text-white flex-1">{{ poll.question }}</p>
               <UBadge color="neutral" variant="soft" size="xs">{{ poll.source }}</UBadge>
               <UButton
-                v-if="state.isServerOwnerOrAdmin"
+                v-if="state.isServerOwnerOrAdmin || state.accessibleModules?.includes('polls')"
                 color="error"
                 variant="ghost"
                 size="xs"
