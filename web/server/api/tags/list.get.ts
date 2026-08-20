@@ -15,7 +15,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireModuleAccess(event, guildId, "tags");
+  try {
+    await requireModuleAccess(event, guildId, "tags");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, guildId, "embeds");
+  }
 
   const repos = getRepos();
   if (!repos) {

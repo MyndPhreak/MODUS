@@ -38,7 +38,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireModuleAccess(event, guild_id, "tags");
+  try {
+    await requireModuleAccess(event, guild_id, "tags");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, guild_id, "embeds");
+  }
 
   const slug = slugify(name);
   if (!slug) {

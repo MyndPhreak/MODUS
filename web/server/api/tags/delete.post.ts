@@ -33,7 +33,12 @@ export default defineEventHandler(async (event) => {
   if (!existing) {
     throw createError({ statusCode: 404, statusMessage: "Tag not found." });
   }
-  await requireModuleAccess(event, existing.guild_id, "tags");
+  try {
+    await requireModuleAccess(event, existing.guild_id, "tags");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, existing.guild_id, "embeds");
+  }
 
   try {
     await repos.tags.delete(tag_id);

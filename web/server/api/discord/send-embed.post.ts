@@ -24,7 +24,12 @@ export default defineEventHandler(async (event) => {
 
   // Sending with the bot token is a privileged action — restrict to managers
   // of the target guild.
-  await requireModuleAccess(event, guild_id, "embeds");
+  try {
+    await requireModuleAccess(event, guild_id, "embeds");
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+    await requireModuleAccess(event, guild_id, "tags");
+  }
 
   // Validate embed has at least title or description or fields or components
   const hasContent =
@@ -50,7 +55,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Confirm the target channel actually belongs to the authorized guild.
-  // requireGuildManager only proves the caller manages `guild_id`; without
+  // requireModuleAccess only proves the caller manages `guild_id`; without
   // this check a manager of one guild could still address a channel in a
   // different guild the bot happens to be in.
   let channelGuildId: string | undefined;
