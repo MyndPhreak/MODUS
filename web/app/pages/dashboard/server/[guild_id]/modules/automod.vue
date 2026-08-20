@@ -277,35 +277,10 @@
                 />
               </div>
 
-              <!-- Trigger -->
-              <div
-                class="relative overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3"
-              >
-                <div class="flex items-center gap-2 mb-1">
-                  <div
-                    class="p-1 rounded-md bg-orange-500/10 border border-orange-500/20"
-                  >
-                    <UIcon
-                      name="i-heroicons-bolt"
-                      class="text-orange-400 text-sm"
-                    />
-                  </div>
-                  <span
-                    class="text-xs font-semibold text-orange-300 uppercase tracking-wider"
-                    >Trigger Event</span
-                  >
-                </div>
-                <USelectMenu
-                  v-model="form.trigger"
-                  :items="triggerOptions"
-                  value-key="value"
-                  size="md"
-                />
-                <p class="text-[11px] text-gray-500">
-                  When should this rule be evaluated?
-                </p>
-              </div>
             </div>
+
+            <!-- ── Trigger (slim row, not a full card) ── -->
+            <TriggerNode v-model="form.trigger" :groups="triggerGroups" />
 
             <!-- ── Section: Conditions (IF) ── -->
             <div
@@ -925,6 +900,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import ConditionGroupEditor from "~/components/automod/ConditionGroupEditor.vue";
+import TriggerNode from "~/components/automod/TriggerNode.vue";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
@@ -982,14 +958,30 @@ const form = ref({
 });
 
 // ── Options ──
-const triggerOptions = [
-  { label: "💬 Message Created", value: "message_create" },
-  { label: "✏️ Message Edited", value: "message_edit" },
-  { label: "🗑️ Message Deleted", value: "message_delete" },
-  { label: "🚪 Member Joined", value: "member_join" },
-  { label: "📝 Member Updated", value: "member_update" },
-  { label: "😀 Reaction Added", value: "reaction_add" },
+const triggerGroups = [
+  {
+    label: "Message events",
+    items: [
+      { label: "💬 Message Created", value: "message_create" },
+      { label: "✏️ Message Edited", value: "message_edit" },
+      { label: "🗑️ Message Deleted", value: "message_delete" },
+    ],
+  },
+  {
+    label: "Member events",
+    items: [
+      { label: "🚪 Member Joined", value: "member_join" },
+      { label: "📝 Member Updated", value: "member_update" },
+    ],
+  },
+  {
+    label: "Reaction events",
+    items: [{ label: "😀 Reaction Added", value: "reaction_add" }],
+  },
 ];
+
+// Flat list retained for label/icon lookups elsewhere (triggerIcon, triggerLabel, rule list).
+const triggerOptions = triggerGroups.flatMap((g) => g.items);
 
 const actionOptions = [
   { label: "🗑️ Delete Message", value: "delete_message" },
