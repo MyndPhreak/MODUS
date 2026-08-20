@@ -17,9 +17,10 @@
           icon="i-heroicons-trash"
           variant="ghost"
           color="neutral"
-          title="Clear View"
-          class="rounded-xl border border-white/8"
-          @click="logs = []"
+          :disabled="logs.length === 0"
+          title="Clear Server Logs"
+          class="rounded-xl border border-white/8 hover:text-red-400 hover:bg-red-500/10"
+          @click="confirmModalOpen = true"
         />
         <UButton
           icon="i-heroicons-arrow-path"
@@ -137,6 +138,48 @@
         </div>
       </div>
     </div>
+
+    <!-- Clear Logs Confirmation Modal -->
+    <UModal v-model:open="confirmModalOpen">
+      <template #content>
+        <div class="p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div
+              class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0"
+            >
+              <UIcon
+                name="i-heroicons-trash"
+                class="w-5 h-5 text-red-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-white">Clear Server Logs</h3>
+              <p class="text-xs text-gray-400">
+                Are you sure you want to delete all logs for this server? This action cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              :disabled="deleting"
+              @click="confirmModalOpen = false"
+            >
+              Cancel
+            </UButton>
+            <UButton
+              color="error"
+              :loading="deleting"
+              @click="deleteLogs"
+            >
+              Clear Logs
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -144,10 +187,13 @@
 import { ref, computed, onMounted } from "vue";
 
 const route = useRoute();
+const toast = useToast();
 const guildId = route.params.guild_id as string;
 
 const loading = ref(true);
 const refreshing = ref(false);
+const deleting = ref(false);
+const confirmModalOpen = ref(false);
 const logs = ref<any[]>([]);
 
 const searchQuery = ref("");
@@ -192,6 +238,31 @@ const fetchLogs = async () => {
   } finally {
     loading.value = false;
     refreshing.value = false;
+  }
+};
+
+const deleteLogs = async () => {
+  deleting.value = true;
+  try {
+    await $fetch(`/api/logs?guild_id=${encodeURIComponent(guildId)}`, {
+      method: "DELETE",
+    });
+    logs.value = [];
+    confirmModalOpen.value = false;
+    toast.add({
+      title: "Logs Cleared",
+      description: "All server logs have been deleted.",
+      color: "success",
+    });
+  } catch (error) {
+    console.error("Error clearing logs:", error);
+    toast.add({
+      title: "Error",
+      description: "Failed to clear server logs.",
+      color: "error",
+    });
+  } finally {
+    deleting.value = false;
   }
 };
 

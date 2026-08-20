@@ -70,6 +70,14 @@ export class LogRepository {
     return rows.map(toDoc);
   }
 
+  async deleteByGuild(guildId: string): Promise<number> {
+    const deleted = await this.db
+      .delete(logs)
+      .where(eq(logs.guildId, guildId))
+      .returning({ id: logs.id });
+    return deleted.length;
+  }
+
   /**
    * Deletes up to `batchLimit` rows older than `cutoff` in a single
    * statement (rows are selected via a LIMIT-capped subquery). Callers
