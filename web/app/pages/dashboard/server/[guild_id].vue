@@ -33,7 +33,7 @@
         You don't have access to this page. Ask a server admin to grant your
         role access to this module.
       </p>
-      <UButton :to="`${basePath}/modules`" color="primary">Back to Dashboard</UButton>
+      <UButton :to="accessDeniedBackTo" color="primary">Back to Dashboard</UButton>
     </div>
 
     <!-- Content: Child Pages -->
@@ -67,6 +67,15 @@ const canAccessActiveTab = computed(() => {
   if (["logs", "modules", "identity"].includes(activeTab.value)) return false;
   return state.value.accessibleModules.includes(activeTab.value);
 });
+
+// Access-denied escape hatch: admins land on the modules grid; module-scoped
+// users would just bounce off that same grid (it's admin-only), so send them
+// to the first module they actually have access to.
+const accessDeniedBackTo = computed(() =>
+  state.value.accessibleModules === null
+    ? `${basePath}/modules`
+    : `${basePath}/modules/${state.value.accessibleModules[0]}`,
+);
 
 // Sidebar tab definitions — route-based, grouped by category
 const sidebarTabs = computed(() => {
