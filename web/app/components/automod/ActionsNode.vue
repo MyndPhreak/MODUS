@@ -36,11 +36,9 @@
             ? 'border-orange-400/60 bg-orange-500/[0.06]'
             : 'border-white/10 bg-white/[0.03]'
         "
-        draggable="true"
-        @dragstart="onDragStart(idx)"
         @dragover.prevent="dragOverIdx = idx"
         @dragleave="dragOverIdx = null"
-        @drop="onDrop(idx)"
+        @drop.prevent="onDrop(idx)"
       >
         <!-- Action type row -->
         <div class="flex items-center gap-2">
@@ -51,6 +49,9 @@
           <span
             class="cursor-grab active:cursor-grabbing text-gray-500 select-none"
             title="Drag to reorder"
+            draggable="true"
+            @dragstart="onDragStart($event, idx)"
+            @dragend="onDragEnd"
           >
             ⠿
           </span>
@@ -452,8 +453,14 @@ const updateActionField = (idx: number, field: string, value: any) => {
 const dragIdx = ref<number | null>(null);
 const dragOverIdx = ref<number | null>(null);
 
-const onDragStart = (idx: number) => {
+const onDragStart = (event: DragEvent, idx: number) => {
   dragIdx.value = idx;
+  event.dataTransfer?.setData("text/plain", String(idx));
+};
+
+const onDragEnd = () => {
+  dragIdx.value = null;
+  dragOverIdx.value = null;
 };
 
 const onDrop = (idx: number) => {

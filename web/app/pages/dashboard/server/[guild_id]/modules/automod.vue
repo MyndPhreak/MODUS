@@ -283,7 +283,7 @@
               v-if="quickCreateMode"
               ref="quickCreateRef"
               :trigger-groups="triggerGroups"
-              :action-options="actionOptions"
+              :action-options="quickCreateActionOptions"
               @promote="
                 (payload) => {
                   promoteToFullEditor(payload);
@@ -561,28 +561,54 @@ interface ActionForm {
   delaySeconds?: number;
 }
 
-const defaultConditions = () => ({
-  operator: "AND" as "AND" | "OR",
+interface Condition {
+  type: "condition";
+  field: string;
+  operator: string;
+  value: string | number | boolean | string[];
+  flags?: string[];
+}
+
+interface ConditionGroup {
+  operator: "AND" | "OR";
+  conditions: (Condition | ConditionGroup)[];
+}
+
+const defaultConditions = (): ConditionGroup => ({
+  operator: "AND",
   conditions: [
     {
-      type: "condition" as const,
+      type: "condition",
       field: "message.content",
-      operator: "contains" as const,
+      operator: "contains",
       value: "",
       flags: ["case_insensitive"],
     },
   ],
 });
 
-const form = ref({
+interface RuleForm {
+  name: string;
+  trigger: string;
+  conditions: ConditionGroup;
+  actions: ActionForm[];
+  cooldown: number;
+  priority: number;
+  exemptRoles: string[];
+  exemptChannels: string[];
+  exemptRolesInput: string;
+  exemptChannelsInput: string;
+}
+
+const form = ref<RuleForm>({
   name: "",
   trigger: "message_create",
   conditions: defaultConditions(),
-  actions: [] as ActionForm[],
+  actions: [],
   cooldown: 0,
   priority: 0,
-  exemptRoles: [] as string[],
-  exemptChannels: [] as string[],
+  exemptRoles: [],
+  exemptChannels: [],
   exemptRolesInput: "",
   exemptChannelsInput: "",
 });
@@ -627,6 +653,12 @@ const actionOptions = [
   { label: "➖ Remove Role", value: "remove_role" },
   { label: "📋 Log to Mod Log", value: "log_to_modlog" },
 ];
+
+// Quick-Create has no UI for filling in action-specific params, so only
+// offer actions that are fully functional with empty params.
+const quickCreateActionOptions = actionOptions.filter((a) =>
+  ["delete_message", "warn_user", "log_to_modlog"].includes(a.value),
+);
 
 const advancedItems = [
   {
@@ -810,7 +842,7 @@ const openCreateModal = () => {
 
 const promoteToFullEditor = (payload: {
   trigger: string;
-  conditions: typeof form.value.conditions;
+  conditions: ConditionGroup;
   actions: ActionForm[];
 }) => {
   form.value.trigger = payload.trigger;
@@ -850,13 +882,22 @@ const openEditModal = (rule: any) => {
     conditions,
     actions,
     cooldown: rule.cooldown ?? 0,
-    priority: rule.priority ?? 0,
+    priority: Math.min(rule.priority ?? 0, 10),
     exemptRoles,
     exemptChannels,
     exemptRolesInput: exemptRoles.join(", "),
     exemptChannelsInput: exemptChannels.join(", "),
   };
   showModal.value = true;
+};
+
+const hasEmptyConditionValue = (group: ConditionGroup): boolean => {
+  return group.conditions.some((c) => {
+    if ("type" in c && c.type === "condition") {
+      return typeof c.value === "string" && c.value === "";
+    }
+    return hasEmptyConditionValue(c as ConditionGroup);
+  });
 };
 
 const saveRule = async () => {
@@ -877,6 +918,15 @@ const saveRule = async () => {
     toast.add({
       title: "Validation",
       description: "Add at least one action.",
+      color: "warning",
+    });
+    return;
+  }
+
+  if (hasEmptyConditionValue(form.value.conditions)) {
+    toast.add({
+      title: "Validation",
+      description: "Please fill in a value for every condition.",
       color: "warning",
     });
     return;
