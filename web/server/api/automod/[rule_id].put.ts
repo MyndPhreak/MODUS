@@ -9,7 +9,7 @@
  *                 exempt_roles, exempt_channels, cooldown }
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const ruleId = getRouterParam(event, "rule_id");
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "Rule not found" });
   }
 
-  await requireGuildManager(event, existing.guild_id);
+  await requireModuleAccess(event, existing.guild_id, "automod");
 
   const body = await readBody(event);
   try {

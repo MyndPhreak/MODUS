@@ -6,7 +6,7 @@
  * leak cross-tenant to any authenticated user.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "automod");
 
   const repos = getRepos();
   if (!repos) {
