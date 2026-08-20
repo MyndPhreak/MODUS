@@ -22,7 +22,10 @@ export default defineEventHandler(async (event) => {
   await requireGuildManager(event, guildId);
 
   const body = await readBody<{ roleIds?: string[] }>(event);
-  if (!Array.isArray(body?.roleIds)) {
+  if (
+    !Array.isArray(body?.roleIds) ||
+    !body.roleIds.every((r: unknown) => typeof r === "string")
+  ) {
     throw createError({
       statusCode: 400,
       statusMessage: "Missing required field: roleIds (array).",
