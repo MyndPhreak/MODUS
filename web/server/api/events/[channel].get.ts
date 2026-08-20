@@ -31,7 +31,7 @@ import {
 import {
   requireAuthedUserId,
   requireBotAdmin,
-  requireGuildManager,
+  requireModuleAccess,
 } from "../../utils/session";
 
 const HEARTBEAT_MS = 25_000;
@@ -71,7 +71,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: "Missing guild_id query parameter.",
       });
     }
-    await requireGuildManager(event, guildId);
+    await requireModuleAccess(event, guildId, "events");
     scopedGuildId = guildId;
   } else {
     await requireAuthedUserId(event);

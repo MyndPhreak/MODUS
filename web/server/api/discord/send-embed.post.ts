@@ -2,7 +2,7 @@
  * Server-side endpoint to send an embed to a specific channel.
  * Uses the Discord bot token to send messages directly.
  */
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   // Sending with the bot token is a privileged action — restrict to managers
   // of the target guild.
-  await requireGuildManager(event, guild_id);
+  await requireModuleAccess(event, guild_id, "embeds");
 
   // Validate embed has at least title or description or fields or components
   const hasContent =
