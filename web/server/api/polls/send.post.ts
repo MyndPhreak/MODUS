@@ -9,7 +9,7 @@
  * fall back to the template's saved values but can still be overridden.
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const identity = await requireGuildManager(event, guildId);
+  const identity = await requireModuleAccess(event, guildId, "polls");
 
   const repos = getRepos();
   if (!repos) {

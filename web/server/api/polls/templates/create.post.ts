@@ -5,7 +5,7 @@
  *         allow_multiselect, created_by? }
  */
 import { getRepos } from "../../../utils/db";
-import { requireGuildManager } from "../../../utils/session";
+import { requireModuleAccess } from "../../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const identity = await requireGuildManager(event, body.guild_id);
+  const identity = await requireModuleAccess(event, body.guild_id, "polls");
 
   const repos = getRepos();
   if (!repos) {

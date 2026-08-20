@@ -1,6 +1,6 @@
 /** Delete a poll template. Body: { template_id } */
 import { getRepos } from "../../../utils/db";
-import { requireGuildManager } from "../../../utils/session";
+import { requireModuleAccess } from "../../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
   if (!existing) {
     throw createError({ statusCode: 404, statusMessage: "Template not found." });
   }
-  await requireGuildManager(event, existing.guildId);
+  await requireModuleAccess(event, existing.guildId, "polls");
 
   try {
     await repos.pollTemplates.delete(body.template_id);

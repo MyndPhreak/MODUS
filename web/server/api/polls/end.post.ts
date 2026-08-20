@@ -5,7 +5,7 @@
  * Body: { guild_id, channel_id, message_id }
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, guildId);
+  await requireModuleAccess(event, guildId, "polls");
 
   const botToken = config.discordBotToken as string;
   if (!botToken) {
