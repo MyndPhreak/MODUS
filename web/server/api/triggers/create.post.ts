@@ -6,7 +6,7 @@
  *   - embed_template?, filters?, created_by? (optional)
  */
 import { getRepos } from "../../utils/db";
-import { requireGuildManager } from "../../utils/session";
+import { requireModuleAccess } from "../../utils/session";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await requireGuildManager(event, body.guild_id);
+  await requireModuleAccess(event, body.guild_id, "triggers");
 
   const input = {
     guild_id: body.guild_id,
