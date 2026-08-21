@@ -107,8 +107,29 @@
       </div>
     </div>
 
+    <!-- YOUR SERVERS: LOADING SKELETON -->
+    <div v-if="myServersLoading" class="space-y-4">
+      <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+        <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-400" />
+        Your Servers
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          v-for="n in 3"
+          :key="n"
+          class="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/10 animate-pulse"
+        >
+          <div class="w-11 h-11 rounded-xl bg-white/10 shrink-0" />
+          <div class="min-w-0 flex-1 space-y-2">
+            <div class="h-3.5 w-2/3 rounded-full bg-white/10" />
+            <div class="h-3 w-1/3 rounded-full bg-white/10" />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- YOUR SERVERS -->
-    <div v-if="userStore.initialized && userStore.isLoggedIn && myServers.length > 0" class="space-y-4">
+    <div v-else-if="userStore.initialized && userStore.isLoggedIn && myServers.length > 0" class="space-y-4">
       <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
         <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-400" />
         Your Servers
@@ -540,6 +561,7 @@ const myServers = ref<
     rankedYet: boolean;
   }>
 >([]);
+const myServersLoading = ref(false);
 watch(
   () => userStore.initialized,
   async (ready) => {
@@ -550,12 +572,15 @@ watch(
     // near-simultaneous call to it reliably 429s.
     const guildIds = userStore.userGuilds.map((g) => g.id);
     if (guildIds.length === 0) return;
+    myServersLoading.value = true;
     try {
       myServers.value = await $fetch("/api/xp/my-servers", {
         query: { guildIds: guildIds.join(",") },
       });
     } catch {
       myServers.value = [];
+    } finally {
+      myServersLoading.value = false;
     }
   },
   { immediate: true },
