@@ -23,7 +23,7 @@
         </div>
         <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
           <UButton
-            href="/auth/discord"
+            href="/api/auth/discord"
             external
             color="primary"
             size="lg"
