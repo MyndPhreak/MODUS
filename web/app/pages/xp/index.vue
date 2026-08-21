@@ -159,6 +159,30 @@
       </div>
     </div>
 
+    <!-- YOUR SERVERS: DISCORD CONNECTION EXPIRED -->
+    <div
+      v-else-if="userStore.initialized && userStore.isLoggedIn && myServersTokenExpired"
+      class="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-amber-500/5 border border-amber-500/20"
+    >
+      <div class="flex items-center gap-3">
+        <UIcon name="i-heroicons-exclamation-triangle" class="w-6 h-6 text-amber-400 shrink-0" />
+        <p class="text-sm text-zinc-300">
+          Your Discord connection has expired. Log in again to see the servers you're ranked in.
+        </p>
+      </div>
+      <UButton
+        :href="`/api/auth/discord?returnTo=${encodeURIComponent('/xp')}`"
+        external
+        color="warning"
+        variant="soft"
+        size="sm"
+        icon="i-simple-icons-discord"
+        class="shrink-0"
+      >
+        Reconnect Discord
+      </UButton>
+    </div>
+
     <!-- YOUR SERVERS: LOGGED OUT PROMPT -->
     <div
       v-else-if="userStore.initialized && !userStore.isLoggedIn"
@@ -540,6 +564,11 @@ const myServers = ref<
     rankedYet: boolean;
   }>
 >([]);
+// The Discord OAuth token backing the session can go stale (expired
+// refresh token, revoked authorization) even while the session itself
+// stays logged in — /api/discord/me swallows that same failure to avoid
+// booting the user, so it can't be inferred from userStore.isLoggedIn.
+const myServersTokenExpired = ref(false);
 
 watch(
   () => userStore.initialized,
@@ -547,8 +576,11 @@ watch(
     if (!ready || !userStore.isLoggedIn) return;
     try {
       myServers.value = await $fetch("/api/xp/my-servers");
-    } catch {
+      myServersTokenExpired.value = false;
+    } catch (err: any) {
       myServers.value = [];
+      myServersTokenExpired.value =
+        err?.data?.data?.code === "discord_token_expired";
     }
   },
   { immediate: true },
