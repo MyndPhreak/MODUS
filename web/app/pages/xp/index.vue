@@ -107,7 +107,10 @@
       </div>
     </div>
 
-    <!-- YOUR SERVERS: LOADING SKELETON -->
+    <!-- YOUR SERVERS (client-only: depends on session state SSR never has,
+         and starting the skeleton at setup-time would otherwise mismatch
+         the server-rendered HTML) -->
+    <ClientOnly>
     <div v-if="myServersLoading" class="space-y-4">
       <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
         <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-400" />
@@ -203,6 +206,7 @@
         Log In with Discord
       </UButton>
     </div>
+    </ClientOnly>
 
     <!-- TOP 3 SERVERS PODIUM (if page === 1 and no active search) -->
     <div
@@ -561,18 +565,35 @@ const myServers = ref<
     rankedYet: boolean;
   }>
 >([]);
-const myServersLoading = ref(false);
+// Starts true (not gated on any session check) so the skeleton — and the
+// layout space it reserves — is there from the very first client render.
+// userStore.initialized only flips once /api/auth/session AND (for a
+// logged-in caller) /api/discord/me's round trip to Discord's API have
+// both resolved, which is the actual multi-second cost; waiting for that
+// before even showing a skeleton is what made the section look absent
+// and then shove the page layout down once it finally appeared. The
+// section is wrapped in <ClientOnly> in the template, so this initial
+// "true" never reaches SSR output for anonymous visitors — it only takes
+// effect once the client has mounted and is about to check the session.
+const myServersLoading = ref(true);
+
 watch(
   () => userStore.initialized,
   async (ready) => {
-    if (!ready || !userStore.isLoggedIn) return;
+    if (!ready) return;
+    if (!userStore.isLoggedIn) {
+      myServersLoading.value = false;
+      return;
+    }
     // Reuse the guild list already fetched during session hydration
     // (userStore.init() -> /api/discord/me) instead of asking Discord
     // again — /users/@me/guilds is tightly rate-limited, and a second
     // near-simultaneous call to it reliably 429s.
     const guildIds = userStore.userGuilds.map((g) => g.id);
-    if (guildIds.length === 0) return;
-    myServersLoading.value = true;
+    if (guildIds.length === 0) {
+      myServersLoading.value = false;
+      return;
+    }
     try {
       myServers.value = await $fetch("/api/xp/my-servers", {
         query: { guildIds: guildIds.join(",") },
