@@ -371,3 +371,57 @@ async function refreshAndPersist(
 export async function clearNativeSession(event: H3Event): Promise<void> {
   await clearUserSession(event);
 }
+
+export interface DiscordUserGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  permissions: string;
+}
+
+/**
+ * Fetch the caller's Discord guild list with their own OAuth token. 401
+ * triggers one forced refresh + retry (handles a revoked/rotated token
+ * that still looked fresh locally); if that also fails, throws so the
+ * caller can prompt re-authentication.
+ */
+export async function fetchUserDiscordGuilds(
+  event: H3Event,
+): Promise<DiscordUserGuild[]> {
+  const token = await getDiscordAccessToken(event);
+  if (!token) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized: no Discord session.",
+    });
+  }
+
+  try {
+    return await $fetch("https://discord.com/api/users/@me/guilds", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err: any) {
+    if (err.status === 401 || err.statusCode === 401) {
+      const refreshed = await refreshNativeTokens(event);
+      if (refreshed) {
+        try {
+          return await $fetch("https://discord.com/api/users/@me/guilds", {
+            headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+          });
+        } catch {
+          // fall through
+        }
+      }
+    }
+    throw createError({
+      statusCode: 401,
+      statusMessage: "discord_token_expired",
+      data: {
+        code: "discord_token_expired",
+        message:
+          "Your Discord connection has expired. Please re-authenticate with Discord.",
+      },
+    });
+  }
+}

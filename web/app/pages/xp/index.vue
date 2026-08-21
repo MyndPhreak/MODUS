@@ -107,6 +107,82 @@
       </div>
     </div>
 
+    <!-- YOUR SERVERS -->
+    <div v-if="userStore.initialized && userStore.isLoggedIn && myServers.length > 0" class="space-y-4">
+      <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+        <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-400" />
+        Your Servers
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <NuxtLink
+          v-for="server in myServers"
+          :key="server.guildId"
+          :to="`/xp/${server.guildId}`"
+          class="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.06] transition-all group"
+        >
+          <div
+            class="w-11 h-11 rounded-xl bg-zinc-800 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center"
+          >
+            <img
+              v-if="server.icon"
+              :src="getServerIconUrl(server.guildId, server.icon)"
+              :alt="server.name"
+              class="w-full h-full object-cover"
+            />
+            <UIcon
+              v-else
+              name="i-heroicons-server-stack"
+              class="w-5 h-5 text-indigo-400"
+            />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-white text-sm truncate group-hover:text-indigo-300 transition-colors">
+              {{ server.name }}
+            </p>
+            <p class="text-xs text-zinc-400">
+              <template v-if="server.rankedYet">
+                Level {{ server.level }} • {{ formatNumber(server.xp) }} XP
+              </template>
+              <template v-else>Not ranked yet</template>
+            </p>
+          </div>
+          <UBadge
+            v-if="server.visibility !== 'public'"
+            color="neutral"
+            variant="subtle"
+            size="xs"
+            class="shrink-0"
+          >
+            {{ server.visibility === "private" ? "Private" : "Unlisted" }}
+          </UBadge>
+        </NuxtLink>
+      </div>
+    </div>
+
+    <!-- YOUR SERVERS: LOGGED OUT PROMPT -->
+    <div
+      v-else-if="userStore.initialized && !userStore.isLoggedIn"
+      class="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-white/[0.02] border border-white/10"
+    >
+      <div class="flex items-center gap-3">
+        <UIcon name="i-heroicons-user-circle" class="w-6 h-6 text-indigo-400 shrink-0" />
+        <p class="text-sm text-zinc-300">
+          Log in with Discord to jump straight to the servers you're already ranked in.
+        </p>
+      </div>
+      <UButton
+        :href="`/api/auth/discord?returnTo=${encodeURIComponent('/xp')}`"
+        external
+        color="primary"
+        variant="soft"
+        size="sm"
+        icon="i-simple-icons-discord"
+        class="shrink-0"
+      >
+        Log In with Discord
+      </UButton>
+    </div>
+
     <!-- TOP 3 SERVERS PODIUM (if page === 1 and no active search) -->
     <div
       v-if="page === 1 && !searchQuery && podium.length >= 3"
@@ -451,6 +527,32 @@ const { data } = await useFetch("/api/xp/global", {
   },
   watch: [page, searchQuery],
 });
+
+const userStore = useUserStore();
+const myServers = ref<
+  Array<{
+    guildId: string;
+    name: string;
+    icon: string | null;
+    visibility: "private" | "unlisted" | "public";
+    xp: number;
+    level: number;
+    rankedYet: boolean;
+  }>
+>([]);
+
+watch(
+  () => userStore.initialized,
+  async (ready) => {
+    if (!ready || !userStore.isLoggedIn) return;
+    try {
+      myServers.value = await $fetch("/api/xp/my-servers");
+    } catch {
+      myServers.value = [];
+    }
+  },
+  { immediate: true },
+);
 
 const podium = computed(() => {
   return data.value?.top3 || [];
