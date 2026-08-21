@@ -12,6 +12,7 @@ import {
 } from "../../utils/session";
 
 const STATE_COOKIE = "discord_oauth_state";
+const RETURN_TO_COOKIE = "discord_oauth_return_to";
 
 interface DiscordUserResponse {
   id: string;
@@ -41,8 +42,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const expectedState = getCookie(event, STATE_COOKIE);
-  // Clear the state cookie regardless of outcome.
+  const returnTo = getCookie(event, RETURN_TO_COOKIE);
+  // Clear both one-shot cookies regardless of outcome.
   setCookie(event, STATE_COOKIE, "", { path: "/", maxAge: 0 });
+  setCookie(event, RETURN_TO_COOKIE, "", { path: "/", maxAge: 0 });
 
   if (!state || !expectedState || state !== expectedState) {
     console.warn(
@@ -102,5 +105,8 @@ export default defineEventHandler(async (event) => {
     secure: { tokens },
   });
 
-  return sendRedirect(event, `${baseUrl}/auth/callback`);
+  const target = returnTo
+    ? `${baseUrl}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`
+    : `${baseUrl}/auth/callback`;
+  return sendRedirect(event, target);
 });

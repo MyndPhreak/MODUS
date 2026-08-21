@@ -10,6 +10,7 @@ import { randomBytes } from "crypto";
 
 const DISCORD_AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize";
 const STATE_COOKIE = "discord_oauth_state";
+const RETURN_TO_COOKIE = "discord_oauth_return_to";
 const STATE_COOKIE_MAX_AGE_SEC = 600; // 10 min — long enough for a slow user
 
 export default defineEventHandler(async (event) => {
@@ -34,6 +35,20 @@ export default defineEventHandler(async (event) => {
     sameSite: "lax",
     maxAge: STATE_COOKIE_MAX_AGE_SEC,
   });
+
+  // Remember where to send the user back to after login. Only accept a
+  // same-site relative path (single leading slash) to prevent this from
+  // being turned into an open redirect.
+  const returnTo = getQuery(event).returnTo as string | undefined;
+  if (returnTo && /^\/(?!\/)/.test(returnTo)) {
+    setCookie(event, RETURN_TO_COOKIE, returnTo, {
+      path: "/",
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: "lax",
+      maxAge: STATE_COOKIE_MAX_AGE_SEC,
+    });
+  }
 
   const params = new URLSearchParams({
     client_id: clientId,

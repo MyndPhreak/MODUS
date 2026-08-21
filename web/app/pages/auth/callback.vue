@@ -23,6 +23,7 @@ definePageMeta({
 
 const userStore = useUserStore();
 const router = useRouter();
+const route = useRoute();
 const error = ref("");
 
 onMounted(async () => {
@@ -32,7 +33,12 @@ onMounted(async () => {
     await userStore.fetchUserSession();
 
     if (userStore.isLoggedIn) {
-      router.push("/dashboard");
+      const returnTo = route.query.returnTo;
+      const destination =
+        typeof returnTo === "string" && /^\/(?!\/)/.test(returnTo)
+          ? returnTo
+          : "/dashboard";
+      router.push(destination);
     } else {
       error.value = "Login failed. Please try again.";
       setTimeout(() => router.push("/login"), 2000);

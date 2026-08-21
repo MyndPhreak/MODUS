@@ -23,7 +23,7 @@
         </div>
         <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
           <UButton
-            href="/api/auth/discord"
+            :href="discordLoginUrl"
             external
             color="primary"
             size="lg"
@@ -591,6 +591,10 @@ definePageMeta({
 
 const route = useRoute();
 const guildId = computed(() => String(route.params.guild_id));
+
+const discordLoginUrl = computed(
+  () => `/api/auth/discord?returnTo=${encodeURIComponent(route.fullPath)}`,
+);
 
 const page = ref(1);
 const searchQuery = ref("");

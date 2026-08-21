@@ -117,11 +117,18 @@ export const useUserStore = defineStore("user", {
       }
     },
 
-    loginWithDiscord() {
+    /**
+     * @param returnTo Path (with optional query string) to send the user
+     *   back to once login completes. Omit to land on /dashboard.
+     */
+    loginWithDiscord(returnTo?: string) {
       if (import.meta.server) return;
       // Server-side route handles the OAuth redirect; the CSRF state cookie
       // is set there too.
-      window.location.href = "/api/auth/discord";
+      const url = returnTo
+        ? `/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`
+        : "/api/auth/discord";
+      window.location.href = url;
     },
 
     /**
