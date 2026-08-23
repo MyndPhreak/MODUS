@@ -36,6 +36,7 @@ import {
   GiveawayRepository,
   GiveawayEntryRepository,
   XpUserRepository,
+  SystemFlagsRepository,
 } from "@modus/db";
 import {
   StorageService,
@@ -49,6 +50,7 @@ import {
   CHANNEL_GUILD_CONFIGS,
   CHANNEL_LOGS,
   CHANNEL_MODULES,
+  CHANNEL_MUSIC_HEALTH,
   CHANNEL_POLL_VOTES,
   type EventBus,
 } from "./EventBus";
@@ -76,6 +78,7 @@ export class DatabaseService {
   public readonly music: MusicRepository;
   public readonly giveaways: GiveawayRepository;
   public readonly giveawayEntries: GiveawayEntryRepository;
+  public readonly systemFlags: SystemFlagsRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
   private configCache: CacheService<any>;
@@ -89,6 +92,7 @@ export class DatabaseService {
   private logBuffer: LogInput[] = [];
   private static readonly LOG_FLUSH_INTERVAL_MS = 5_000;
   private static readonly LOG_FLUSH_MAX_BUFFER = 50;
+  private static readonly MUSIC_ENABLED_CACHE_KEY = "music:enabled";
 
   constructor(opts: { eventBus?: EventBus | null } = {}) {
     if (!process.env.DATABASE_URL) {
@@ -113,6 +117,20 @@ export class DatabaseService {
       eventBus: this.eventBus,
     });
 
+    if (this.eventBus) {
+      this.eventBus
+        .subscribe(CHANNEL_MUSIC_HEALTH, () => {
+          this.configCache.invalidate(DatabaseService.MUSIC_ENABLED_CACHE_KEY);
+        })
+        .catch((err) => {
+          console.warn(
+            `[DatabaseService] Failed to subscribe to ${CHANNEL_MUSIC_HEALTH}: ${
+              err instanceof Error ? err.message : err
+            }`,
+          );
+        });
+    }
+
     const { db } = createDb();
     this.recordings = new RecordingRepository(db);
     this.guildConfigs = new GuildConfigRepository(db);
@@ -135,6 +153,7 @@ export class DatabaseService {
     this.music = new MusicRepository(db);
     this.giveaways = new GiveawayRepository(db);
     this.giveawayEntries = new GiveawayEntryRepository(db);
+    this.systemFlags = new SystemFlagsRepository(db);
 
     // Periodic log flush. unref() so a pending timer never holds the
     // process open during shutdown — gracefulShutdown calls flushLogs().
@@ -314,6 +333,45 @@ export class DatabaseService {
         `[DatabaseService] ensureRegistered(${moduleName}) failed:`,
         error,
       );
+    }
+  }
+
+  // ── Music health ─────────────────────────────────────────────────────
+
+  /**
+   * Cached (60s TTL, cross-shard invalidated via CHANNEL_MUSIC_HEALTH) read
+   * of the fleet-wide music playback switch. Fails open (enabled: true) on
+   * a Postgres error so a DB blip never silently blocks music.
+   */
+  async isMusicEnabled(): Promise<{ enabled: boolean; reason: string | null }> {
+    const cached = this.configCache.get(DatabaseService.MUSIC_ENABLED_CACHE_KEY);
+    if (cached !== undefined) {
+      return cached as { enabled: boolean; reason: string | null };
+    }
+
+    try {
+      const flag = await this.systemFlags.getFlag("music");
+      const value = { enabled: flag?.enabled ?? true, reason: flag?.reason ?? null };
+      this.configCache.set(DatabaseService.MUSIC_ENABLED_CACHE_KEY, value);
+      return value;
+    } catch (error) {
+      console.error("[DatabaseService] isMusicEnabled failed:", error);
+      return { enabled: true, reason: null };
+    }
+  }
+
+  /** Sets the fleet-wide music switch and notifies every shard immediately. */
+  async setMusicEnabled(enabled: boolean, reason: string): Promise<void> {
+    await this.systemFlags.setFlag("music", enabled, reason);
+    this.configCache.invalidate(DatabaseService.MUSIC_ENABLED_CACHE_KEY);
+    if (this.eventBus) {
+      this.eventBus.publish(CHANNEL_MUSIC_HEALTH, { kind: "changed" }).catch((err) => {
+        console.warn(
+          `[DatabaseService] music-health publish failed: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      });
     }
   }
 

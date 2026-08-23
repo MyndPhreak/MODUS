@@ -52,6 +52,15 @@ export const CHANNEL_MUSIC_STATE = "modus:realtime:music";
  */
 export const CHANNEL_POLL_VOTES = "modus:realtime:poll-votes";
 
+/**
+ * Fleet-wide feature-switch changes — `{ kind: "changed" }`. First consumer
+ * is the `system_flags` "music" row (Lavalink health check auto-disable /
+ * dashboard manual re-enable). Mirrors CHANNEL_MODULES's shape but is kept
+ * separate since it's a different table with a different admin surface.
+ * Keep in sync with `web/server/utils/eventbus.ts`.
+ */
+export const CHANNEL_MUSIC_HEALTH = "modus:realtime:music-health";
+
 export interface Envelope<T = unknown> {
   origin: string;
   ts: number;
