@@ -71,6 +71,10 @@ export class GiveawayRepository {
       .set({ status: "cancelled" })
       .where(eq(giveaways.id, id));
   }
+
+  async deleteById(id: string): Promise<void> {
+    await this.db.delete(giveaways).where(eq(giveaways.id, id));
+  }
 }
 
 export class GiveawayEntryRepository {

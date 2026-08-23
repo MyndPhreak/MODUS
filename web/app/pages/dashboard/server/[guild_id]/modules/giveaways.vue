@@ -4,8 +4,34 @@ const guildId = route.params.guild_id as string;
 
 const { state, isModuleEnabled, loadChannels, loadRoles, channelOptions, roleOptions, getModuleConfig, saveModuleSettings } =
   useServerSettings(guildId);
-const { giveaways, loading, actionLoading, error, createGiveaway, updateGiveaway, cancelGiveaway } =
+const { giveaways, loading, actionLoading, error, createGiveaway, updateGiveaway, cancelGiveaway, deleteGiveaway } =
   useGiveaways(guildId);
+
+const currentGiveaways = computed(() => giveaways.value.filter((g) => g.status === "active"));
+const pastGiveaways = computed(() => giveaways.value.filter((g) => g.status !== "active"));
+
+const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+}).format(new Date(value));
+
+const timeLeft = (value: string) => {
+  const remaining = new Date(value).getTime() - Date.now();
+  if (remaining <= 0) return "Ending soon";
+  const minutes = Math.floor(remaining / 60000);
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  return days > 0 ? `${days}d ${hours % 24}h left` : `${hours}h ${minutes % 60}m left`;
+};
+
+const memberLabel = (member: { id: string; displayName: string; username: string | null }) => {
+  if (member.displayName === member.id) return member.id;
+  if (member.username && member.username !== member.displayName) {
+    return `${member.displayName} (@${member.username})`;
+  }
+  return member.displayName;
+};
 
 const hostRoleIds = ref<string[]>(getModuleConfig("giveaways").hostRoleIds ?? []);
 
@@ -98,6 +124,15 @@ const cancel = async (id: string) => {
     await cancelGiveaway(id);
   } catch {
     // cancelGiveaway re-throws after populating `error` — see submitCreate.
+  }
+};
+
+const removePastGiveaway = async (id: string) => {
+  if (!window.confirm("Delete this past giveaway from the dashboard history? The Discord message will remain.")) return;
+  try {
+    await deleteGiveaway(id);
+  } catch {
+    // deleteGiveaway surfaces the error in the page alert.
   }
 };
 
@@ -228,14 +263,21 @@ onMounted(() => {
     </UCard>
 
     <div v-if="loading">Loading…</div>
-    <div v-else class="space-y-3">
-      <UCard v-for="g in giveaways" :key="g.id">
+    <div v-else class="space-y-8">
+      <section>
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h3 class="text-lg font-semibold text-white">Current giveaways</h3>
+            <p class="text-sm text-muted">Live campaigns and their entry activity.</p>
+          </div>
+          <UBadge color="success" variant="soft">{{ currentGiveaways.length }}</UBadge>
+        </div>
+        <div v-if="currentGiveaways.length" class="space-y-3">
+        <UCard v-for="g in currentGiveaways" :key="g.id">
         <div class="flex items-center justify-between">
           <div>
             <div class="font-medium">{{ g.title }}</div>
-            <div class="text-sm text-muted">
-              {{ g.status }} — {{ g.entrantCount }} entrant(s) — {{ g.winnerCount }} winner(s)
-            </div>
+            <div class="text-sm text-muted">{{ timeLeft(g.endsAt) }} · ends {{ formatDate(g.endsAt) }}</div>
           </div>
           <div class="flex gap-2" v-if="g.status === 'active' && editing !== g.id">
             <UButton size="sm" variant="soft" @click="startEdit(g)">Edit</UButton>
@@ -243,6 +285,12 @@ onMounted(() => {
               Cancel
             </UButton>
           </div>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Prize</div><div class="text-white font-medium">{{ g.prizeValue || g.prizeKind }}</div></div>
+          <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Who entered</div><div class="text-white font-medium break-words">{{ g.entrants.length ? g.entrants.map(memberLabel).join(", ") : "No entries yet" }}</div></div>
+          <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Winners</div><div class="text-white font-medium">{{ g.winnerCount }}</div></div>
         </div>
 
         <form v-if="editing === g.id" class="mt-4 space-y-5" @submit.prevent="submitEdit">
@@ -329,7 +377,33 @@ onMounted(() => {
           </div>
         </form>
       </UCard>
-      <div v-if="giveaways.length === 0" class="text-muted">No giveaways yet.</div>
+        </div>
+        <div v-else class="text-muted">No current giveaways.</div>
+      </section>
+
+      <section>
+        <div class="flex items-center justify-between mb-3">
+          <div><h3 class="text-lg font-semibold text-white">Past giveaways</h3><p class="text-sm text-muted">A record of finished and cancelled campaigns.</p></div>
+          <UBadge color="neutral" variant="soft">{{ pastGiveaways.length }}</UBadge>
+        </div>
+        <div v-if="pastGiveaways.length" class="space-y-3">
+          <UCard v-for="g in pastGiveaways" :key="g.id">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2"><div class="font-medium text-white">{{ g.title }}</div><UBadge :color="g.status === 'ended' ? 'neutral' : 'warning'" variant="soft">{{ g.status }}</UBadge></div>
+                <div class="text-sm text-muted">Ended {{ formatDate(g.endsAt) }} · created {{ formatDate(g.createdAt) }}</div>
+              </div>
+              <UButton size="sm" color="error" variant="soft" :loading="actionLoading" @click="removePastGiveaway(g.id)">Delete record</UButton>
+            </div>
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Prize</div><div class="text-white font-medium">{{ g.prizeValue || g.prizeKind }}</div></div>
+              <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Who entered ({{ g.entrantCount }})</div><div class="text-white font-medium break-words">{{ g.entrants.length ? g.entrants.map(memberLabel).join(", ") : "No entries" }}</div></div>
+              <div class="rounded-lg bg-white/5 p-3"><div class="text-muted">Winners</div><div v-if="g.winners.length" class="text-white font-medium break-words">{{ g.winners.map(memberLabel).join(", ") }}</div><div v-else class="text-muted">No winners</div></div>
+            </div>
+          </UCard>
+        </div>
+        <div v-else class="text-muted">No past giveaways.</div>
+      </section>
     </div>
 
     <DashboardModuleAccessSection :guild-id="guildId" module-name="giveaways" />

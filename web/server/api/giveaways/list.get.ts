@@ -3,6 +3,7 @@
  */
 import { getRepos } from "../../utils/db";
 import { requireModuleAccess } from "../../utils/session";
+import { fetchGuildMemberIdentities } from "../../utils/discord";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -20,8 +21,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const rows = await repos.giveaways.listByGuild(guildId);
-  const giveaways = await Promise.all(
-    rows.map(async (row) => ({
+  const giveawayRows = await Promise.all(
+    rows.map(async (row) => {
+      const entrantIds = await repos.giveawayEntries.listEntrantIds(row.id);
+      return {
       id: row.id,
       channelId: row.channelId,
       messageId: row.messageId,
@@ -31,6 +34,7 @@ export default defineEventHandler(async (event) => {
       prizeValue: row.prizeKind === "key" ? null : row.prizeValue,
       imageUrl: row.imageUrl,
       winnerCount: row.winnerCount,
+      entrantIds,
       entrantCount: await repos.giveawayEntries.countEntries(row.id),
       endsAt: row.endsAt,
       status: row.status,
@@ -38,8 +42,24 @@ export default defineEventHandler(async (event) => {
       requirements: row.requirements,
       source: row.source,
       createdAt: row.createdAt,
-    })),
+      };
+    }),
   );
+
+  const identities = await fetchGuildMemberIdentities(
+    guildId,
+    giveawayRows.flatMap((giveaway) => [...giveaway.entrantIds, ...giveaway.winnerIds]),
+  );
+  const resolveMembers = (ids: string[]) => ids.map((id) => identities.get(id) ?? {
+    id,
+    displayName: id,
+    username: null,
+  });
+  const giveaways = giveawayRows.map(({ entrantIds, winnerIds, ...giveaway }) => ({
+    ...giveaway,
+    entrants: resolveMembers(entrantIds),
+    winners: resolveMembers(winnerIds),
+  }));
 
   return { giveaways };
 });
