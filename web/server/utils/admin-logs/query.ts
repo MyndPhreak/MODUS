@@ -5,7 +5,20 @@ const MAX_SEARCH_LENGTH = 500
 const MAX_SOURCE_LENGTH = 100
 const MAX_GUILD_ID_LENGTH = 32
 const MAX_CURSOR_ID_LENGTH = 256
+const MAX_ENCODED_CURSOR_LENGTH = 512
 const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?Z$/
+const ADMIN_LOG_QUERY_KEYS = new Set([
+  'search',
+  'level',
+  'scope',
+  'guildId',
+  'shardId',
+  'source',
+  'from',
+  'to',
+  'limit',
+  'cursor',
+])
 
 type QueryValue = string | string[] | null | undefined
 
@@ -150,6 +163,9 @@ export function encodeLogCursor(cursor: { timestamp: Date | string; id: string }
 }
 
 export function decodeLogCursor(value: string): LogCursor {
+  if (value.length > MAX_ENCODED_CURSOR_LENGTH) {
+    throw new AdminLogQueryError('cursor is too long.')
+  }
   if (!value || !/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new AdminLogQueryError('cursor is malformed.')
   }
@@ -159,7 +175,14 @@ export function decodeLogCursor(value: string): LogCursor {
       timestamp?: unknown
       id?: unknown
     }
-    if (typeof decoded.timestamp !== 'string' || !validCursorId(decoded.id)) {
+    if (
+      !decoded ||
+      Array.isArray(decoded) ||
+      typeof decoded !== 'object' ||
+      Object.keys(decoded).sort().join(',') !== 'id,timestamp' ||
+      typeof decoded.timestamp !== 'string' ||
+      !validCursorId(decoded.id)
+    ) {
       throw new Error('Invalid cursor fields')
     }
     const timestamp = parseTimestamp(decoded.timestamp, 'cursor timestamp')
@@ -171,6 +194,11 @@ export function decodeLogCursor(value: string): LogCursor {
 }
 
 export function parseAdminLogQuery(query: Record<string, QueryValue>): AdminLogQuery {
+  const unknownKey = Object.keys(query).find((key) => !ADMIN_LOG_QUERY_KEYS.has(key))
+  if (unknownKey) {
+    throw new AdminLogQueryError(`${unknownKey} is not a supported query parameter.`)
+  }
+
   const guildId = parseGuildId(singleValue(query, 'guildId'))
   const from = parseTimestamp(singleValue(query, 'from'), 'from')
   const to = parseTimestamp(singleValue(query, 'to'), 'to')
