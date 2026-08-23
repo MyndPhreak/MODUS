@@ -1,5 +1,5 @@
 <template>
-  <main class="p-5 sm:p-8 space-y-6 sm:space-y-8">
+  <main class="operations-overview p-5 sm:p-8 space-y-6 sm:space-y-8">
     <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p class="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80">
@@ -33,7 +33,7 @@
     >
       <UIcon name="i-lucide-loader-circle" class="mx-auto size-8 animate-spin text-violet-400" />
       <p class="mt-3 text-sm font-medium text-white">Loading operations overview</p>
-      <p class="mt-1 text-sm text-gray-500">Checking the latest reported fleet state.</p>
+      <p class="mt-1 text-sm text-gray-300">Checking the latest reported fleet state.</p>
     </section>
 
     <section
@@ -56,7 +56,7 @@
       >
         <div class="flex flex-col gap-1 border-b border-white/8 pb-4 sm:flex-row sm:items-baseline sm:justify-between">
           <h2 id="fleet-signal-heading" class="text-sm font-bold text-white">Fleet signal</h2>
-          <p class="text-xs text-gray-500">Generated {{ formatTimestamp(overview.generatedAt) }}</p>
+          <p class="text-xs text-gray-300">Generated {{ formatTimestamp(overview.generatedAt) }}</p>
         </div>
         <div class="relative mt-5">
           <div aria-hidden="true" class="absolute left-[16.67%] right-[16.67%] top-5 hidden h-px bg-gradient-to-r from-violet-500/30 via-indigo-400/50 to-violet-500/30 md:block" />
@@ -69,7 +69,7 @@
                 <UIcon :name="statusIcon(station.status)" class="size-5" aria-hidden="true" />
               </span>
               <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">{{ station.label }}</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">{{ station.label }}</p>
                 <p class="mt-1 text-sm font-bold text-white">{{ station.value }}</p>
                 <p class="mt-0.5 text-xs text-gray-400">{{ statusLabel(station.status) }}</p>
               </div>
@@ -78,10 +78,61 @@
         </div>
       </section>
 
+      <section
+        class="glass-card rounded-2xl border px-5 py-5 sm:px-6"
+        :class="attentionItems.length ? 'border-warning/50 bg-warning/10 ring-1 ring-warning/30' : 'border-white/8'"
+        aria-labelledby="attention-heading"
+        aria-live="polite"
+      >
+        <div class="flex flex-col gap-3 border-b border-white/8 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-start gap-3">
+            <span
+              class="flex size-10 shrink-0 items-center justify-center rounded-xl border"
+              :class="attentionItems.length ? 'border-warning/40 bg-warning/15 text-warning' : 'border-success/30 bg-success/10 text-success'"
+            >
+              <UIcon :name="attentionItems.length ? 'i-lucide-triangle-alert' : 'i-lucide-circle-check-big'" class="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p v-if="attentionItems.length" class="text-xs font-bold uppercase tracking-[0.16em] text-warning">Action needed</p>
+              <h2 id="attention-heading" class="text-base font-bold text-white">Needs attention</h2>
+              <p class="mt-0.5 text-xs text-gray-300">
+                {{ attentionItems.length ? 'Unhealthy and degraded signals are listed first.' : 'The latest checks did not find any signals that need attention.' }}
+              </p>
+            </div>
+          </div>
+          <UBadge :color="attentionItems.length ? 'warning' : 'success'" variant="soft">
+            {{ attentionItems.length ? `${attentionItems.length} open` : 'All clear' }}
+          </UBadge>
+        </div>
+        <div v-if="attentionItems.length" class="mt-1 divide-y divide-white/10">
+          <component
+            :is="item.href ? NuxtLink : 'div'"
+            v-for="item in attentionItems"
+            :key="item.key"
+            :to="item.href"
+            class="group flex gap-4 px-1 py-5 sm:px-2"
+            :class="item.href ? 'transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset' : ''"
+          >
+            <span class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border" :class="stationClass(item.severity)">
+              <UIcon :name="statusIcon(item.severity)" class="size-5" aria-hidden="true" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-base font-bold text-white">{{ item.title }}</h3>
+                <UBadge :color="statusColor(item.severity)" variant="soft" size="xs">{{ statusLabel(item.severity) }}</UBadge>
+              </div>
+              <p class="mt-1 text-sm text-gray-300">{{ item.description }}</p>
+              <p v-if="item.occurredAt" class="mt-1 text-xs text-gray-300">Reported {{ formatTimestamp(item.occurredAt) }}</p>
+            </div>
+            <UIcon v-if="item.href" name="i-lucide-arrow-up-right" class="mt-1 size-5 shrink-0 text-gray-400 transition-colors group-hover:text-violet-300" aria-hidden="true" />
+          </component>
+        </div>
+      </section>
+
       <section aria-label="Fleet summary" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article v-for="summary in fleetSummary" :key="summary.label" class="glass-card rounded-2xl border border-white/8 p-5 motion-reduce:hover:transform-none">
           <div class="flex items-start justify-between gap-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">{{ summary.label }}</p>
+            <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">{{ summary.label }}</p>
             <UIcon :name="summary.icon" class="size-4 shrink-0 text-violet-300" aria-hidden="true" />
           </div>
           <p class="mt-3 text-2xl font-black tracking-tight text-white">{{ summary.value }}</p>
@@ -95,7 +146,7 @@
             <div class="flex items-center justify-between border-b border-white/8 px-5 py-4 sm:px-6">
               <div>
                 <h2 id="dependency-heading" class="text-sm font-bold text-white">Dependencies</h2>
-                <p class="mt-0.5 text-xs text-gray-500">Latest connection checks</p>
+                <p class="mt-0.5 text-xs text-gray-300">Latest connection checks</p>
               </div>
               <UBadge :color="statusColor(dependencyStatus)" variant="soft">
                 {{ dependencyStatusLabel }}
@@ -109,18 +160,18 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <p class="text-sm font-semibold text-white">{{ dependency.label }}</p>
-                    <span v-if="dependency.required" class="text-xs text-gray-500">Required</span>
+                    <span v-if="dependency.required" class="text-xs text-gray-300">Required</span>
                   </div>
                   <p class="mt-0.5 text-xs text-gray-400">{{ dependency.message }}</p>
                 </div>
                 <div class="shrink-0 text-right">
                   <p v-if="dependency.latencyMs !== undefined" class="font-mono text-xs text-gray-300">{{ dependency.latencyMs }} ms</p>
-                  <p class="mt-0.5 text-xs text-gray-600">{{ formatRelativeTime(dependency.checkedAt) }}</p>
+                  <p class="mt-0.5 text-xs text-gray-300">{{ formatRelativeTime(dependency.checkedAt) }}</p>
                 </div>
               </li>
             </ul>
             <div v-else class="px-6 py-10 text-center">
-              <UIcon name="i-lucide-circle-help" class="mx-auto size-7 text-gray-600" aria-hidden="true" />
+              <UIcon name="i-lucide-circle-help" class="mx-auto size-7 text-gray-400" aria-hidden="true" />
               <p class="mt-3 text-sm text-gray-400">No dependency checks were reported.</p>
             </div>
           </section>
@@ -129,7 +180,7 @@
             <div class="flex items-center justify-between border-b border-white/8 px-5 py-4 sm:px-6">
               <div>
                 <h2 id="storage-heading" class="text-sm font-bold text-white">R2 usage</h2>
-                <p class="mt-0.5 text-xs text-gray-500">Storage analytics</p>
+                <p class="mt-0.5 text-xs text-gray-300">Storage analytics</p>
               </div>
               <UBadge :color="statusColor(overview.r2Usage.status)" variant="soft">
                 {{ statusLabel(overview.r2Usage.status) }}
@@ -138,25 +189,25 @@
             <template v-if="overview.r2Usage.status === 'available'">
               <div class="grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">Stored data</p>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">Stored data</p>
                   <p class="mt-2 text-xl font-black text-white">{{ overview.r2Usage.payloadSizeFormatted }}</p>
                 </div>
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">Objects</p>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">Objects</p>
                   <p class="mt-2 text-xl font-black text-white">{{ formatNumber(overview.r2Usage.objectCount) }}</p>
                 </div>
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">Uploads</p>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">Uploads</p>
                   <p class="mt-2 text-xl font-black text-white">{{ formatNumber(overview.r2Usage.uploadCount) }}</p>
                 </div>
               </div>
-              <p class="border-t border-white/6 px-5 py-3 text-xs text-gray-500 sm:px-6">
+              <p class="border-t border-white/6 px-5 py-3 text-xs text-gray-300 sm:px-6">
                 Last reported {{ formatTimestamp(overview.r2Usage.sampledAt) }} · Metadata {{ overview.r2Usage.metadataSizeFormatted }}
               </p>
             </template>
             <div v-else class="px-5 py-6 sm:px-6">
               <p class="text-sm text-gray-300">{{ overview.r2Usage.message }}</p>
-              <p class="mt-1 text-xs text-gray-500">R2 usage is last reported analytics, not a real-time storage scan.</p>
+              <p class="mt-1 text-xs text-gray-300">R2 usage is last reported analytics, not a real-time storage scan.</p>
             </div>
           </section>
         </div>
@@ -164,7 +215,7 @@
         <section class="glass-card rounded-2xl border border-white/8" aria-labelledby="recent-heading">
           <div class="border-b border-white/8 px-5 py-4 sm:px-6">
             <h2 id="recent-heading" class="text-sm font-bold text-white">Recent activity</h2>
-            <p class="mt-0.5 text-xs text-gray-500">Retained log and registration summaries</p>
+            <p class="mt-0.5 text-xs text-gray-300">Retained log and registration summaries</p>
           </div>
           <div class="divide-y divide-white/6">
             <article v-for="window in recentWindows" :key="window.label" class="px-5 py-5 sm:px-6">
@@ -176,15 +227,15 @@
               </div>
               <dl class="mt-4 grid grid-cols-3 gap-3">
                 <div>
-                  <dt class="text-xs text-gray-500">Errors</dt>
+                  <dt class="text-xs text-gray-300">Errors</dt>
                   <dd class="mt-1 font-mono text-sm font-semibold text-white">{{ formatNumber(window.errors) }}</dd>
                 </div>
                 <div>
-                  <dt class="text-xs text-gray-500">Warnings</dt>
+                  <dt class="text-xs text-gray-300">Warnings</dt>
                   <dd class="mt-1 font-mono text-sm font-semibold text-white">{{ formatNumber(window.warnings) }}</dd>
                 </div>
                 <div>
-                  <dt class="text-xs text-gray-500">Servers</dt>
+                  <dt class="text-xs text-gray-300">Servers</dt>
                   <dd class="mt-1 font-mono text-sm font-semibold text-white">{{ formatNumber(window.registeredServers) }}</dd>
                 </div>
               </dl>
@@ -193,45 +244,6 @@
         </section>
       </section>
 
-      <section class="glass-card rounded-2xl border border-white/8" aria-labelledby="attention-heading">
-        <div class="flex flex-col gap-3 border-b border-white/8 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <h2 id="attention-heading" class="text-sm font-bold text-white">Needs attention</h2>
-            <p class="mt-0.5 text-xs text-gray-500">Unhealthy and degraded signals are listed first.</p>
-          </div>
-          <UBadge :color="attentionItems.length ? 'warning' : 'success'" variant="soft">
-            {{ attentionItems.length ? `${attentionItems.length} open` : 'All clear' }}
-          </UBadge>
-        </div>
-        <div v-if="attentionItems.length" class="divide-y divide-white/6">
-          <component
-            :is="item.href ? NuxtLink : 'div'"
-            v-for="item in attentionItems"
-            :key="item.key"
-            :to="item.href"
-            class="group flex gap-3 px-5 py-4 sm:px-6"
-            :class="item.href ? 'transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset' : ''"
-          >
-            <span class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border" :class="stationClass(item.severity)">
-              <UIcon :name="statusIcon(item.severity)" class="size-4" aria-hidden="true" />
-            </span>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-sm font-semibold text-white">{{ item.title }}</h3>
-                <UBadge :color="statusColor(item.severity)" variant="soft" size="xs">{{ statusLabel(item.severity) }}</UBadge>
-              </div>
-              <p class="mt-1 text-sm text-gray-400">{{ item.description }}</p>
-              <p v-if="item.occurredAt" class="mt-1 text-xs text-gray-600">Reported {{ formatTimestamp(item.occurredAt) }}</p>
-            </div>
-            <UIcon v-if="item.href" name="i-lucide-arrow-up-right" class="mt-1 size-4 shrink-0 text-gray-600 transition-colors group-hover:text-violet-300" aria-hidden="true" />
-          </component>
-        </div>
-        <div v-else class="px-6 py-12 text-center">
-          <UIcon name="i-lucide-circle-check-big" class="mx-auto size-9 text-success" aria-hidden="true" />
-          <p class="mt-3 text-sm font-semibold text-white">No active operational issues</p>
-          <p class="mt-1 text-sm text-gray-500">The latest checks did not find any signals that need attention.</p>
-        </div>
-      </section>
     </template>
   </main>
 </template>
@@ -239,14 +251,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { NuxtLink } from '#components'
+import { getFleetTelemetryPresentation } from '~/utils/admin-operations'
 import type {
   AdminOverviewResponse,
+  AttentionItem,
   DependencyStatus,
   OverallStatus,
 } from '../../../../server/utils/admin-operations/types'
 
 type DisplayStatus = DependencyStatus | 'available' | 'unavailable'
 type BadgeColor = 'success' | 'warning' | 'error' | 'neutral'
+
+interface SignalStation {
+  id: string
+  label: string
+  value: string
+  status: DisplayStatus
+}
 
 const overview = shallowRef<AdminOverviewResponse | null>(null)
 const loading = ref(true)
@@ -257,9 +278,23 @@ const severityRank: Record<Exclude<OverallStatus, 'healthy'>, number> = {
   degraded: 1,
 }
 
-const attentionItems = computed(() => {
+const fleetTelemetry = computed(() => {
+  if (!overview.value) return null
+  return getFleetTelemetryPresentation(overview.value.fleet)
+})
+
+const attentionItems = computed<AttentionItem[]>(() => {
   if (!overview.value) return []
-  return [...overview.value.attentionItems].sort((left, right) => {
+  const attention = [...overview.value.attentionItems]
+  if (!fleetTelemetry.value?.available) {
+    attention.push({
+      key: 'fleet:no-telemetry',
+      severity: 'degraded',
+      title: 'Fleet telemetry is unavailable',
+      description: 'No active shard or version telemetry has been reported.',
+    })
+  }
+  return attention.sort((left, right) => {
     return severityRank[left.severity] - severityRank[right.severity]
   })
 })
@@ -277,25 +312,23 @@ const dependencyStatusLabel = computed(() => {
   return `${dependencies.filter((dependency) => dependency.status === 'healthy').length}/${dependencies.length} healthy`
 })
 
-const signalStations = computed(() => {
-  if (!overview.value) return []
+const signalStations = computed<SignalStation[]>(() => {
+  if (!overview.value || !fleetTelemetry.value) return []
+  const telemetry = fleetTelemetry.value
   const dependencyCount = overview.value.dependencies.filter((dependency) => dependency.status === 'healthy').length
-  const shardStatus: OverallStatus = overview.value.fleet.shards.stale > 0 || overview.value.fleet.shards.active < overview.value.fleet.shards.expected
-    ? 'degraded'
-    : 'healthy'
 
   return [
     {
       id: 'overall',
       label: 'Overall state',
-      value: statusLabel(overview.value.overallStatus),
-      status: overview.value.overallStatus,
+      value: telemetry.available ? statusLabel(overview.value.overallStatus) : 'No telemetry',
+      status: telemetry.available ? overview.value.overallStatus : 'unavailable',
     },
     {
       id: 'shards',
       label: 'Active shards',
-      value: `${overview.value.fleet.shards.active} / ${overview.value.fleet.shards.expected}`,
-      status: shardStatus,
+      value: telemetry.shardValue,
+      status: telemetry.shardStatus,
     },
     {
       id: 'dependencies',
@@ -307,8 +340,9 @@ const signalStations = computed(() => {
 })
 
 const fleetSummary = computed(() => {
-  if (!overview.value) return []
+  if (!overview.value || !fleetTelemetry.value) return []
   const { fleet } = overview.value
+  const telemetry = fleetTelemetry.value
   return [
     {
       label: 'Servers',
@@ -318,8 +352,8 @@ const fleetSummary = computed(() => {
     },
     {
       label: 'Shards',
-      value: `${fleet.shards.active} / ${fleet.shards.expected}`,
-      detail: fleet.shards.stale ? `${fleet.shards.stale} stale heartbeat${fleet.shards.stale === 1 ? '' : 's'}` : 'No stale heartbeats',
+      value: telemetry.shardValue,
+      detail: telemetry.shardDetail,
       icon: 'i-lucide-network',
     },
     {
@@ -330,8 +364,8 @@ const fleetSummary = computed(() => {
     },
     {
       label: 'Versions',
-      value: String(fleet.versions.active.length),
-      detail: fleet.versions.disagreement ? 'Version disagreement detected' : 'Active versions agree',
+      value: telemetry.versionValue,
+      detail: telemetry.versionDetail,
       icon: 'i-lucide-git-compare-arrows',
     },
   ]
@@ -413,3 +447,22 @@ onMounted(() => {
   void loadOverview()
 })
 </script>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  .operations-overview .glass-card,
+  .operations-overview .glass-card::before,
+  .operations-overview .group,
+  .operations-overview .group * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .operations-overview .glass-card,
+  .operations-overview .glass-card:hover,
+  .operations-overview .glass-card::before,
+  .operations-overview .glass-card:hover::before {
+    transform: none !important;
+  }
+}
+</style>

@@ -73,9 +73,14 @@
       </div>
 
       <!-- Log count -->
-      <span class="text-xs text-gray-500 font-mono ml-auto">
-        {{ filteredBotLogs.length }} / {{ botLogs.length }} entries
-      </span>
+      <div class="ml-auto text-right">
+        <span class="text-xs text-gray-500 font-mono">
+          {{ filteredBotLogs.length }} / {{ botLogs.length }} entries
+        </span>
+        <p v-if="queryFilterSummary" class="mt-0.5 text-xs text-gray-400">
+          {{ queryFilterSummary }}
+        </p>
+      </div>
     </div>
 
     <!-- Terminal -->
@@ -139,14 +144,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import {
+  filterAdminLogs,
+  parseAdminLogQuery,
+} from "~/utils/admin-operations";
+import type { AdminLogLevel } from "~/utils/admin-operations";
 
-const botLogs = ref<any[]>([]);
+interface AdminLogEntry {
+  $id: string;
+  level: string;
+  timestamp: string;
+  source?: string | null;
+  guildId?: string | null;
+  shardId?: number | null;
+  message: string;
+}
+
+const route = useRoute();
+const botLogs = ref<AdminLogEntry[]>([]);
 const logsRefreshing = ref(false);
 const eventSource = ref<EventSource | null>(null);
 
 const adminLogScope = ref("all");
-const adminLogLevel = ref("all");
+const adminLogLevel = ref<AdminLogLevel>("all");
+const adminLogSource = ref<string | null>(null);
+const adminLogGuildId = ref<string | null>(null);
+const adminLogShardId = ref<number | null>(null);
 
 const logScopes = [
   { value: "all", label: "All Logs", color: "neutral" as const },
@@ -154,7 +178,7 @@ const logScopes = [
   { value: "guild", label: "Per-Server", color: "info" as const },
 ];
 
-const adminLogLevels = [
+const adminLogLevels: Array<{ value: AdminLogLevel; label: string; color: "neutral" | "info" | "warning" | "error" }> = [
   { value: "all", label: "All", color: "neutral" as const },
   { value: "info", label: "Info", color: "info" as const },
   { value: "warn", label: "Warn", color: "warning" as const },
@@ -162,7 +186,12 @@ const adminLogLevels = [
 ];
 
 const filteredBotLogs = computed(() => {
-  let logs = [...botLogs.value];
+  let logs = filterAdminLogs(botLogs.value, {
+    level: adminLogLevel.value,
+    source: adminLogSource.value,
+    guildId: adminLogGuildId.value,
+    shardId: adminLogShardId.value,
+  });
 
   if (adminLogScope.value === "global") {
     logs = logs.filter((l) => l.guildId === "global");
@@ -180,7 +209,12 @@ const filteredBotLogs = computed(() => {
 });
 
 const getAdminLogCount = (level: string) => {
-  let logs = botLogs.value;
+  let logs = filterAdminLogs(botLogs.value, {
+    level: level as AdminLogLevel,
+    source: adminLogSource.value,
+    guildId: adminLogGuildId.value,
+    shardId: adminLogShardId.value,
+  });
   if (adminLogScope.value === "global") {
     logs = logs.filter((l) => l.guildId === "global");
   } else if (adminLogScope.value === "guild") {
@@ -189,6 +223,29 @@ const getAdminLogCount = (level: string) => {
   if (level === "all") return logs.length;
   return logs.filter((l) => l.level === level).length;
 };
+
+const queryFilterSummary = computed(() => {
+  const filters = [
+    adminLogSource.value ? `source: ${adminLogSource.value}` : null,
+    adminLogGuildId.value ? "a selected server" : null,
+    adminLogShardId.value !== null ? `shard ${adminLogShardId.value}` : null,
+  ].filter(Boolean);
+  return filters.length ? `Filtered to ${filters.join(" · ")}` : null;
+});
+
+const syncQueryFilters = () => {
+  const filters = parseAdminLogQuery(route.query);
+  adminLogLevel.value = filters.level;
+  adminLogSource.value = filters.source;
+  adminLogGuildId.value = filters.guildId;
+  adminLogShardId.value = filters.shardId;
+};
+
+watch(
+  () => route.fullPath,
+  syncQueryFilters,
+  { immediate: true },
+);
 
 const fetchInitialLogs = async () => {
   logsRefreshing.value = true;
