@@ -91,6 +91,8 @@ The overview presents:
 - Registered, online, offline, and premium server counts.
 - Current fleet-wide music switch state.
 - Postgres, Redis, R2, Discord, bot HTTP, and Lavalink health.
+- Current reported R2 bucket usage: object count, payload bytes, metadata bytes,
+  pending multipart uploads, and metric timestamp.
 
 Each dependency result includes only:
 
@@ -101,6 +103,40 @@ Each dependency result includes only:
 - Sanitized operator-facing message.
 
 Redis is optional in MODUS, so an unconfigured Redis result is informational rather than making the whole fleet unhealthy. R2 and Postgres are required and therefore affect overall state. Optional services such as Lavalink affect only their associated subsystem when deliberately unconfigured.
+
+### R2 Usage
+
+Per-bucket usage comes from Cloudflare's GraphQL Analytics API
+`r2StorageAdaptiveGroups` dataset, filtered to the configured R2 bucket. The
+overview uses the latest available sample and reports:
+
+- Object count.
+- Object payload size in bytes and a human-readable binary unit.
+- Object metadata size in bytes and a human-readable binary unit.
+- Pending multipart upload count.
+- The timestamp represented by the metric.
+
+Cloudflare analytics can lag behind current writes, so the UI labels this data
+as "last reported" and displays the metric timestamp. The dashboard must not
+describe it as an exact real-time bucket scan.
+
+The GraphQL request uses `R2_ACCOUNT_ID`, `R2_BUCKET`, and a dedicated
+Cloudflare API bearer token supplied through a private server runtime setting.
+The existing S3 access key and secret are not reused as a bearer token. The
+token requires only the minimum account analytics permission needed to read R2
+metrics and is never exposed through runtime config or API responses.
+
+R2 usage is cached independently for at least five minutes because it changes
+less frequently than dependency reachability and the upstream dataset is not
+real-time. Concurrent refreshes share an in-flight request where practical. If
+the analytics token is absent, the R2 health probe still runs through the S3
+client while usage is returned as `unconfigured`; this does not mark R2 itself
+unhealthy. If Cloudflare returns no recent sample, usage is `unavailable` with
+a sanitized explanation.
+
+The implementation must not calculate routine usage by listing and summing
+every object in the bucket. A full S3 object scan grows linearly with bucket
+contents and is unsuitable for a dashboard refresh path.
 
 ### Probing and Caching
 
@@ -271,6 +307,8 @@ Registered-server rows link to logs filtered by guild ID. Premium changes link t
 - Every new admin endpoint calls `requireBotAdmin` before accessing data.
 - Actor identity comes from the sealed authenticated session.
 - The overview exposes state, not deployment credentials or private endpoints.
+- The Cloudflare analytics token remains private server configuration and is
+  never serialized to the browser.
 - Audit storage is limited to bot-admin behavior in this release.
 - Log access remains bot-admin-only because entries span all guilds.
 - Request context is limited to a correlation ID; raw IP retention is not required for this feature.
@@ -281,6 +319,8 @@ The implementation plan must include focused automated coverage for:
 
 - Health aggregation when individual probes succeed, fail, timeout, or are unconfigured.
 - Overall health policy for required and optional dependencies.
+- R2 usage parsing, unit formatting, stale/unavailable data, cache behavior,
+  and operation without an analytics token.
 - 24-hour and 7-day summary behavior with insufficient retention.
 - Log filter validation, stable `(timestamp, id)` cursor pagination, and page limits.
 - Live/historical log deduplication in extracted testable client logic where practical.
