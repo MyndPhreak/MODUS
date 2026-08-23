@@ -10,10 +10,15 @@ const AI_PROVIDERS = new Set([
   'Anthropic Claude',
   'OpenAI Compatible',
 ])
-const SECRET_SHAPED = /(?:^|[^a-z])(sk-|bearer\s|api.?key|token\s*[=:]|secret|password|credential|access.?key|connection.?string)/i
+const SECRET_SHAPED = /(?:gh[pousr]_|github_pat_|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:bearer|basic)\s+[A-Za-z0-9+/=_-]+|\bsk-(?:proj-)?[A-Za-z0-9_-]+|\bAIza[A-Za-z0-9_-]{30,}|\bxox[baprs]-[A-Za-z0-9-]+|\bnpm_[A-Za-z0-9_-]+|api.?key|token\s*[=:]|secret|password|credential|access.?key|connection.?string)/i
 const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/
 const IPV6 = /^\[?[0-9a-f]*:[0-9a-f:]+\]?$/i
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
+const EMBEDDED_IPV4 = /(?:^|[^\d])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)/
+const EMBEDDED_IPV6 = /(?:^|[^0-9a-f])(?:[0-9a-f]{1,4}:){2,}[0-9a-f:]{0,}(?:$|[^0-9a-f])/i
+const EMBEDDED_URL = /(?:https?|ftp):\/\//i
+const HIGH_ENTROPY_SEGMENT = /[A-Za-z0-9_-]{32,}/g
+const REDACTED_MODEL = '[redacted-model]'
 
 export type AiEndpointClassification = 'provider-default' | 'custom-public' | 'custom-private' | 'local'
 
@@ -31,25 +36,42 @@ function safeString(value: unknown): string | undefined {
   return value
 }
 
+function hasSuspiciousEntropy(value: string): boolean {
+  const segments = value.match(HIGH_ENTROPY_SEGMENT) ?? []
+  return segments.some((segment) => {
+    const classes = [/[a-z]/, /[A-Z]/, /\d/].filter((pattern) => pattern.test(segment)).length
+    const uniqueRatio = new Set(segment).size / segment.length
+    return classes >= 2 && uniqueRatio > 0.35
+  })
+}
+
+function unsafeAiString(value: string): boolean {
+  return CONTROL_CHARACTER.test(value)
+    || SECRET_SHAPED.test(value)
+    || IPV4.test(value)
+    || IPV6.test(value)
+    || EMBEDDED_IPV4.test(value)
+    || EMBEDDED_IPV6.test(value)
+    || EMBEDDED_URL.test(value)
+    || hasSuspiciousEntropy(value)
+}
+
 function safeAiLabel(field: 'provider' | 'model', value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || value.length === 0 || value.length > 200) {
-    throw new TypeError(`Unsafe AI ${field}`)
+    if (field === 'model') return REDACTED_MODEL
+    throw new TypeError('Unsafe AI provider')
   }
-  if (CONTROL_CHARACTER.test(value) || SECRET_SHAPED.test(value) || IPV4.test(value) || IPV6.test(value)) {
-    throw new TypeError(`Unsafe AI ${field}`)
-  }
-  try {
-    new URL(value)
-    throw new TypeError(`Unsafe AI ${field}`)
-  } catch (error) {
-    if (error instanceof TypeError && error.message === `Unsafe AI ${field}`) throw error
+  if (unsafeAiString(value)) {
+    if (field === 'model') return REDACTED_MODEL
+    throw new TypeError('Unsafe AI provider')
   }
   if (field === 'provider' && !AI_PROVIDERS.has(value)) {
     throw new TypeError('Unsafe AI provider')
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9._:/ +()-]*$/.test(value)) {
-    throw new TypeError(`Unsafe AI ${field}`)
+    if (field === 'model') return REDACTED_MODEL
+    throw new TypeError('Unsafe AI provider')
   }
   return value
 }

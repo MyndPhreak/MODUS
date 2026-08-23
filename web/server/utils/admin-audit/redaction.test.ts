@@ -64,17 +64,70 @@ describe('admin audit state sanitization', () => {
     ['provider', '2001:db8::1'],
     ['provider', 'https://10.0.0.4/v1'],
     ['provider', 'sk-secret-value'],
-    ['model', '203.0.113.8'],
-    ['model', '[2001:db8::1]'],
-    ['model', 'https://localhost:11434/v1'],
-    ['model', 'token=secret-value'],
-    ['model', 'line-one\nsecret-value'],
   ])('rejects unsafe AI %s content: %s', (field, value) => {
     expect(() => sanitizeAuditState('ai', {
       provider: 'OpenAI',
       model: 'gpt-5',
       [field]: value,
     })).toThrow(`Unsafe AI ${field}`)
+  })
+
+  const embeddedSensitiveValues = [
+    '203.0.113.8',
+    '[2001:db8::1]',
+    'model-10.0.0.4-release',
+    'model-2001:db8::1-release',
+    'https://localhost:11434/v1',
+    'prefix-https://user:password@private.example/v1',
+    'token=secret-value',
+    'line-one\nsecret-value',
+    'model/path/ghp_abcdefghijklmnopqrstuvwxyz123456',
+    'model#github_pat_11AA0abcdefghijklmnopqrstuvwxyz',
+    'AKIAIOSFODNN7EXAMPLE',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl',
+    'Bearer abcdefghijklmnopqrstuvwxyz123456',
+    'Basic dXNlcjpwYXNzd29yZA==',
+    'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+    'AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ1234567',
+    'xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwx',
+    'npm_abcdefghijklmnopqrstuvwxyz1234567890',
+    'aZ9kLm2Pq7Rx4Tv8Wy1Bc6Df0Gh3Jk5Mn9Qr2St7',
+  ]
+
+  it.each(embeddedSensitiveValues)('redacts unsafe model metadata without rejecting mutation: %s', (payload) => {
+    expect(sanitizeAuditState('ai', {
+      provider: 'OpenAI',
+      model: payload,
+    })).toMatchObject({
+      provider: 'OpenAI',
+      model: '[redacted-model]',
+      endpointClassification: 'provider-default',
+    })
+  })
+
+  it.each(embeddedSensitiveValues)('rejects payloads placed in the closed provider field: %s', (payload) => {
+    expect(() => sanitizeAuditState('ai', {
+      provider: payload,
+      model: 'gpt-5',
+    })).toThrow('Unsafe AI provider')
+  })
+
+  it.each(embeddedSensitiveValues)('ignores payloads placed in caller endpoint classification: %s', (payload) => {
+    expect(sanitizeAuditState('ai', {
+      provider: 'OpenAI',
+      model: 'gpt-5',
+      endpointClassification: payload,
+    }).endpointClassification).toBe('provider-default')
+  })
+
+  it.each([
+    'gpt-5',
+    'llama-3.3-70b-versatile',
+    'anthropic/claude-3.5-sonnet',
+    'openai:gpt-4.1-mini',
+    'Qwen2.5-Coder-32B-Instruct',
+  ])('preserves normal model identifier %s', (model) => {
+    expect(sanitizeAuditState('ai', { provider: 'OpenAI', model }).model).toBe(model)
   })
 
   it.each([

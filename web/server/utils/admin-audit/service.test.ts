@@ -1,41 +1,44 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
+import { createEvent } from 'h3'
+import { beforeEach, describe, expect, expectTypeOf, it, vi, type MockInstance } from 'vitest'
+import { drizzle } from '../../../../packages/db/node_modules/drizzle-orm/node-postgres'
+import * as schema from '../../../../packages/db/src/schema'
+import {
+  AdminAuditEventRepository,
+  type AdminAuditEvent,
+  type Database,
+  type NewAdminAuditEvent,
+} from '@modus/db'
+import type { AuditedMutationInput, AuditTransaction } from './types'
+
+const mocks = vi.hoisted(() => ({
+  requireBotAdmin: vi.fn(),
+  getRepos: vi.fn(),
+}))
+
+vi.mock('../session', () => ({ requireBotAdmin: mocks.requireBotAdmin }))
+vi.mock('../db', () => ({ getRepos: mocks.getRepos }))
+
 import { runAuditedMutation } from './service'
-import { createAuditedMutationTestHarness } from './service.test-harness'
-import type { AuditedMutationInput } from './types'
 
-interface TestTransaction {
-  staged: string[]
+const request = new IncomingMessage(new Socket())
+request.headers['x-request-id'] = ' request-123 '
+const event = createEvent(request, new ServerResponse(request))
+
+function auditRow(auditInput: NewAdminAuditEvent): AdminAuditEvent {
+  return {
+    ...auditInput,
+    id: 'audit-1',
+    actorDisplay: auditInput.actorDisplay ?? null,
+    reason: auditInput.reason ?? null,
+    requestId: auditInput.requestId ?? null,
+    createdAt: new Date('2026-08-23T12:00:00.000Z'),
+    reasonRequired: auditInput.reasonRequired ?? false,
+  }
 }
 
-const event = { node: { req: { headers: {} } } }
-
-function createHarness(options: { failAudit?: boolean } = {}) {
-  const committed: string[] = []
-  const trace: string[] = []
-  let inserted: Record<string, unknown> | undefined
-
-  const run = createAuditedMutationTestHarness<TestTransaction>({
-    actor: { userId: 'sealed-actor', actorDisplay: 'Sealed Operator' },
-    requestId: 'request-123',
-    transaction: async (operation) => {
-      const tx: TestTransaction = { staged: [] }
-      const result = await operation(tx)
-      committed.push(...tx.staged)
-      return result
-    },
-    insertAudit: async (tx, auditInput) => {
-      trace.push('audit')
-      if (options.failAudit) throw new Error('audit insert failed')
-      tx.staged.push('audit')
-      inserted = auditInput
-      return { id: 'audit-1' }
-    },
-  })
-
-  return { run, committed, trace, getInserted: () => inserted }
-}
-
-function input<TResult>(mutate: (tx: TestTransaction) => Promise<TResult>) {
+function input<TResult>(mutate: (tx: AuditTransaction) => Promise<TResult>) {
   return {
     event,
     action: 'module.updated',
@@ -51,104 +54,94 @@ function input<TResult>(mutate: (tx: TestTransaction) => Promise<TResult>) {
   }
 }
 
-describe('runAuditedMutation production contract', () => {
+describe('runAuditedMutation sealed production boundary', () => {
+  let db: Database
+  let inserted: NewAdminAuditEvent | undefined
+  let insertSpy: MockInstance<AdminAuditEventRepository['insert']>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    inserted = undefined
+    db = drizzle.mock({ schema })
+    vi.spyOn(db, 'transaction').mockImplementation(async (operation) =>
+      Reflect.apply(operation, undefined, [Object.create(null)]))
+    mocks.requireBotAdmin.mockResolvedValue({
+      userId: 'sealed-actor',
+      actorDisplay: 'Sealed Operator',
+    })
+    mocks.getRepos.mockReturnValue({ db })
+    insertSpy = vi.spyOn(AdminAuditEventRepository.prototype, 'insert')
+      .mockImplementation(async (auditInput) => {
+        inserted = auditInput
+        return auditRow(auditInput)
+      })
+  })
+
   it('exposes only the sealed one-argument production API', () => {
     expectTypeOf(runAuditedMutation).parameters.toEqualTypeOf<[
       AuditedMutationInput<unknown>,
     ]>()
   })
-})
 
-describe('audited mutation internal test harness', () => {
-  it('uses only the sealed actor and request context supplied by its boundary', async () => {
-    const harness = createHarness()
-    await harness.run(input(async (tx) => {
-      tx.staged.push('mutation')
-      return 'done'
-    }))
+  it('authorizes through requireBotAdmin and persists only its sealed actor', async () => {
+    const result = await runAuditedMutation(input(async () => ({ success: true })))
 
-    expect(harness.getInserted()).toMatchObject({
+    expect(mocks.requireBotAdmin).toHaveBeenCalledWith(event)
+    expect(inserted).toMatchObject({
       actorId: 'sealed-actor',
       actorDisplay: 'Sealed Operator',
       requestId: 'request-123',
       reason: 'Routine rollout',
     })
-    expect(JSON.stringify(harness.getInserted())).not.toContain('198.51.100.2')
-    expect(JSON.stringify(harness.getInserted())).not.toContain('caller-override')
+    expect(JSON.stringify(inserted)).not.toContain('caller-override')
+    expect(JSON.stringify(inserted)).not.toContain('198.51.100.2')
+    expect(result).toEqual({ result: { success: true }, auditEventId: 'audit-1' })
   })
 
-  it('rejects a missing required reason before opening a transaction or mutating', async () => {
+  it('runs mutation before audit insertion in the real Drizzle transaction callback', async () => {
     const trace: string[] = []
-    const run = createAuditedMutationTestHarness<TestTransaction>({
-      actor: { userId: 'actor-1' },
-      requestId: null,
-      transaction: async () => {
-        trace.push('transaction')
-        throw new Error('must not run')
-      },
-      insertAudit: async () => ({ id: 'must-not-run' }),
+    insertSpy.mockImplementation(async (auditInput) => {
+      trace.push('audit')
+      return auditRow(auditInput)
     })
 
-    await expect(run({
+    await runAuditedMutation(input(async () => {
+      trace.push('mutation')
+      return 'done'
+    }))
+    expect(trace).toEqual(['mutation', 'audit'])
+  })
+
+  it('rejects required empty reasons before opening persistence transaction', async () => {
+    const transactionSpy = vi.spyOn(db, 'transaction')
+    let mutated = false
+
+    await expect(runAuditedMutation({
       ...input(async () => {
-        trace.push('mutation')
+        mutated = true
         return 'done'
       }),
       before: { enabled: true },
       after: { enabled: false },
       reason: '   ',
     })).rejects.toMatchObject({ statusCode: 400 })
-    expect(trace).toEqual([])
-  })
 
-  it('orders mutation before audit insertion in one transaction callback', async () => {
-    const harness = createHarness()
-    const result = await harness.run(input(async (tx) => {
-      harness.trace.push('mutation')
-      tx.staged.push('mutation')
-      return { success: true }
-    }))
-
-    expect(harness.trace).toEqual(['mutation', 'audit'])
-    expect(harness.committed).toEqual(['mutation', 'audit'])
-    expect(result).toEqual({ result: { success: true }, auditEventId: 'audit-1' })
-  })
-
-  it('propagates audit failure from the shared transaction callback', async () => {
-    const harness = createHarness({ failAudit: true })
-    await expect(harness.run(input(async (tx) => {
-      harness.trace.push('mutation')
-      tx.staged.push('mutation')
-      return 'done'
-    }))).rejects.toThrow('audit insert failed')
-
-    expect(harness.trace).toEqual(['mutation', 'audit'])
-    expect(harness.committed).toEqual([])
-  })
-
-  it('rejects overlong reasons before mutation', async () => {
-    const harness = createHarness()
-    let mutated = false
-    await expect(harness.run({
-      ...input(async () => {
-        mutated = true
-        return 'done'
-      }),
-      reason: 'x'.repeat(1001),
-    })).rejects.toMatchObject({ statusCode: 400 })
+    expect(transactionSpy).not.toHaveBeenCalled()
     expect(mutated).toBe(false)
   })
 
-  it('rejects unsupported resources before mutation', async () => {
-    const harness = createHarness()
-    let mutated = false
-    await expect(harness.run({
-      ...input(async () => {
-        mutated = true
-        return 'done'
-      }),
-      target: { type: 'server-manager' as never, id: 'guild-1' },
-    })).rejects.toThrow('Unsupported audit resource')
-    expect(mutated).toBe(false)
+  it('propagates audit insertion failure from the Drizzle transaction callback', async () => {
+    insertSpy.mockRejectedValue(new Error('audit insert failed'))
+    await expect(runAuditedMutation(input(async () => 'done')))
+      .rejects.toThrow('audit insert failed')
   })
+})
+
+describe('audit service import boundary', () => {
+  it.each(['./service-internal', './service.test-harness'])(
+    'does not expose the actor-injectable %s module',
+    async (specifier) => {
+      await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow()
+    },
+  )
 })

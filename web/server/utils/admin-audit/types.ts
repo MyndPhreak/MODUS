@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { Database, NewAdminAuditEvent } from '@modus/db'
+import type { Database } from '@modus/db'
 
 export const AUDIT_REASON_MAX_LENGTH = 1000
 
@@ -25,22 +25,7 @@ export interface AuditedMutationInput<TResult> {
   mutate: (tx: AuditTransaction) => Promise<TResult>
 }
 
-export type AuditedMutationCommand<TResult, TTransaction> = Omit<
-  AuditedMutationInput<TResult>,
-  'event' | 'mutate'
-> & {
-  mutate: (tx: TTransaction) => Promise<TResult>
-}
-
 export interface AuditedMutationResult<TResult> {
   result: TResult
   auditEventId: string
-}
-
-export interface AuditPersistence<TTransaction> {
-  transaction: <T>(operation: (tx: TTransaction) => Promise<T>) => Promise<T>
-  insertAudit: (
-    tx: TTransaction,
-    input: NewAdminAuditEvent,
-  ) => Promise<{ id: string }>
 }
