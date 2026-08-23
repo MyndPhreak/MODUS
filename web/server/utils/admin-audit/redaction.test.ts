@@ -44,7 +44,7 @@ describe('admin audit state sanitization', () => {
       model: 'model-1',
       apiKey: 'api-key-value',
       baseUrl: 'https://url-user:url-password@private.example/v1?token=token-value',
-      endpointClassification: 'custom',
+      endpointClassification: 'secret-value',
       credentialRotated: true,
       nested: [{ token: 'token-value' }],
     })
@@ -52,11 +52,67 @@ describe('admin audit state sanitization', () => {
     expect(result).toEqual({
       provider: 'OpenAI Compatible',
       model: 'model-1',
-      endpointClassification: 'custom',
+      endpointClassification: 'custom-private',
       credentialPresent: true,
       credentialRotated: true,
     })
     expectNoSecrets(result)
+  })
+
+  it.each([
+    ['provider', '203.0.113.8'],
+    ['provider', '2001:db8::1'],
+    ['provider', 'https://10.0.0.4/v1'],
+    ['provider', 'sk-secret-value'],
+    ['model', '203.0.113.8'],
+    ['model', '[2001:db8::1]'],
+    ['model', 'https://localhost:11434/v1'],
+    ['model', 'token=secret-value'],
+    ['model', 'line-one\nsecret-value'],
+  ])('rejects unsafe AI %s content: %s', (field, value) => {
+    expect(() => sanitizeAuditState('ai', {
+      provider: 'OpenAI',
+      model: 'gpt-5',
+      [field]: value,
+    })).toThrow(`Unsafe AI ${field}`)
+  })
+
+  it.each([
+    ['https://203.0.113.8/v1', 'custom-public'],
+    ['https://10.0.0.4/v1', 'custom-private'],
+    ['http://[2001:db8::1]/v1', 'custom-private'],
+    ['http://[::1]/v1', 'local'],
+    ['http://localhost:11434/v1', 'local'],
+    ['https://public.example/v1/key/secret-value', 'custom-public'],
+    ['https://public.example/v1#token=secret-value', 'custom-public'],
+    ['https://public.example/v1?apiKey=secret-value', 'custom-public'],
+  ])('derives a closed endpoint classification without retaining %s', (baseUrl, classification) => {
+    const result = sanitizeAuditState('ai', {
+      provider: 'OpenAI Compatible',
+      model: 'model-1',
+      baseUrl,
+      endpointClassification: 'secret-value',
+    })
+
+    expect(result.endpointClassification).toBe(classification)
+    expect(JSON.stringify(result)).not.toContain(baseUrl)
+    expect(JSON.stringify(result)).not.toContain('secret-value')
+  })
+
+  it('accepts every closed AI field while dropping caller-provided classification', () => {
+    expect(sanitizeAuditState('ai', {
+      provider: 'Groq',
+      model: 'llama-3.3-70b-versatile',
+      credentialPresent: true,
+      credentialRotated: false,
+      endpointClassification: 'secret-value',
+    })).toEqual({
+      provider: 'Groq',
+      model: 'llama-3.3-70b-versatile',
+      endpointClassification: 'provider-default',
+      credentialPresent: true,
+      credentialRotated: false,
+    })
   })
 
   it('sanitizes nested arrays and credential-bearing URLs in any allowed future value', () => {

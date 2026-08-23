@@ -48,6 +48,15 @@ declare module "#auth-utils" {
 export interface AuthedIdentity {
   /** Discord user ID governing data ownership checks. */
   userId: string;
+  /** Display snapshot sourced only from the sealed OAuth session. */
+  actorDisplay: string | null;
+}
+
+export function sealedSessionIdentity(user: SessionUser): AuthedIdentity {
+  return {
+    userId: user.id,
+    actorDisplay: user.globalName || user.username || null,
+  };
 }
 
 /** Throws 401 when no valid session is present. */
@@ -56,7 +65,7 @@ export async function requireAuthedUserId(
 ): Promise<AuthedIdentity> {
   const session = await getUserSession(event);
   if (session.user?.id) {
-    return { userId: session.user.id };
+    return sealedSessionIdentity(session.user);
   }
   throw createError({
     statusCode: 401,
