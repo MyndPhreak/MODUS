@@ -10,6 +10,12 @@ export interface GiveawayRequirements {
   minServerAgeDays?: number;
 }
 
+export interface GiveawayMember {
+  id: string;
+  displayName: string;
+  username: string | null;
+}
+
 export interface Giveaway {
   id: string;
   channelId: string;
@@ -21,9 +27,10 @@ export interface Giveaway {
   imageUrl: string | null;
   winnerCount: number;
   entrantCount: number;
+  entrants: GiveawayMember[];
   endsAt: string;
   status: "active" | "ended" | "cancelled";
-  winnerIds: string[];
+  winners: GiveawayMember[];
   requirements: GiveawayRequirements;
   source: "slash" | "dashboard";
   createdAt: string;
@@ -104,6 +111,20 @@ export function useGiveaways(guildId: string) {
     }
   };
 
+  const deleteGiveaway = async (id: string) => {
+    actionLoading.value = true;
+    error.value = null;
+    try {
+      await $fetch("/api/giveaways/delete", { method: "POST", body: { guild_id: guildId, id } });
+      await fetchGiveaways();
+    } catch (err: any) {
+      error.value = err?.data?.statusMessage || err?.message || "Failed to delete giveaway";
+      throw err;
+    } finally {
+      actionLoading.value = false;
+    }
+  };
+
   onMounted(async () => {
     loading.value = true;
     await fetchGiveaways();
@@ -119,5 +140,6 @@ export function useGiveaways(guildId: string) {
     createGiveaway,
     updateGiveaway,
     cancelGiveaway,
+    deleteGiveaway,
   };
 }
