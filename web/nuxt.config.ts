@@ -53,6 +53,7 @@ export default defineNuxtConfig({
     r2Bucket: "modus-recordings", // Set via NUXT_R2_BUCKET
     r2Endpoint: "", // Set via NUXT_R2_ENDPOINT (optional override)
     r2PresignTtl: "300", // Set via NUXT_R2_PRESIGN_TTL
+    cloudflareApiToken: "", // Optional R2 analytics bearer token — Set via NUXT_CLOUDFLARE_API_TOKEN
     // ── Postgres ──────────────────────────────────────────────────────────
     // Required for every server-side data endpoint. When unset the endpoints
     // return 503 rather than silently degrading.
