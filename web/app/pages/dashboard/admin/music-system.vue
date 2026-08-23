@@ -47,17 +47,49 @@
         {{ status.enabled ? "Active" : "Disabled" }}
       </UBadge>
       <USwitch
-        v-model="status.enabled"
+        :model-value="status.enabled"
         :loading="updating"
-        @update:model-value="toggle"
+        @update:model-value="(value) => requestToggle(Boolean(value))"
         class="shrink-0"
       />
     </div>
+
+    <!-- Toggle confirmation -->
+    <UModal v-model:open="confirmOpen" :title="confirmTitle">
+      <template #body>
+        <div class="space-y-4 p-1">
+          <p class="text-sm text-gray-400">{{ confirmDescription }}</p>
+          <UFormField
+            label="Reason"
+            :required="pendingEnabled === false"
+            :hint="pendingEnabled === false ? undefined : 'Optional'"
+          >
+            <UTextarea
+              v-model="reason"
+              placeholder="Why is this changing?"
+              class="w-full"
+              :rows="3"
+            />
+          </UFormField>
+        </div>
+        <div class="flex justify-end gap-2 pt-4">
+          <UButton variant="ghost" @click="confirmOpen = false">Cancel</UButton>
+          <UButton
+            :color="pendingEnabled === false ? 'error' : 'primary'"
+            :loading="submitting"
+            :disabled="pendingEnabled === false && !reason.trim()"
+            @click="submitToggle"
+          >
+            {{ pendingEnabled === false ? "Disable" : "Enable" }}
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 
 interface MusicSystemStatus {
   enabled: boolean;
@@ -82,28 +114,61 @@ const fetchStatus = async () => {
   }
 };
 
-const toggle = async (enabled: boolean) => {
+const confirmOpen = ref(false);
+const pendingEnabled = ref(true);
+const reason = ref("");
+const submitting = ref(false);
+
+const confirmTitle = computed(
+  () => `${pendingEnabled.value ? "Enable" : "Disable"} music playback?`,
+);
+const confirmDescription = computed(() =>
+  pendingEnabled.value
+    ? "This re-enables music playback fleet-wide. A reason is optional."
+    : "This disables music playback fleet-wide for every server. A reason is required.",
+);
+
+const requestToggle = (enabled: boolean) => {
+  pendingEnabled.value = enabled;
+  reason.value = "";
+  confirmOpen.value = true;
+};
+
+const submitToggle = async () => {
+  if (pendingEnabled.value === false && !reason.value.trim()) return;
+
+  submitting.value = true;
   updating.value = true;
   try {
-    await $fetch("/api/admin/music-system", {
+    const response = await $fetch<{
+      success: true;
+      auditEventId: string;
+      syncWarning?: string;
+    }>("/api/admin/music-system", {
       method: "PATCH",
-      body: { enabled },
+      body: {
+        enabled: pendingEnabled.value,
+        reason: reason.value.trim() || undefined,
+      },
     });
+    confirmOpen.value = false;
     toast.add({
-      title: "Success",
-      description: `Music system ${enabled ? "enabled" : "disabled"}.`,
-      color: "success",
+      title: response.syncWarning ? "Saved with a warning" : "Success",
+      description:
+        response.syncWarning ??
+        `Music system ${pendingEnabled.value ? "enabled" : "disabled"}.`,
+      color: response.syncWarning ? "warning" : "success",
     });
     await fetchStatus();
   } catch (error) {
     console.error("Error updating music system status:", error);
-    status.value.enabled = !enabled;
     toast.add({
       title: "Error",
       description: "Failed to update the music system switch.",
       color: "error",
     });
   } finally {
+    submitting.value = false;
     updating.value = false;
   }
 };

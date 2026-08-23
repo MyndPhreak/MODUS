@@ -72,13 +72,45 @@
           {{ module.enabled ? "Active" : "Disabled" }}
         </UBadge>
         <USwitch
-          v-model="module.enabled"
+          :model-value="module.enabled"
           :loading="updating === module.$id"
-          @update:model-value="toggleModule(module)"
+          @update:model-value="(value) => requestToggle(module, Boolean(value))"
           class="shrink-0"
         />
       </div>
     </div>
+
+    <!-- Toggle confirmation -->
+    <UModal v-model:open="confirmOpen" :title="confirmTitle">
+      <template #body>
+        <div class="space-y-4 p-1">
+          <p class="text-sm text-gray-400">{{ confirmDescription }}</p>
+          <UFormField
+            label="Reason"
+            :required="pendingEnabled === false"
+            :hint="pendingEnabled === false ? undefined : 'Optional'"
+          >
+            <UTextarea
+              v-model="reason"
+              placeholder="Why is this changing?"
+              class="w-full"
+              :rows="3"
+            />
+          </UFormField>
+        </div>
+        <div class="flex justify-end gap-2 pt-4">
+          <UButton variant="ghost" @click="confirmOpen = false">Cancel</UButton>
+          <UButton
+            :color="pendingEnabled === false ? 'error' : 'primary'"
+            :loading="submitting"
+            :disabled="pendingEnabled === false && !reason.trim()"
+            @click="submitToggle"
+          >
+            {{ pendingEnabled === false ? "Disable" : "Enable" }}
+          </UButton>
+        </div>
+      </template>
+    </UModal>
 
     <!-- Admin Access Info -->
     <div
@@ -104,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import type { ModuleDoc } from "@modus/db";
 import { getModuleDisplay } from "~/utils/module-metadata";
 
@@ -125,27 +157,65 @@ const fetchModules = async () => {
   }
 };
 
-const toggleModule = async (module: ModuleDoc) => {
+const confirmOpen = ref(false);
+const pendingModule = ref<ModuleDoc | null>(null);
+const pendingEnabled = ref(true);
+const reason = ref("");
+const submitting = ref(false);
+
+const confirmTitle = computed(() =>
+  pendingModule.value
+    ? `${pendingEnabled.value ? "Enable" : "Disable"} ${pendingModule.value.name}?`
+    : "",
+);
+const confirmDescription = computed(() =>
+  pendingEnabled.value
+    ? "This re-enables the module fleet-wide for every server. A reason is optional."
+    : "This disables the module fleet-wide for every server. A reason is required.",
+);
+
+const requestToggle = (module: ModuleDoc, enabled: boolean) => {
+  pendingModule.value = module;
+  pendingEnabled.value = enabled;
+  reason.value = "";
+  confirmOpen.value = true;
+};
+
+const submitToggle = async () => {
+  const module = pendingModule.value;
+  if (!module || (pendingEnabled.value === false && !reason.value.trim())) return;
+
+  submitting.value = true;
   updating.value = module.$id;
   try {
-    await $fetch(`/api/modules/${encodeURIComponent(module.name)}`, {
+    const response = await $fetch<{
+      success: true;
+      auditEventId: string;
+      syncWarning?: string;
+    }>(`/api/modules/${encodeURIComponent(module.name)}`, {
       method: "PATCH",
-      body: { enabled: module.enabled },
+      body: {
+        enabled: pendingEnabled.value,
+        reason: reason.value.trim() || undefined,
+      },
     });
+    module.enabled = pendingEnabled.value;
+    confirmOpen.value = false;
     toast.add({
-      title: "Success",
-      description: `Global status for ${module.name} updated.`,
-      color: "success",
+      title: response.syncWarning ? "Saved with a warning" : "Success",
+      description:
+        response.syncWarning ?? `Global status for ${module.name} updated.`,
+      color: response.syncWarning ? "warning" : "success",
     });
   } catch (error) {
     console.error("Error updating module:", error);
-    module.enabled = !module.enabled;
     toast.add({
       title: "Error",
       description: "Failed to update global module status.",
       color: "error",
     });
   } finally {
+    submitting.value = false;
     updating.value = null;
   }
 };

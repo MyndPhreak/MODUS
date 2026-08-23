@@ -22,8 +22,11 @@ function toDoc(row: SystemFlagRow): SystemFlagDoc {
   };
 }
 
+/** Structural executor type so audited mutations can pass a transaction. */
+export type SystemFlagExecutor = Pick<Database, "select" | "insert">;
+
 export class SystemFlagsRepository {
-  constructor(private db: Database) {}
+  constructor(private db: SystemFlagExecutor) {}
 
   async getFlag(key: string): Promise<SystemFlagDoc | null> {
     const rows = await this.db

@@ -11,6 +11,9 @@ export type ModuleDoc = Module & {
   $id: string;
 };
 
+/** Structural executor type so audited mutations can pass a transaction. */
+export type ModuleExecutor = Pick<Database, "select" | "insert" | "update">;
+
 export interface ModuleRegistrationMeta {
   description: string;
   displayName?: string | null;
@@ -25,7 +28,7 @@ function toDoc(row: Module): ModuleDoc {
 }
 
 export class ModuleRepository {
-  constructor(private db: Database) {}
+  constructor(private db: ModuleExecutor) {}
 
   async listEnabled(): Promise<string[]> {
     const rows = await this.db
@@ -33,6 +36,15 @@ export class ModuleRepository {
       .from(modules)
       .where(eq(modules.enabled, true));
     return rows.map((r) => r.name);
+  }
+
+  async getByName(name: string): Promise<ModuleDoc | null> {
+    const rows = await this.db
+      .select()
+      .from(modules)
+      .where(eq(modules.name, name))
+      .limit(1);
+    return rows[0] ? toDoc(rows[0]) : null;
   }
 
   async ensureRegistered(
