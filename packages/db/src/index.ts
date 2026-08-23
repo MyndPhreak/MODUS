@@ -21,4 +21,5 @@ export * from "./repositories/event-announcements";
 export * from "./repositories/module-access";
 export * from "./repositories/music";
 export * from "./repositories/xp";
+export * from "./repositories/system-flags";
 export * from "./rank-cards";

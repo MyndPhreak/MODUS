@@ -164,6 +164,26 @@ export const modules = pgTable(
 export type Module = typeof modules.$inferSelect;
 export type NewModule = typeof modules.$inferInsert;
 
+// ── system_flags ─────────────────────────────────────────────────────────
+// Generic fleet-wide boolean switches, keyed by name. First consumer is the
+// Lavalink health check ("music"), which auto-disables playback when
+// YouTube extraction breaks fleet-wide. A singleton row per key, not a
+// per-guild setting — see docs/superpowers/specs/2026-08-22-lavalink-health-check-design.md.
+export const systemFlags = pgTable("system_flags", {
+  key: text("key").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  // Who/what last changed this and why — e.g. "lavalink-health-check" or
+  // "manual". Lets the dashboard show whether an outage or a person caused
+  // the current state.
+  reason: text("reason"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type SystemFlagRow = typeof systemFlags.$inferSelect;
+export type NewSystemFlagRow = typeof systemFlags.$inferInsert;
+
 // ── servers ───────────────────────────────────────────────────────────────
 // Guild metadata + premium flag. `admin_user_ids` / `dashboard_role_ids` were
 // Appwrite string arrays; preserved as text[] here for GIN-indexable membership.

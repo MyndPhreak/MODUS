@@ -92,6 +92,13 @@
       "when": 1787182124110,
       "tag": "0012_new_hiroim",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787456497303,
+      "tag": "0013_glamorous_serpent_society",
+      "breakpoints": true
     }
   ]
 }
