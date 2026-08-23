@@ -9,7 +9,6 @@ import {
   desc,
   eq,
   gte,
-  ilike,
   inArray,
   lt,
   lte,
@@ -58,12 +57,11 @@ export interface LogSearchPage {
   nextCursorRow: { timestamp: Date; id: string } | null;
 }
 
-function isAfterCursor(row: LogDoc, cursor: NonNullable<LogSearchInput["cursor"]>): boolean {
-  const timestampDifference = row.timestamp.getTime() - cursor.timestamp.getTime();
-  return timestampDifference < 0 || (timestampDifference === 0 && row.$id < cursor.id);
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function finalizeLogSearchPage(rows: LogDoc[], limit: number): LogSearchPage {
+export function finalizeLogSearchPage(rows: LogDoc[], limit: number): LogSearchPage {
   const hasNextPage = rows.length > limit;
   const items = rows.slice(0, limit);
   const last = hasNextPage ? items.at(-1) : undefined;
@@ -73,29 +71,35 @@ function finalizeLogSearchPage(rows: LogDoc[], limit: number): LogSearchPage {
   };
 }
 
-/** Pure reference implementation of the repository's filtering and ordering
- * contract. It keeps cursor semantics deterministic without a live database. */
-export function applyLogSearchContract(rows: LogDoc[], input: LogSearchInput): LogSearchPage {
-  const filtered = rows.filter((row) => {
-    if (input.search && !row.message.toLocaleLowerCase().includes(input.search.toLocaleLowerCase())) return false;
-    if (input.level && row.level !== input.level) return false;
-    if (input.scope === "guild" && row.guildId !== input.guildId) return false;
-    if (input.shardId !== null && row.shardId !== input.shardId) return false;
-    if (input.source && row.source !== input.source) return false;
-    if (input.from && row.timestamp < input.from) return false;
-    if (input.to && row.timestamp > input.to) return false;
-    if (input.cursor && !isAfterCursor(row, input.cursor)) return false;
-    return true;
-  });
+export function buildLogSearchQuery(db: Database, input: LogSearchInput) {
+  const conditions: SQL[] = [];
+  if (input.search) {
+    conditions.push(
+      sql`${logs.message} ILIKE ${`%${escapeLikePattern(input.search)}%`} ESCAPE '\\'`,
+    );
+  }
+  if (input.level) conditions.push(eq(logs.level, input.level));
+  if (input.scope === "guild" && input.guildId) conditions.push(eq(logs.guildId, input.guildId));
+  if (input.shardId !== null) conditions.push(eq(logs.shardId, input.shardId));
+  if (input.source) conditions.push(eq(logs.source, input.source));
+  if (input.from) conditions.push(gte(logs.timestamp, input.from));
+  if (input.to) conditions.push(lte(logs.timestamp, input.to));
+  if (input.cursor) {
+    conditions.push(or(
+      lt(logs.timestamp, input.cursor.timestamp),
+      and(
+        eq(logs.timestamp, input.cursor.timestamp),
+        lt(logs.id, input.cursor.id),
+      ),
+    )!);
+  }
 
-  filtered.sort((left, right) => {
-    const timestampDifference = right.timestamp.getTime() - left.timestamp.getTime();
-    if (timestampDifference !== 0) return timestampDifference;
-    if (left.$id === right.$id) return 0;
-    return left.$id > right.$id ? -1 : 1;
-  });
-
-  return finalizeLogSearchPage(filtered.slice(0, input.limit + 1), input.limit);
+  return db
+    .select()
+    .from(logs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(logs.timestamp), desc(logs.id))
+    .limit(input.limit + 1);
 }
 
 export class LogRepository {
@@ -141,30 +145,7 @@ export class LogRepository {
   }
 
   async searchPage(input: LogSearchInput): Promise<LogSearchPage> {
-    const conditions: SQL[] = [];
-    if (input.search) conditions.push(ilike(logs.message, `%${input.search}%`));
-    if (input.level) conditions.push(eq(logs.level, input.level));
-    if (input.scope === "guild" && input.guildId) conditions.push(eq(logs.guildId, input.guildId));
-    if (input.shardId !== null) conditions.push(eq(logs.shardId, input.shardId));
-    if (input.source) conditions.push(eq(logs.source, input.source));
-    if (input.from) conditions.push(gte(logs.timestamp, input.from));
-    if (input.to) conditions.push(lte(logs.timestamp, input.to));
-    if (input.cursor) {
-      conditions.push(or(
-        lt(logs.timestamp, input.cursor.timestamp),
-        and(
-          eq(logs.timestamp, input.cursor.timestamp),
-          lt(logs.id, input.cursor.id),
-        ),
-      )!);
-    }
-
-    const rows = await this.db
-      .select()
-      .from(logs)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(logs.timestamp), desc(logs.id))
-      .limit(input.limit + 1);
+    const rows = await buildLogSearchQuery(this.db, input);
 
     return finalizeLogSearchPage(rows.map(toDoc), input.limit);
   }
