@@ -101,6 +101,14 @@ export class LavalinkHealthCheckWorker {
     }
 
     this.recoveryDmSent = false;
+
+    const { enabled: enabledBeforeThisTick } = await this.db.isMusicEnabled();
+    if (!enabledBeforeThisTick) {
+      // Already disabled — don't accumulate failures or re-DM every tick.
+      // Nothing to count until a human re-enables it from the dashboard.
+      return;
+    }
+
     this.consecutiveFailures += 1;
     this.logger.warn(
       `Lavalink health check failed (${this.consecutiveFailures}/${CONSECUTIVE_FAILURES_TO_DISABLE} consecutive)`,
@@ -109,9 +117,6 @@ export class LavalinkHealthCheckWorker {
     );
 
     if (this.consecutiveFailures < CONSECUTIVE_FAILURES_TO_DISABLE) return;
-
-    const { enabled } = await this.db.isMusicEnabled();
-    if (!enabled) return; // already disabled — don't re-disable or re-DM every tick
 
     await this.db.setMusicEnabled(false, DISABLE_REASON);
     this.consecutiveFailures = 0;

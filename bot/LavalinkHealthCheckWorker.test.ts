@@ -217,4 +217,40 @@ describe("LavalinkHealthCheckWorker", () => {
     expect(db.calls).toHaveLength(3);
     expect(db.calls[2]).toEqual({ enabled: false, reason: "lavalink-health-check" });
   });
+
+  it("does not re-disable on a single failed tick after a long outage plus manual re-enable", async () => {
+    process.env.BOT_ADMIN_IDS = "admin-1";
+    // 2 failures to disable, then 3 more failures while still disabled (simulating
+    // an outage that continues for many more 5-minute ticks after the auto-disable),
+    // then a manual re-enable, then 1 failure (must not re-disable), then a 2nd
+    // fresh consecutive failure (must re-disable).
+    const runtime = makeRuntime([failure, failure, failure, failure, failure, failure, failure]);
+    const db = makeDb();
+    const worker = new LavalinkHealthCheckWorker(makeClient([]), runtime, db, logger());
+
+    await worker.runOnce(); // fail (1/2)
+    await worker.runOnce(); // fail (2/2) -> disables
+    expect(db.calls).toHaveLength(1);
+
+    // Outage continues for 3 more ticks while music is already disabled. None
+    // of these should cause another setMusicEnabled call, and — this is the
+    // crux of the bug — they must not leave consecutiveFailures accumulated
+    // past what matters once a human re-enables the flag.
+    await worker.runOnce();
+    await worker.runOnce();
+    await worker.runOnce();
+    expect(db.calls).toHaveLength(1); // still just the one disable call
+
+    // A bot admin manually re-enables from the dashboard, bypassing the
+    // worker entirely, well after the outage has been ongoing.
+    await db.setMusicEnabled(true, "manual");
+    expect(db.calls).toHaveLength(2);
+
+    await worker.runOnce(); // one failed tick right after re-enable
+    expect(db.calls).toHaveLength(2); // must NOT re-disable on a single failed tick
+
+    await worker.runOnce(); // second consecutive failure since re-enable -> re-disables
+    expect(db.calls).toHaveLength(3);
+    expect(db.calls[2]).toEqual({ enabled: false, reason: "lavalink-health-check" });
+  });
 });
