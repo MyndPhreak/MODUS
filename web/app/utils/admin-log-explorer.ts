@@ -146,7 +146,26 @@ export function clearLogView(state: AdminLogExplorerState): AdminLogExplorerStat
 }
 
 export function refreshLogHistory(state: AdminLogExplorerState): AdminLogExplorerState {
-  return { ...state, pending: [], pendingCount: 0, nextCursor: null }
+  return { ...state, nextCursor: null }
+}
+
+interface LogHistoryError {
+  statusCode?: number
+  status?: number
+  data?: { statusMessage?: unknown; message?: unknown }
+  response?: { status?: number; _data?: { statusMessage?: unknown; message?: unknown } }
+}
+
+export function formatLogHistoryError(error: unknown): string {
+  const candidate = error && typeof error === 'object' ? error as LogHistoryError : {}
+  const status = candidate.statusCode ?? candidate.status ?? candidate.response?.status
+  if (status === 400) {
+    const data = candidate.data ?? candidate.response?._data
+    const message = data?.statusMessage ?? data?.message
+    if (typeof message === 'string' && message.trim()) return message.trim()
+    return 'One or more log filters are invalid. Check the filter values and try again.'
+  }
+  return 'Retained logs could not be loaded. Refresh to try again.'
 }
 
 export function applyLiveLog(state: AdminLogExplorerState, log: ClientLogDoc): AdminLogExplorerState {

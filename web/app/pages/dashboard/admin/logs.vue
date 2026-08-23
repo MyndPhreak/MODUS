@@ -7,17 +7,17 @@
 
     <section class="glass-card rounded-2xl border border-white/8 p-4" aria-label="Log search filters">
       <div class="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_10rem_10rem_auto]">
-        <UInput v-model="filters.search" icon="i-lucide-search" placeholder="Search log messages" aria-label="Search log messages" />
-        <USelect v-model="filters.level" :items="levelItems" aria-label="Log level" />
-        <USelect v-model="filters.scope" :items="scopeItems" aria-label="Log scope" />
+        <UInput v-model="filters.search" name="log-search" autocomplete="off" icon="i-lucide-search" placeholder="Search log messages" aria-label="Search log messages" />
+        <USelect v-model="filters.level" name="log-level" :items="levelItems" aria-label="Log level" />
+        <USelect v-model="filters.scope" name="log-scope" :items="scopeItems" aria-label="Log scope" />
         <UButton :icon="filtersOpen ? 'i-lucide-chevron-up' : 'i-lucide-sliders-horizontal'" color="neutral" variant="soft" :aria-expanded="filtersOpen" aria-controls="advanced-log-filters" @click="filtersOpen = !filtersOpen">More filters</UButton>
       </div>
       <div v-if="filtersOpen" id="advanced-log-filters" class="mt-3 grid gap-3 border-t border-white/8 pt-3 sm:grid-cols-2 xl:grid-cols-5">
-        <UInput v-model="filters.guildId" placeholder="Guild ID" aria-label="Guild ID" inputmode="numeric" />
-        <UInput v-model="filters.shardId" placeholder="Shard ID" aria-label="Shard ID" inputmode="numeric" />
-        <UInput v-model="filters.source" placeholder="Source" aria-label="Log source" />
-        <UInput v-model="filters.from" type="datetime-local" aria-label="Logs from" />
-        <UInput v-model="filters.to" type="datetime-local" aria-label="Logs to" />
+        <UInput v-model="filters.guildId" name="log-guild-id" autocomplete="off" placeholder="Guild ID" aria-label="Guild ID" inputmode="numeric" />
+        <UInput v-model="filters.shardId" name="log-shard-id" autocomplete="off" placeholder="Shard ID" aria-label="Shard ID" inputmode="numeric" />
+        <UInput v-model="filters.source" name="log-source" autocomplete="off" placeholder="Source" aria-label="Log source" />
+        <UInput v-model="filters.from" name="log-from" autocomplete="off" type="datetime-local" aria-label="Logs from" />
+        <UInput v-model="filters.to" name="log-to" autocomplete="off" type="datetime-local" aria-label="Logs to" />
       </div>
     </section>
 
@@ -55,6 +55,7 @@ import {
   createLogEventStream,
   createRouteSyncCoordinator,
   historyQuery,
+  formatLogHistoryError,
   matchesLogFilters,
   refreshLogHistory,
   resumeExplorerView,
@@ -102,7 +103,7 @@ async function fetchHistory(append = false, querySnapshot = historyQuery(filters
     state.value = applyCoordinatedHistoryPage(historyCoordinator, request, state.value, page.items, page.nextCursor)
   } catch (error) {
     if (historyCoordinator.isCurrent(request.id) && !(error instanceof DOMException && error.name === 'AbortError')) {
-      historyError.value = 'Retained logs could not be loaded. Refresh to try again.'
+      historyError.value = formatLogHistoryError(error)
     }
   } finally {
     if (historyCoordinator.isCurrent(request.id)) {

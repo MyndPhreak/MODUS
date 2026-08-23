@@ -9,6 +9,7 @@ import {
   createHistoryCoordinator,
   createLogEventStream,
   createRouteSyncCoordinator,
+  formatLogHistoryError,
   historyQuery,
   localDateTimeToUtc,
   matchesLogFilters,
@@ -170,9 +171,29 @@ describe('admin log explorer history orchestration', () => {
     expect(clearLogView(state)).toMatchObject({ visible: [], pending: [], pendingCount: 0, nextCursor: null, liveIds: [] })
   })
 
-  it('refresh resets pagination and pending live entries', () => {
+  it('refresh preserves paused live entries and resume merges them without duplicates', () => {
     const state = { ...createAdminLogExplorerState(), pending: [log('pending', '2026-08-23T10:01:00Z')], pendingCount: 1, nextCursor: 'older' }
-    expect(refreshLogHistory(state)).toMatchObject({ pending: [], pendingCount: 0, nextCursor: null })
+    const refreshed = refreshLogHistory(state)
+    const withHistory = replaceHistoryPage(refreshed, [log('pending', '2026-08-23T10:01:00Z'), log('history', '2026-08-23T10:00:00Z')], null)
+    const resumed = resumeExplorerLogs(withHistory)
+
+    expect(refreshed).toMatchObject({ pending: state.pending, pendingCount: 1, nextCursor: null })
+    expect(resumed.visible.map(item => item.$id)).toEqual(['pending', 'history'])
+    expect(resumed).toMatchObject({ pending: [], pendingCount: 0, paused: false })
+  })
+})
+
+describe('admin log explorer errors', () => {
+  it('shows actionable API validation feedback for invalid filters', () => {
+    expect(formatLogHistoryError({ statusCode: 400, data: { statusMessage: 'Shard ID must be a non-negative integer' } })).toBe(
+      'Shard ID must be a non-negative integer',
+    )
+  })
+
+  it('keeps server failures sanitized', () => {
+    expect(formatLogHistoryError({ statusCode: 500, data: { statusMessage: 'password=secret' } })).toBe(
+      'Retained logs could not be loaded. Refresh to try again.',
+    )
   })
 })
 
