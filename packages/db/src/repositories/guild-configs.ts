@@ -32,8 +32,11 @@ function toDoc(row: GuildConfig): GuildConfigDoc {
   };
 }
 
+/** Structural executor type so audited mutations can pass a transaction. */
+export type GuildConfigExecutor = Pick<Database, "select" | "insert" | "delete">;
+
 export class GuildConfigRepository {
-  constructor(private db: Database) {}
+  constructor(private db: GuildConfigExecutor) {}
 
   private async findOne(
     guildId: string,

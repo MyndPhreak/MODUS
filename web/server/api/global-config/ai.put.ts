@@ -3,38 +3,39 @@
  *
  * Admin-only. Writes the sentinel `guild_configs` row for global AI
  * defaults. Body is the full settings object; an empty object effectively
- * clears the override.
+ * clears the override. Provider changes require a reason; model-only
+ * changes do not. Every change is persisted to the audit trail (see
+ * server/utils/admin-audit) with the API key itself never recorded.
  */
+import { GuildConfigRepository } from "@modus/db";
+import type { H3Event } from "h3";
 import { getRepos } from "../../utils/db";
-import { requireBotAdmin } from "../../utils/session";
+import {
+  createAiConfigRouteHandler,
+  type AiConfigRepository,
+  type GlobalAiConfig,
+} from "../../utils/admin-audit/admin-mutations";
 
-export default defineEventHandler(async (event) => {
-  await requireBotAdmin(event);
-
-  const body = await readBody<Record<string, any>>(event);
-  if (!body || typeof body !== "object") {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Body must be a JSON object with the global AI config.",
-    });
-  }
-
-  const repos = getRepos();
-  if (!repos) {
-    throw createError({
-      statusCode: 503,
-      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
-    });
-  }
-
-  try {
-    await repos.guildConfigs.setGlobalAIConfig(body);
-    return { success: true };
-  } catch (error: any) {
-    console.error("[Global AI Config] write failed:", error?.message || error);
-    throw createError({
-      statusCode: 500,
-      statusMessage: "Failed to save global AI config.",
-    });
-  }
+const handler = createAiConfigRouteHandler<H3Event>({
+  parseBody: (event) => readBody(event),
+  getRepository: (): AiConfigRepository | null => {
+    const repos = getRepos();
+    if (!repos) return null;
+    return {
+      getConfig: async () =>
+        (await repos.guildConfigs.getGlobalAIConfig()) as GlobalAiConfig | null,
+      setConfig: (tx, config) =>
+        new GuildConfigRepository(tx).setGlobalAIConfig(config),
+    };
+  },
+  createHttpError: (statusCode, statusMessage) => createError({
+    statusCode,
+    statusMessage,
+  }),
+  logError: (error) => {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    console.error(`[Global AI Config] write failed (${errorName}).`);
+  },
 });
+
+export default defineEventHandler(handler);

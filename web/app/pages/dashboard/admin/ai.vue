@@ -104,17 +104,54 @@
         <UButton
           icon="i-heroicons-check"
           :loading="savingGlobalAI"
-          @click="saveGlobalAI"
+          @click="requestSave"
         >
           Save Settings
         </UButton>
       </div>
     </div>
+
+    <!-- Save confirmation -->
+    <UModal v-model:open="confirmOpen" title="Save Global AI Settings?">
+      <template #body>
+        <div class="space-y-4 p-1">
+          <p class="text-sm text-gray-400">
+            {{
+              providerChanged
+                ? "You're changing the default provider. A reason is required."
+                : "A reason is optional for this change."
+            }}
+          </p>
+          <UFormField
+            label="Reason"
+            :required="providerChanged"
+            :hint="providerChanged ? undefined : 'Optional'"
+          >
+            <UTextarea
+              v-model="reason"
+              placeholder="Why is this changing?"
+              class="w-full"
+              :rows="3"
+            />
+          </UFormField>
+        </div>
+        <div class="flex justify-end gap-2 pt-4">
+          <UButton variant="ghost" @click="confirmOpen = false">Cancel</UButton>
+          <UButton
+            :loading="savingGlobalAI"
+            :disabled="providerChanged && !reason.trim()"
+            @click="saveGlobalAI"
+          >
+            Save
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 
 const toast = useToast();
 
@@ -124,7 +161,13 @@ const globalAI = ref({
   aiModel: "llama-3.3-70b-versatile",
   aiBaseUrl: "",
 });
+const savedProvider = ref(globalAI.value.aiProvider);
 const savingGlobalAI = ref(false);
+const confirmOpen = ref(false);
+const reason = ref("");
+const providerChanged = computed(
+  () => globalAI.value.aiProvider !== savedProvider.value,
+);
 const globalAIModels = ref<string[]>([
   "llama-3.3-70b-versatile",
   "llama-3.1-8b-instant",
@@ -181,6 +224,7 @@ const loadGlobalAI = async () => {
     const saved = await $fetch<Record<string, any>>("/api/global-config/ai");
     if (saved && Object.keys(saved).length > 0) {
       globalAI.value = { ...globalAI.value, ...saved };
+      savedProvider.value = globalAI.value.aiProvider;
       if (globalAI.value.aiApiKey) await fetchGlobalAIModels();
     }
   } catch (error) {
@@ -188,13 +232,22 @@ const loadGlobalAI = async () => {
   }
 };
 
+const requestSave = () => {
+  reason.value = "";
+  confirmOpen.value = true;
+};
+
 const saveGlobalAI = async () => {
+  if (providerChanged.value && !reason.value.trim()) return;
+
   savingGlobalAI.value = true;
   try {
     await $fetch("/api/global-config/ai", {
       method: "PUT",
-      body: { ...globalAI.value },
+      body: { ...globalAI.value, reason: reason.value.trim() || undefined },
     });
+    savedProvider.value = globalAI.value.aiProvider;
+    confirmOpen.value = false;
     toast.add({
       title: "Saved",
       description: "Global AI settings updated.",

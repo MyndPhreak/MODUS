@@ -38,8 +38,11 @@ function toDoc(row: Server): ServerDoc {
   };
 }
 
+/** Structural executor type so audited mutations can pass a transaction. */
+export type ServerExecutor = Pick<Database, "select" | "insert" | "update" | "delete">;
+
 export class ServerRepository {
-  constructor(private db: Database) {}
+  constructor(private db: ServerExecutor) {}
 
   async listAll(): Promise<ServerDoc[]> {
     const rows = await this.db.select().from(servers);

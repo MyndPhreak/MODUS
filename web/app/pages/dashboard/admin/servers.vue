@@ -73,6 +73,36 @@
         :items-per-page="limit"
       />
     </div>
+
+    <!-- Premium change confirmation -->
+    <UModal v-model:open="confirmOpen" :title="confirmTitle">
+      <template #body>
+        <div class="space-y-4 p-1">
+          <p class="text-sm text-gray-400">
+            Every premium change requires a reason for the audit trail.
+          </p>
+          <UFormField label="Reason" required>
+            <UTextarea
+              v-model="premiumReason"
+              placeholder="Why is this changing?"
+              class="w-full"
+              :rows="3"
+            />
+          </UFormField>
+        </div>
+        <div class="flex justify-end gap-2 pt-4">
+          <UButton variant="ghost" @click="confirmOpen = false">Cancel</UButton>
+          <UButton
+            color="warning"
+            :loading="updatingPremium === pendingServer?.$id"
+            :disabled="!premiumReason.trim()"
+            @click="submitPremiumToggle"
+          >
+            {{ pendingPremium ? "Enable Premium" : "Remove Premium" }}
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -233,7 +263,7 @@ const columns: TableColumn<ServerRow>[] = [
     cell: ({ row }) =>
       h(USwitchEl, {
         modelValue: row.original.premium === true,
-        "onUpdate:modelValue": (v: boolean) => togglePremium(row.original, v),
+        "onUpdate:modelValue": (v: boolean) => requestPremiumToggle(row.original, Boolean(v)),
         loading: updatingPremium.value === row.original.$id,
         color: "warning",
         "aria-label": `${row.original.premium ? "Disable" : "Enable"} premium for ${row.original.name}`,
@@ -288,18 +318,50 @@ watch([statusFilter, premiumOnly], () => {
 
 watch(page, () => fetchServers());
 
-const togglePremium = async (server: ServerRow, premium: boolean) => {
+const confirmOpen = ref(false);
+const pendingServer = ref<ServerRow | null>(null);
+const pendingPremium = ref(false);
+const premiumReason = ref("");
+
+const confirmTitle = computed(() =>
+  pendingServer.value
+    ? `${pendingPremium.value ? "Enable" : "Remove"} premium for ${pendingServer.value.name}?`
+    : "",
+);
+
+const requestPremiumToggle = (server: ServerRow, premium: boolean) => {
+  pendingServer.value = server;
+  pendingPremium.value = premium;
+  premiumReason.value = "";
+  confirmOpen.value = true;
+};
+
+const submitPremiumToggle = async () => {
+  const server = pendingServer.value;
+  if (!server || !premiumReason.value.trim()) return;
+
   updatingPremium.value = server.$id;
   try {
-    await $fetch(
-      `/api/admin/servers/${encodeURIComponent(server.guild_id)}/premium`,
-      { method: "PATCH", body: { premium } },
-    );
-    server.premium = premium;
+    const response = await $fetch<{
+      success: true;
+      auditEventId: string;
+      syncWarning?: string;
+    }>(`/api/admin/servers/${encodeURIComponent(server.guild_id)}/premium`, {
+      method: "PATCH",
+      body: { premium: pendingPremium.value, reason: premiumReason.value.trim() },
+    });
+    server.premium = pendingPremium.value;
+    confirmOpen.value = false;
     toast.add({
-      title: premium ? "Premium Enabled" : "Premium Removed",
-      description: `${server.name} is now ${premium ? "premium" : "standard"}.`,
-      color: premium ? "warning" : "neutral",
+      title: response.syncWarning
+        ? "Saved with a warning"
+        : pendingPremium.value
+          ? "Premium Enabled"
+          : "Premium Removed",
+      description:
+        response.syncWarning ??
+        `${server.name} is now ${pendingPremium.value ? "premium" : "standard"}.`,
+      color: response.syncWarning ? "warning" : pendingPremium.value ? "warning" : "neutral",
     });
   } catch (error) {
     console.error("Error toggling premium:", error);

@@ -1,5 +1,5 @@
 import { runAuditedMutation } from './service'
-import type { AuditedMutationInput, AuditResource, AuditTransaction } from './types'
+import type { AuditedMutationInput, AuditResource, AuditState, AuditTransaction } from './types'
 
 interface RouteError {
   statusCode: number
@@ -20,6 +20,8 @@ export interface EnabledToggleResult {
 export interface EnabledToggleRouteDependencies<Event> {
   resource: AuditResource
   action: string
+  /** Boolean field name in both the request body and the audit before/after snapshots. */
+  stateKey?: 'enabled' | 'premium'
   getTargetId: (event: Event) => string
   parseBody: (event: Event) => Promise<unknown>
   getRepository: (event: Event) => EnabledToggleRepository | null
@@ -40,14 +42,18 @@ function isRouteError(error: unknown): error is RouteError {
 
 function parseToggleBody(
   raw: unknown,
+  stateKey: string,
   createHttpError: (statusCode: number, statusMessage: string) => unknown,
-): { enabled: boolean; reason: string | null } {
+): { value: boolean; reason: string | null } {
   const body = raw as Record<string, unknown> | null | undefined
-  if (typeof body?.enabled !== 'boolean') {
-    throw createHttpError(400, 'Body must include { enabled: boolean }.')
+  const value = body?.[stateKey]
+  if (typeof value !== 'boolean') {
+    throw createHttpError(400, `Body must include { ${stateKey}: boolean }.`)
   }
-  const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason : null
-  return { enabled: body.enabled, reason }
+  const reason = typeof body?.reason === 'string' && (body.reason as string).trim()
+    ? (body.reason as string)
+    : null
+  return { value, reason }
 }
 
 export function createEnabledToggleRouteHandler<Event>(
@@ -55,6 +61,7 @@ export function createEnabledToggleRouteHandler<Event>(
 ) {
   const createHttpError = deps.createHttpError ?? defaultHttpError
   const mutate = deps.mutate ?? runAuditedMutation
+  const stateKey = deps.stateKey ?? 'enabled'
 
   return async (event: Event): Promise<EnabledToggleResult> => {
     const targetId = deps.getTargetId(event)
@@ -67,9 +74,9 @@ export function createEnabledToggleRouteHandler<Event>(
       throw createHttpError(503, 'Database unavailable (NUXT_DATABASE_URL not set).')
     }
 
-    const body = parseToggleBody(await deps.parseBody(event), createHttpError)
-    const before = { enabled: await repository.getEnabled() }
-    const after = { enabled: body.enabled }
+    const body = parseToggleBody(await deps.parseBody(event), stateKey, createHttpError)
+    const before = { [stateKey]: await repository.getEnabled() }
+    const after = { [stateKey]: body.value }
 
     let auditEventId: string
     try {
@@ -80,7 +87,7 @@ export function createEnabledToggleRouteHandler<Event>(
         before,
         after,
         reason: body.reason,
-        mutate: (tx) => repository.setEnabled(tx, body.enabled, body.reason ?? 'manual'),
+        mutate: (tx) => repository.setEnabled(tx, body.value, body.reason ?? 'manual'),
       } as AuditedMutationInput<unknown>)
       auditEventId = result.auditEventId
     } catch (error) {
@@ -100,6 +107,95 @@ export function createEnabledToggleRouteHandler<Event>(
           syncWarning: 'The change was saved, but fleet sync may be delayed.',
         }
       }
+    }
+
+    return { success: true, auditEventId }
+  }
+}
+
+export interface GlobalAiConfig {
+  aiProvider?: string
+  aiApiKey?: string
+  aiModel?: string
+  aiBaseUrl?: string
+}
+
+export interface AiConfigRepository {
+  getConfig(): Promise<GlobalAiConfig | null>
+  setConfig(tx: AuditTransaction, config: GlobalAiConfig): Promise<void>
+}
+
+export interface AiConfigRouteDependencies<Event> {
+  parseBody: (event: Event) => Promise<unknown>
+  getRepository: (event: Event) => AiConfigRepository | null
+  logError: (error: unknown) => void
+  createHttpError?: (statusCode: number, statusMessage: string) => unknown
+  mutate?: typeof runAuditedMutation
+}
+
+function parseAiConfigBody(
+  raw: unknown,
+  createHttpError: (statusCode: number, statusMessage: string) => unknown,
+): { config: GlobalAiConfig; reason: string | null } {
+  const body = raw as Record<string, unknown> | null | undefined
+  if (!body || typeof body !== 'object') {
+    throw createHttpError(400, 'Body must be a JSON object with the global AI config.')
+  }
+  const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason : null
+  return {
+    config: {
+      aiProvider: typeof body.aiProvider === 'string' ? body.aiProvider : undefined,
+      aiApiKey: typeof body.aiApiKey === 'string' ? body.aiApiKey : undefined,
+      aiModel: typeof body.aiModel === 'string' ? body.aiModel : undefined,
+      aiBaseUrl: typeof body.aiBaseUrl === 'string' ? body.aiBaseUrl : undefined,
+    },
+    reason,
+  }
+}
+
+/** Maps the wire config shape to the safe audit-state field names redaction.ts expects. */
+function toAiAuditState(config: GlobalAiConfig | null, rotated: boolean): AuditState {
+  return {
+    provider: config?.aiProvider,
+    model: config?.aiModel,
+    baseUrl: config?.aiBaseUrl,
+    credentialPresent: Boolean(config?.aiApiKey),
+    credentialRotated: rotated,
+  }
+}
+
+export function createAiConfigRouteHandler<Event>(
+  deps: AiConfigRouteDependencies<Event>,
+) {
+  const createHttpError = deps.createHttpError ?? defaultHttpError
+  const mutate = deps.mutate ?? runAuditedMutation
+
+  return async (event: Event): Promise<EnabledToggleResult> => {
+    const repository = deps.getRepository(event)
+    if (!repository) {
+      throw createHttpError(503, 'Database unavailable (NUXT_DATABASE_URL not set).')
+    }
+
+    const { config, reason } = parseAiConfigBody(await deps.parseBody(event), createHttpError)
+    const previous = await repository.getConfig()
+    const rotated = Boolean(config.aiApiKey) && config.aiApiKey !== previous?.aiApiKey
+
+    let auditEventId: string
+    try {
+      const result = await mutate({
+        event,
+        action: 'ai.updated',
+        target: { type: 'ai', id: 'global' },
+        before: toAiAuditState(previous, false),
+        after: toAiAuditState(config, rotated),
+        reason,
+        mutate: (tx) => repository.setConfig(tx, config),
+      } as AuditedMutationInput<unknown>)
+      auditEventId = result.auditEventId
+    } catch (error) {
+      if (isRouteError(error)) throw error
+      deps.logError(error)
+      throw createHttpError(500, 'Failed to save global AI config.')
     }
 
     return { success: true, auditEventId }

@@ -3,48 +3,40 @@
  *
  * Admin-only. Toggles the `premium` flag on a server. This is the only
  * `servers` column the admin dashboard mutates today, so a scoped
- * endpoint is clearer than a generic PATCH.
+ * endpoint is clearer than a generic PATCH. Every transition — granting
+ * or revoking — requires a reason and is persisted to the audit trail
+ * (see server/utils/admin-audit).
  *
- * Body: { premium: boolean }
+ * Body: { premium: boolean, reason: string }
  */
+import { ServerRepository } from "@modus/db";
+import type { H3Event } from "h3";
 import { getRepos } from "../../../../utils/db";
-import { requireBotAdmin } from "../../../../utils/session";
+import { createEnabledToggleRouteHandler } from "../../../../utils/admin-audit/admin-mutations";
 
-export default defineEventHandler(async (event) => {
-  await requireBotAdmin(event);
-
-  const guildId = getRouterParam(event, "guild_id");
-  if (!guildId) {
-    throw createError({ statusCode: 400, statusMessage: "Missing guild_id" });
-  }
-
-  const body = await readBody(event);
-  if (typeof body?.premium !== "boolean") {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Body must include { premium: boolean }.",
-    });
-  }
-
-  const repos = getRepos();
-  if (!repos) {
-    throw createError({
-      statusCode: 503,
-      statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
-    });
-  }
-
-  try {
-    await repos.servers.setPremium(guildId, body.premium);
-    return { success: true };
-  } catch (error: any) {
-    console.error(
-      `[Admin Servers API] setPremium(${guildId}) failed:`,
-      error?.message || error,
-    );
-    throw createError({
-      statusCode: 500,
-      statusMessage: "Failed to update premium flag.",
-    });
-  }
+const handler = createEnabledToggleRouteHandler<H3Event>({
+  resource: "premium",
+  action: "premium.updated",
+  stateKey: "premium",
+  getTargetId: (event) => getRouterParam(event, "guild_id") ?? "",
+  parseBody: (event) => readBody(event),
+  getRepository: (event) => {
+    const repos = getRepos();
+    if (!repos) return null;
+    const guildId = getRouterParam(event, "guild_id")!;
+    return {
+      getEnabled: () => repos.servers.isPremium(guildId),
+      setEnabled: (tx, premium) => new ServerRepository(tx).setPremium(guildId, premium),
+    };
+  },
+  createHttpError: (statusCode, statusMessage) => createError({
+    statusCode,
+    statusMessage,
+  }),
+  logError: (error) => {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    console.error(`[Admin Servers API] setPremium failed (${errorName}).`);
+  },
 });
+
+export default defineEventHandler(handler);
