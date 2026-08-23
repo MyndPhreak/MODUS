@@ -43,6 +43,7 @@ const activeTab = computed(() => {
   if (path.includes("/dashboard/admin/ai")) return "ai";
   if (path.includes("/dashboard/admin/servers")) return "servers";
   if (path.includes("/dashboard/admin/logs")) return "logs";
+  if (path.includes("/dashboard/admin/music-system")) return "music-system";
   return "modules";
 });
 
@@ -53,6 +54,12 @@ const sidebarTabs = [
     label: "Global Modules",
     icon: "i-heroicons-squares-2x2",
     to: "/dashboard/admin/modules",
+  },
+  {
+    id: "music-system",
+    label: "Music System",
+    icon: "i-heroicons-musical-note",
+    to: "/dashboard/admin/music-system",
   },
   {
     id: "ai",
