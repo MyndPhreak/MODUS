@@ -13,14 +13,17 @@ export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyRes
   const requiredDependencyKeys = new Set(input.requiredDependencyKeys)
 
   for (const dependency of input.dependencies) {
-    if (dependency.status !== 'unhealthy' || !requiredDependencyKeys.has(dependency.key)) {
+    if (
+      !requiredDependencyKeys.has(dependency.key) ||
+      (dependency.status !== 'unhealthy' && dependency.status !== 'degraded')
+    ) {
       continue
     }
 
     attentionItems.push({
       key: `dependency:${dependency.key}`,
-      severity: 'unhealthy',
-      title: `${dependency.label} is unhealthy`,
+      severity: dependency.status,
+      title: `${dependency.label} is ${dependency.status}`,
       description: dependency.message,
       occurredAt: dependency.checkedAt,
     })

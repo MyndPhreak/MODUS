@@ -27,6 +27,27 @@ describe('deriveOverallStatus', () => {
     expect(result.attentionItems.map((item) => item.key)).toEqual(['dependency:postgres'])
   })
 
+  it('degrades for a degraded required dependency with a stable attention key', () => {
+    const result = deriveOverallStatus({
+      now,
+      expectedShardCount: 1,
+      activeShards: [{ id: 0, heartbeatAt: freshHeartbeat, version: '1.21.0' }],
+      requiredDependencyKeys: ['postgres', 'r2'],
+      dependencies: [
+        {
+          key: 'postgres',
+          label: 'Postgres',
+          status: 'degraded',
+          checkedAt: now,
+          message: 'Connection latency is elevated.',
+        },
+      ],
+    })
+
+    expect(result.overallStatus).toBe('degraded')
+    expect(result.attentionItems.map((item) => item.key)).toEqual(['dependency:postgres'])
+  })
+
   it('keeps unconfigured Redis informational', () => {
     const result = deriveOverallStatus({
       now,
