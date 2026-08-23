@@ -129,7 +129,7 @@ describe('log cursors', () => {
   })
 
   it('rejects oversized encoded cursors before decoding', () => {
-    expect(() => decodeLogCursor('A'.repeat(513))).toThrow('too long')
+    expect(() => decodeLogCursor('A'.repeat(10_000))).toThrow('too long')
   })
 
   it('accepts the maximum cursor ID and rejects larger encode inputs', () => {
@@ -139,6 +139,23 @@ describe('log cursors', () => {
     expect(decodeLogCursor(cursor).id).toHaveLength(256)
     expect(() => encodeLogCursor({ timestamp, id: 'x'.repeat(257) })).toThrow('cursor')
     expect(() => encodeLogCursor({ timestamp: new Date('invalid'), id: 'row-1' })).toThrow('cursor')
+  })
+
+  it.each([
+    ['maximum-length Unicode', '😀'.repeat(128)],
+    ['maximum-length JSON-escaped', '\0'.repeat(256)],
+  ])('round-trips %s cursor IDs accepted by the encoder', (_case, id) => {
+    const timestamp = new Date('2026-08-23T10:15:30.123Z')
+    const encoded = encodeLogCursor({ timestamp, id })
+
+    expect(decodeLogCursor(encoded)).toEqual({ timestamp, id })
+  })
+
+  it('rejects Date values outside the timestamp grammar shared with the decoder', () => {
+    expect(() => encodeLogCursor({
+      timestamp: new Date('+010000-01-01T00:00:00.000Z'),
+      id: 'row-1',
+    })).toThrow('cursor timestamp')
   })
 
   it.each([

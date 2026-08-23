@@ -5,8 +5,17 @@ const MAX_SEARCH_LENGTH = 500
 const MAX_SOURCE_LENGTH = 100
 const MAX_GUILD_ID_LENGTH = 32
 const MAX_CURSOR_ID_LENGTH = 256
-const MAX_ENCODED_CURSOR_LENGTH = 512
 const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?Z$/
+const MAX_CURSOR_TIMESTAMP = '9999-12-31T23:59:59.999Z'
+// JSON may escape each accepted UTF-16 code unit as six ASCII bytes (for
+// example, "\u0000"). Add that worst case to the fixed payload, then apply
+// the unpadded base64url expansion. This keeps the pre-decode allocation
+// bounded while guaranteeing every cursor produced by the encoder fits.
+const MAX_CURSOR_JSON_BYTES = Buffer.byteLength(JSON.stringify({
+  timestamp: MAX_CURSOR_TIMESTAMP,
+  id: '',
+}), 'utf8') + (MAX_CURSOR_ID_LENGTH * 6)
+const MAX_ENCODED_CURSOR_LENGTH = Math.ceil(MAX_CURSOR_JSON_BYTES * 4 / 3)
 const ADMIN_LOG_QUERY_KEYS = new Set([
   'search',
   'level',
@@ -148,18 +157,29 @@ function validCursorId(value: unknown): value is string {
 }
 
 export function encodeLogCursor(cursor: { timestamp: Date | string; id: string }): string {
-  const timestamp = cursor.timestamp instanceof Date
-    ? cursor.timestamp
-    : parseTimestamp(cursor.timestamp, 'cursor timestamp')
+  if (
+    cursor.timestamp instanceof Date &&
+    Number.isNaN(cursor.timestamp.getTime())
+  ) {
+    throw new AdminLogQueryError('cursor timestamp must be an ISO UTC timestamp.')
+  }
+  const timestampValue = cursor.timestamp instanceof Date
+    ? cursor.timestamp.toISOString()
+    : cursor.timestamp
+  const timestamp = parseTimestamp(timestampValue, 'cursor timestamp')
 
-  if (!timestamp || Number.isNaN(timestamp.getTime()) || !validCursorId(cursor.id)) {
+  if (!timestamp || !validCursorId(cursor.id)) {
     throw new AdminLogQueryError('cursor contains invalid values.')
   }
 
-  return Buffer.from(JSON.stringify({
+  const encoded = Buffer.from(JSON.stringify({
     timestamp: timestamp.toISOString(),
     id: cursor.id,
   }), 'utf8').toString('base64url')
+  if (encoded.length > MAX_ENCODED_CURSOR_LENGTH) {
+    throw new AdminLogQueryError('cursor is too long.')
+  }
+  return encoded
 }
 
 export function decodeLogCursor(value: string): LogCursor {
