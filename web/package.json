@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "test": "vitest run",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "@iconify-json/lucide": "^1.2.94",
     "@iconify-json/simple-icons": "^1.2.92",
     "@types/node": "^25.6.0",
+    "vitest": "^3.2.7",
     "vue-tsc": "^3.3.6"
   }
 }
