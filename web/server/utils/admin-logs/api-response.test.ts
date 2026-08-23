@@ -143,7 +143,7 @@ describe('createAdminLogRouteHandler', () => {
     expect(repositoryInput).toEqual({
       search: 'reconnect',
       level: 'warn',
-      scope: 'global',
+      scope: 'all',
       guildId: null,
       shardId: 2,
       source: null,

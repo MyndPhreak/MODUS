@@ -12,6 +12,7 @@ import {
   inArray,
   lt,
   lte,
+  ne,
   or,
   sql,
   type SQL,
@@ -42,7 +43,7 @@ export interface LogInput {
 export interface LogSearchInput {
   search: string | null;
   level: "info" | "warn" | "error" | null;
-  scope: "global" | "guild";
+  scope: "all" | "global" | "guild";
   guildId: string | null;
   shardId: number | null;
   source: string | null;
@@ -79,7 +80,9 @@ export function buildLogSearchQuery(db: Database, input: LogSearchInput) {
     );
   }
   if (input.level) conditions.push(eq(logs.level, input.level));
-  if (input.scope === "guild" && input.guildId) conditions.push(eq(logs.guildId, input.guildId));
+  if (input.guildId) conditions.push(eq(logs.guildId, input.guildId));
+  else if (input.scope === "global") conditions.push(eq(logs.guildId, "global"));
+  else if (input.scope === "guild") conditions.push(ne(logs.guildId, "global"));
   if (input.shardId !== null) conditions.push(eq(logs.shardId, input.shardId));
   if (input.source) conditions.push(eq(logs.source, input.source));
   if (input.from) conditions.push(gte(logs.timestamp, input.from));

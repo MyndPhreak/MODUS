@@ -16,6 +16,8 @@
         variant="ghost"
         color="neutral"
         :loading="serversLoading"
+        aria-label="Refresh registered servers"
+        title="Refresh registered servers"
         @click="fetchServers"
         class="glass-card rounded-xl border border-white/8 hover:bg-white/10"
       />
@@ -27,6 +29,7 @@
         v-model="statusFilter"
         :items="statusItems"
         class="w-40"
+        aria-label="Server status"
       />
       <div class="flex items-center gap-2">
         <USwitch v-model="premiumOnly" color="warning" />
@@ -233,6 +236,7 @@ const columns: TableColumn<ServerRow>[] = [
         "onUpdate:modelValue": (v: boolean) => togglePremium(row.original, v),
         loading: updatingPremium.value === row.original.$id,
         color: "warning",
+        "aria-label": `${row.original.premium ? "Disable" : "Enable"} premium for ${row.original.name}`,
       }),
     meta: { class: { th: "w-24", td: "w-24" } },
   },

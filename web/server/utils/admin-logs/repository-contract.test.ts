@@ -13,7 +13,7 @@ function input(overrides: Partial<LogSearchInput> = {}): LogSearchInput {
   return {
     search: null,
     level: null,
-    scope: 'global',
+    scope: 'all',
     guildId: null,
     shardId: null,
     source: null,
@@ -86,12 +86,22 @@ describe('admin log repository query', () => {
     expect(query.params).toEqual(['%100\\% worker\\_1 \\\\%', 101])
   })
 
-  it('omits optional predicates for an unfiltered global query', () => {
+  it('omits optional predicates for an unfiltered all-scope query', () => {
     const query = buildLogSearchQuery(drizzle.mock(), input({ limit: 1 })).toSQL()
 
     expect(query.sql).not.toContain(' where ')
     expect(query.sql).toContain('order by "logs"."timestamp" desc, "logs"."id" desc limit $1')
     expect(query.params).toEqual([2])
+  })
+
+  it('distinguishes global and all-guild scope without requiring a guild ID', () => {
+    const globalQuery = buildLogSearchQuery(drizzle.mock(), input({ scope: 'global' })).toSQL()
+    const guildQuery = buildLogSearchQuery(drizzle.mock(), input({ scope: 'guild' })).toSQL()
+
+    expect(globalQuery.sql).toContain('where "logs"."guild_id" = $1')
+    expect(globalQuery.params).toEqual(['global', 101])
+    expect(guildQuery.sql).toContain('where "logs"."guild_id" <> $1')
+    expect(guildQuery.params).toEqual(['global', 101])
   })
 })
 

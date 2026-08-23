@@ -32,7 +32,7 @@
     <section class="min-h-[24rem] flex-1 overflow-hidden rounded-2xl border border-gray-800/70 bg-gray-950 shadow-inner" aria-label="Log results">
       <div v-if="historyLoading && !state.visible.length" class="flex h-full min-h-[24rem] items-center justify-center text-sm text-gray-400" aria-busy="true"><UIcon name="i-lucide-loader-circle" class="mr-2 size-5 animate-spin" /> Searching retained logs</div>
       <div v-else-if="!state.visible.length" class="flex h-full min-h-[24rem] flex-col items-center justify-center px-6 text-center"><UIcon name="i-lucide-terminal" class="size-8 text-gray-600" /><p class="mt-3 text-sm font-semibold text-gray-200">No logs in this view</p><p class="mt-1 max-w-md text-xs text-gray-500">Adjust the filters, refresh retained history, or wait for a matching live event.</p></div>
-      <div v-else ref="terminal" class="h-full overflow-auto font-mono text-[11px] leading-5" tabindex="0" aria-label="Scrollable log entries">
+      <div v-else ref="terminal" class="h-full overflow-auto font-mono text-[11px] leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" tabindex="0" aria-label="Scrollable log entries">
         <article v-for="log in state.visible" :key="log.$id" class="group grid min-w-[48rem] grid-cols-[5.5rem_3.5rem_3rem_minmax(0,1fr)] gap-x-3 border-b border-white/[0.035] px-4 py-1.5 hover:bg-white/[0.035]">
           <time class="text-gray-500" :datetime="String(log.timestamp)">{{ formatTime(log.timestamp) }}</time><span class="font-black uppercase" :class="levelClass(log.level)">[{{ log.level }}]</span><span class="text-cyan-400/70">S{{ log.shardId ?? '—' }}</span>
           <div class="min-w-0"><div class="flex flex-wrap items-baseline gap-x-2"><NuxtLink v-if="guildLink(log.guildId)" :to="guildLink(log.guildId)!" class="rounded text-violet-300/80 underline-offset-2 hover:text-violet-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">[{{ log.guildId }}]</NuxtLink><span v-else-if="log.guildId" class="text-gray-500">[{{ log.guildId }}]</span><span v-if="log.source" class="text-emerald-300/70">[{{ log.source }}]</span><span class="break-words text-gray-200">{{ log.message }}</span></div></div>
@@ -45,44 +45,150 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { applyHistoryPage, applyLiveLog, beginHistoryRequest, clearLogView, createAdminLogExplorerState, historyQuery, isCurrentHistoryRequest, matchesLogFilters, refreshLogHistory, routeQueryToLogFilters, serializeLogFilters, type AdminLogExplorerFilters, type AdminLogExplorerState } from '~/utils/admin-log-explorer'
-import { resumeLiveLogs, type ClientLogDoc } from '~/utils/admin-log-state'
+import {
+  applyCoordinatedHistoryPage,
+  applyLiveLog,
+  clearLogView,
+  createAdminLogExplorerState,
+  createDebouncedAction,
+  createHistoryCoordinator,
+  createLogEventStream,
+  historyQuery,
+  matchesLogFilters,
+  refreshLogHistory,
+  resumeExplorerView,
+  routeQueryToLogFilters,
+  serializeLogFilters,
+  type AdminLogExplorerFilters,
+  type AdminLogExplorerState,
+  type LogConnectionState,
+} from '~/utils/admin-log-explorer'
+import type { ClientLogDoc } from '~/utils/admin-log-state'
 
 interface LogPage { items: ClientLogDoc[]; nextCursor: string | null }
-type ConnectionState = 'connecting' | 'connected' | 'reconnecting'
-const route = useRoute(); const router = useRouter(); const initialFilters = routeQueryToLogFilters(route.query)
-const filters = reactive<AdminLogExplorerFilters>(initialFilters); const state = ref<AdminLogExplorerState>(createAdminLogExplorerState())
-const historyLoading = ref(false); const olderLoading = ref(false); const historyError = ref<string | null>(null); const connection = ref<ConnectionState>('connecting'); const autoScroll = ref(true)
-const filtersOpen = ref(Boolean(initialFilters.guildId || initialFilters.shardId || initialFilters.source || initialFilters.from || initialFilters.to)); const terminal = ref<HTMLElement | null>(null)
-let eventSource: EventSource | null = null; let searchTimer: ReturnType<typeof setTimeout> | null = null; let syncingRoute = false
+const route = useRoute()
+const router = useRouter()
+const initialFilters = routeQueryToLogFilters(route.query)
+const filters = reactive<AdminLogExplorerFilters>(initialFilters)
+const state = ref<AdminLogExplorerState>(createAdminLogExplorerState())
+const historyLoading = ref(false)
+const olderLoading = ref(false)
+const historyError = ref<string | null>(null)
+const connection = ref<LogConnectionState>('connecting')
+const autoScroll = ref(true)
+const filtersOpen = ref(Boolean(initialFilters.guildId || initialFilters.shardId || initialFilters.source || initialFilters.from || initialFilters.to))
+const terminal = ref<HTMLElement | null>(null)
+const historyCoordinator = createHistoryCoordinator()
+const searchDebounce = createDebouncedAction(350, () => { void synchronizeFilters() })
+let eventStream: { close(): void } | null = null
+let syncingRoute = false
+let applyingRoute = false
 const levelItems = [{ label: 'All levels', value: 'all' }, { label: 'Info', value: 'info' }, { label: 'Warnings', value: 'warn' }, { label: 'Errors', value: 'error' }]
 const scopeItems = [{ label: 'All scopes', value: 'all' }, { label: 'System', value: 'global' }, { label: 'Guild', value: 'guild' }]
 const connectionLabel = computed(() => ({ connecting: 'Connecting', connected: 'Connected', reconnecting: 'Reconnecting' })[connection.value])
 const connectionDotClass = computed(() => connection.value === 'connected' ? 'bg-success' : connection.value === 'reconnecting' ? 'bg-warning' : 'bg-gray-500')
 
-async function fetchHistory(append = false): Promise<void> {
-  const started = beginHistoryRequest(state.value); state.value = started.state; append ? olderLoading.value = true : historyLoading.value = true; historyError.value = null
+async function fetchHistory(append = false, querySnapshot = historyQuery(filters, append ? state.value.nextCursor : null)): Promise<void> {
+  const cursor = append ? state.value.nextCursor : null
+  const request = historyCoordinator.start(querySnapshot, cursor, append)
+  if (!request) return
+  if (append) olderLoading.value = true
+  else historyLoading.value = true
+  historyError.value = null
   try {
-    const page = await $fetch<LogPage>('/api/admin/logs', { query: historyQuery(filters, append ? state.value.nextCursor : null) })
-    if (isCurrentHistoryRequest(state.value, started.requestId)) state.value = applyHistoryPage(state.value, page.items, page.nextCursor, append)
-  } catch { if (isCurrentHistoryRequest(state.value, started.requestId)) historyError.value = 'Retained logs could not be loaded. Refresh to try again.' }
-  finally { if (isCurrentHistoryRequest(state.value, started.requestId)) { historyLoading.value = false; olderLoading.value = false } }
+    const page = await $fetch<LogPage>('/api/admin/logs', { query: request.query, signal: request.signal })
+    if (!historyCoordinator.isCurrent(request.id)) return
+    state.value = applyCoordinatedHistoryPage(historyCoordinator, request, state.value, page.items, page.nextCursor)
+  } catch (error) {
+    if (historyCoordinator.isCurrent(request.id) && !(error instanceof DOMException && error.name === 'AbortError')) {
+      historyError.value = 'Retained logs could not be loaded. Refresh to try again.'
+    }
+  } finally {
+    if (historyCoordinator.isCurrent(request.id)) {
+      historyLoading.value = false
+      olderLoading.value = false
+      historyCoordinator.finish(request.id)
+    }
+  }
 }
-async function syncUrlAndFetch(): Promise<void> { syncingRoute = true; await router.replace({ query: serializeLogFilters(filters) }); syncingRoute = false; state.value = clearLogView(refreshLogHistory(state.value)); await fetchHistory(false) }
-watch(() => filters.search, () => { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => void syncUrlAndFetch(), 350) })
-watch(() => [filters.level, filters.scope, filters.guildId, filters.shardId, filters.source, filters.from, filters.to], () => { if (searchTimer) clearTimeout(searchTimer); void syncUrlAndFetch() }, { deep: true })
-watch(() => route.fullPath, () => { if (!syncingRoute) Object.assign(filters, routeQueryToLogFilters(route.query)) })
-function loadOlder(): void { void fetchHistory(true) }; function clearView(): void { state.value = clearLogView(state.value) }; function refreshHistory(): void { state.value = refreshLogHistory(state.value); void fetchHistory(false) }
-function togglePaused(): void { state.value = state.value.paused ? resumeLiveLogs(state.value, 1_000) as AdminLogExplorerState : { ...state.value, paused: true } }
+
+function invalidateHistory(clearVisible: boolean): void {
+  historyCoordinator.invalidate()
+  historyLoading.value = false
+  olderLoading.value = false
+  historyError.value = null
+  if (clearVisible) state.value = clearLogView(state.value)
+}
+
+async function synchronizeFilters(): Promise<void> {
+  const query = serializeLogFilters(filters)
+  syncingRoute = true
+  void router.replace({ query }).finally(() => { syncingRoute = false })
+  await fetchHistory(false, { ...query, limit: 100 })
+}
+
+function filterChanged(debounce: boolean): void {
+  if (applyingRoute) return
+  invalidateHistory(true)
+  if (debounce) searchDebounce.schedule(undefined)
+  else {
+    searchDebounce.cancel()
+    void synchronizeFilters()
+  }
+}
+
+watch(() => filters.search, () => filterChanged(true))
+watch(() => filters.scope, (scope) => {
+  if (scope !== 'guild') filters.guildId = ''
+  filterChanged(false)
+})
+watch(() => filters.guildId, (guildId) => {
+  if (guildId.trim() && filters.scope !== 'guild') filters.scope = 'guild'
+  else filterChanged(false)
+})
+watch(() => [filters.level, filters.shardId, filters.source, filters.from, filters.to], () => filterChanged(false), { deep: true })
+watch(() => route.fullPath, async () => {
+  if (syncingRoute) return
+  applyingRoute = true
+  invalidateHistory(true)
+  Object.assign(filters, routeQueryToLogFilters(route.query))
+  await nextTick()
+  applyingRoute = false
+  void fetchHistory(false)
+})
+
+function loadOlder(): void { void fetchHistory(true) }
+function clearView(): void { searchDebounce.cancel(); invalidateHistory(true) }
+function refreshHistory(): void { historyCoordinator.invalidate(); state.value = refreshLogHistory(state.value); void fetchHistory(false) }
+function togglePaused(): void {
+  if (state.value.paused) {
+    const resumed = resumeExplorerView(state.value, autoScroll.value)
+    state.value = resumed.state
+    if (resumed.scrollToLatest) void scrollToLatest()
+  } else state.value = { ...state.value, paused: true }
+}
 function guildLink(guildId: string | null | undefined): string | null { return guildId && guildId !== 'global' ? `/dashboard/server/${encodeURIComponent(guildId)}/logs` : null }
 function levelClass(level: string): string { return level === 'error' ? 'text-error' : level === 'warn' ? 'text-warning' : 'text-info' }
 function formatTime(timestamp: string | Date): string { const date = new Date(timestamp); return Number.isNaN(date.getTime()) ? 'unknown' : date.toLocaleTimeString([], { hour12: false }) }
 async function scrollToLatest(): Promise<void> { if (!autoScroll.value || state.value.paused) return; await nextTick(); terminal.value?.scrollTo({ top: 0, behavior: 'smooth' }) }
 function setupRealtime(): void {
-  eventSource = new EventSource('/api/events/logs', { withCredentials: true }); eventSource.onopen = () => { connection.value = 'connected' }; eventSource.onerror = () => { connection.value = 'reconnecting' }
-  eventSource.onmessage = (event) => { try { const payload = JSON.parse(event.data) as { kind?: string; log?: ClientLogDoc }; if (payload.kind === 'create' && payload.log && matchesLogFilters(payload.log, filters)) { state.value = applyLiveLog(state.value, payload.log); void scrollToLatest() } } catch { /* Ignore malformed events without interrupting reconnect. */ } }
+  eventStream = createLogEventStream(
+    () => new EventSource('/api/events/logs', { withCredentials: true }),
+    (log) => {
+      if (!matchesLogFilters(log, filters)) return
+      state.value = applyLiveLog(state.value, log)
+      void scrollToLatest()
+    },
+    streamState => { connection.value = streamState },
+  )
 }
-onMounted(() => { void fetchHistory(); setupRealtime() }); onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); eventSource?.close(); eventSource = null })
+onMounted(() => { void fetchHistory(); setupRealtime() })
+onUnmounted(() => {
+  searchDebounce.cancel()
+  historyCoordinator.invalidate()
+  eventStream?.close()
+  eventStream = null
+})
 </script>
 
 <style scoped>

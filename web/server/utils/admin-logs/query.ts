@@ -32,7 +32,7 @@ const ADMIN_LOG_QUERY_KEYS = new Set([
 type QueryValue = string | string[] | null | undefined
 
 export type AdminLogLevel = 'info' | 'warn' | 'error'
-export type AdminLogScope = 'global' | 'guild'
+export type AdminLogScope = 'all' | 'global' | 'guild'
 
 export interface LogCursor {
   timestamp: Date
@@ -85,15 +85,15 @@ function parseLevel(value: string | null): AdminLogLevel | null {
 }
 
 function parseScope(value: string | null, guildId: string | null): AdminLogScope {
-  if (!value) return guildId ? 'guild' : 'global'
-  if (value !== 'global' && value !== 'guild') {
-    throw new AdminLogQueryError('scope must be global or guild.')
-  }
-  if (value === 'guild' && !guildId) {
-    throw new AdminLogQueryError('guildId is required for guild scope.')
+  if (!value) return guildId ? 'guild' : 'all'
+  if (value !== 'all' && value !== 'global' && value !== 'guild') {
+    throw new AdminLogQueryError('scope must be all, global, or guild.')
   }
   if (value === 'global' && guildId) {
     throw new AdminLogQueryError('guildId cannot be used with global scope.')
+  }
+  if (value === 'all' && guildId) {
+    throw new AdminLogQueryError('guildId cannot be used with all scope.')
   }
   return value
 }

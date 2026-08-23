@@ -10,7 +10,7 @@ describe('parseAdminLogQuery', () => {
     expect(parseAdminLogQuery({})).toEqual({
       search: null,
       level: null,
-      scope: 'global',
+      scope: 'all',
       guildId: null,
       shardId: null,
       source: null,
@@ -58,7 +58,7 @@ describe('parseAdminLogQuery', () => {
   it.each([
     [{ level: 'debug' }, 'level'],
     [{ scope: 'server' }, 'scope'],
-    [{ scope: 'guild' }, 'guildId'],
+    [{ scope: 'all', guildId: '123456789012345678' }, 'all scope'],
     [{ shardId: '-1' }, 'shardId'],
     [{ shardId: '1.5' }, 'shardId'],
     [{ from: 'yesterday' }, 'from'],
@@ -88,12 +88,19 @@ describe('parseAdminLogQuery', () => {
     })
   })
 
-  it('infers guild scope and rejects contradictory explicit global scope', () => {
+  it('supports every scope and keeps guild combinations coherent', () => {
+    expect(parseAdminLogQuery({ scope: 'all' }).scope).toBe('all')
+    expect(parseAdminLogQuery({ scope: 'global' }).scope).toBe('global')
+    expect(parseAdminLogQuery({ scope: 'guild' }).scope).toBe('guild')
     expect(parseAdminLogQuery({ guildId: '123456789012345678' }).scope).toBe('guild')
     expect(() => parseAdminLogQuery({
       scope: 'global',
       guildId: '123456789012345678',
     })).toThrow('global scope')
+    expect(() => parseAdminLogQuery({
+      scope: 'all',
+      guildId: '123456789012345678',
+    })).toThrow('all scope')
   })
 
   it('rejects unknown and duplicate query parameters', () => {
