@@ -1,10 +1,10 @@
 ---
-description: Prepare granular conventional commits from all pending changes and push them to the repository. Produces one commit per logical change so Release Please generates detailed changelogs.
+description: Prepare feature-level conventional commits from all pending changes and push them to the repository. Produces one commit per shippable feature/fix (not per sub-step) so Release Please generates a readable changelog.
 ---
 
-# Stage, Comment & Commit (Granular)
+# Stage, Comment & Commit
 
-This workflow produces **multiple focused conventional commits** from the current working tree so that Release Please generates a meaningful changelog with one bullet per feature/fix.
+This workflow groups the current working tree into **conventional commits at feature granularity** so that Release Please generates a meaningful changelog with one bullet per feature/fix — not one bullet per sub-step of that feature.
 
 // turbo-all
 
@@ -42,7 +42,7 @@ Carefully review the diff output and **mentally group changes into logical units
 
 ### Grouping Rules
 
-1. **One commit per feature, fix, or refactor.** If the session added tags, audit logging, AND AI memory — that's 3 separate `feat:` commits, not 1.
+1. **One commit per whole feature, fix, or refactor — not per sub-step.** If the session added tags, audit logging, AND AI memory — that's 3 separate `feat:` commits, one each. But within a single feature, don't split further: schema + repository + API route + UI + wiring for "module-scoped RBAC" is **one** commit, not five or fifteen. Release Please renders every commit on `main` as its own changelog bullet, so sub-step commits (`add repository`, `register repository`, `scope route A`, `scope route B`, ...) turn one feature into a wall of noise. Ask "would a user reading the changelog want to see this as its own bullet?" — if no, it belongs inside the parent feature's commit.
 2. **Scope by module when possible.** Use the conventional commit scope to indicate the area:
    - `feat(bot):` — bot-side logic (commands, services, modules)
    - `feat(web):` — dashboard/web UI changes
@@ -51,7 +51,8 @@ Carefully review the diff output and **mentally group changes into logical units
    - `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:` — as appropriate
 3. **Infrastructure/config changes** (Dockerfiles, CI, deps) get their own commit unless they are directly tied to a feature (e.g., adding a new dependency for a feature goes with that feature's commit).
 4. **Styling/UI-only changes** that are cosmetic and not part of a feature should use `style:` type.
-5. **Keep each commit self-contained.** Avoid commits that would break the build if checked out independently. If two groups are tightly coupled, combine them into one commit.
+5. **Keep each commit self-contained.** Avoid commits that would break the build if checked out independently. If two groups are tightly coupled, combine them into one commit — err toward combining rather than splitting.
+6. **A feature that spans bot + db + web is still one commit** if it's one shippable unit (pick the scope of the primary surface, e.g. `feat(web):` for a dashboard feature that also touched a shared db repo). Only split by scope when the pieces are independently useful/mergeable on their own.
 
 ### Subject Line Quality
 

@@ -110,7 +110,7 @@ Changelog-visible types: `feat`, `fix`, `perf`, `refactor`, `docs`. Silent: `cho
 
 Scopes: `bot`, `web`, `api`, `db`.
 
-**Granular commits.** When multiple changes are pending, make one commit per logical change so Release Please produces one changelog bullet per feature. Commit in dependency order: infra/config → bot/db → API routes → web UI → docs/chore. See [.agent/workflows/stage-comment-commit.md](.agent/workflows/stage-comment-commit.md).
+**Commit at feature granularity, not step granularity.** Each commit should be one complete, shippable unit of work — a whole feature, a whole fix — not one commit per file touched or per sub-step along the way. Release Please turns every commit on `main` into its own changelog bullet, so "add table" + "add repository" + "register repository" + "add API route" + "scope route A" + "scope route B" ... for a single feature reads as a wall of bullets instead of one. Roll those into a single commit (e.g. `feat(web): add module-scoped dashboard RBAC`) unless the sub-parts are independently shippable or reviewable on their own. Commit in dependency order when a session does span multiple features: infra/config → bot/db → API routes → web UI → docs/chore. See [.agent/workflows/stage-comment-commit.md](.agent/workflows/stage-comment-commit.md).
 
 **Always stage specific files** (`git add path/to/file`) — never `git add .` or `-A`. This is load-bearing because `.env` files and other local state occasionally appear in the tree.
 
