@@ -23,6 +23,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -351,6 +352,52 @@ export const logs = pgTable(
 
 export type LogEntry = typeof logs.$inferSelect;
 export type NewLogEntry = typeof logs.$inferInsert;
+
+// ── admin_audit_events ───────────────────────────────────────────────────
+// Append-only bot-admin action history. Application repositories deliberately
+// expose insert and search operations only; audit rows are never edited.
+
+export const adminAuditEvents = pgTable(
+  "admin_audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: text("actor_id").notNull(),
+    actorDisplay: text("actor_display"),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    before: jsonb("before").notNull().$type<Record<string, unknown>>(),
+    after: jsonb("after").notNull().$type<Record<string, unknown>>(),
+    reason: text("reason"),
+    reasonRequired: boolean("reason_required").notNull().default(false),
+    requestId: text("request_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byCreatedAtId: index("admin_audit_events_created_at_id_idx").on(
+      t.createdAt.desc(),
+      t.id.desc(),
+    ),
+    byActor: index("admin_audit_events_actor_created_at_idx").on(
+      t.actorId,
+      t.createdAt.desc(),
+    ),
+    byAction: index("admin_audit_events_action_created_at_idx").on(
+      t.action,
+      t.createdAt.desc(),
+    ),
+    byTarget: index("admin_audit_events_target_created_at_idx").on(
+      t.targetType,
+      t.targetId,
+      t.createdAt.desc(),
+    ),
+  }),
+);
+
+export type AdminAuditEvent = typeof adminAuditEvents.$inferSelect;
+export type NewAdminAuditEvent = typeof adminAuditEvents.$inferInsert;
 
 // ── milestone_users ───────────────────────────────────────────────────────
 

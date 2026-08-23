@@ -6,6 +6,7 @@ export * from "./repositories/servers";
 export * from "./repositories/modules";
 export * from "./repositories/bot-status";
 export * from "./repositories/logs";
+export * from "./repositories/admin-audit-events";
 export * from "./repositories/milestones";
 export * from "./repositories/automod";
 export * from "./repositories/ai-usage";
