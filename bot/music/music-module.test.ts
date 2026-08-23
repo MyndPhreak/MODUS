@@ -106,9 +106,12 @@ interface Harness {
   advanceResult: { current: MusicResult<MusicQueueSnapshot> | null };
 }
 
-function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPlayerState } = {}): Harness {
+function createHarness(
+  overrides: { queue?: MusicQueueSnapshot; state?: MusicPlayerState; musicEnabled?: boolean } = {},
+): Harness {
   const service = new FakeMusicService(overrides.queue ?? snapshot(), overrides.state ?? playerState());
   const engine = new FakeEngine();
+  const musicEnabled = overrides.musicEnabled ?? true;
   const settings: Record<string, any> = {
     defaultVolume: 50,
     djRoleId: "",
@@ -156,6 +159,9 @@ function createHarness(overrides: { queue?: MusicQueueSnapshot; state?: MusicPla
         Object.assign(settings, value);
       },
       async subscribeToGuildConfigs() {},
+      async isMusicEnabled() {
+        return { enabled: musicEnabled, reason: musicEnabled ? null : "lavalink-health-check" };
+      },
     },
   };
 
@@ -268,6 +274,43 @@ describe("music module command handlers", () => {
     expect(plays[0]!.expectedRevision).toBe(4);
     expect(plays[0]!.operationId).toBeTruthy();
     expect(interaction.lastReply.content).toBe("🎵 Loading track...");
+  });
+
+  it("refuses to play when music is disabled by the health check", async () => {
+    const harness = createHarness({ musicEnabled: false });
+    const interaction = await run(harness, "play", { query: "Durable Song" });
+
+    expect(interaction.lastReply.content).toBe(
+      "Sorry, this module is currently disabled for maintenance.",
+    );
+    expect(harness.service.commands).toHaveLength(0);
+    expect(harness.engine.loadRequests).toHaveLength(0);
+  });
+
+  it("refuses playqueue when music is disabled", async () => {
+    const harness = createHarness({ musicEnabled: false });
+    const interaction = await run(harness, "playqueue");
+
+    expect(interaction.lastReply.content).toBe(
+      "Sorry, this module is currently disabled for maintenance.",
+    );
+    expect(harness.service.commands).toHaveLength(0);
+  });
+
+  it("still allows read-only commands like nowplaying when music is disabled", async () => {
+    const harness = createHarness({
+      musicEnabled: false,
+      queue: snapshot({
+        currentEntryId: "entry-1",
+        entries: [{ id: "entry-1", track: track("entry-1", "One"), position: 0, status: "playing" }],
+      }),
+    });
+
+    const interaction = await run(harness, "nowplaying");
+
+    expect(interaction.lastReply.content).not.toBe(
+      "Sorry, this module is currently disabled for maintenance.",
+    );
   });
 
   it("refuses to play when the requester is not in a voice channel", async () => {

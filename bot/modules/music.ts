@@ -2154,6 +2154,9 @@ export const musicAiTools: AiTool[] = [
 
 // ─── Module Export ────────────────────────────────────────────────────────
 
+/** Only these commands touch new-track resolution; everything else (queue view, skip, filters, …) stays available during an outage. */
+const MUSIC_GATED_COMMANDS = new Set(["play", "playqueue"]);
+
 const musicModule: BotModule = {
   name: "music",
   description:
@@ -2287,6 +2290,16 @@ const musicModule: BotModule = {
 
     // Dispatch based on the top-level command name
     const commandName = interaction.commandName;
+
+    if (MUSIC_GATED_COMMANDS.has(commandName)) {
+      const { enabled } = await moduleManager.databaseService.isMusicEnabled();
+      if (!enabled) {
+        await interaction.editReply({
+          content: "Sorry, this module is currently disabled for maintenance.",
+        });
+        return;
+      }
+    }
 
     switch (commandName) {
       case "play":
