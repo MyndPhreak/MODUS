@@ -12,6 +12,7 @@ import { TranscriptRetentionWorker } from "./TranscriptRetentionWorker";
 import { LogRetentionWorker } from "./LogRetentionWorker";
 import { ReminderWorker } from "./ReminderWorker";
 import { GiveawayDrawWorker } from "./GiveawayDrawWorker";
+import { LavalinkHealthCheckWorker } from "./LavalinkHealthCheckWorker";
 import { Logger } from "./Logger";
 
 import {
@@ -171,6 +172,48 @@ client.once("ready", async () => {
       await musicRuntime.start();
     } catch (err) {
       logger.error("Failed to start the music service", undefined, err, "music");
+    }
+  }
+
+  // ── Lavalink health check ─────────────────────────────────────────────
+  // Only one shard should run the periodic YouTube-extraction probe.
+  //
+  // With Redis: acquire a distributed lease, same shape as recording
+  // retention above. Without Redis: fall back to shard-0 running it
+  // directly.
+  if (musicRuntime) {
+    const healthCheckWorker = new LavalinkHealthCheckWorker(
+      client,
+      musicRuntime,
+      databaseService,
+      logger,
+    );
+
+    if (redisClients) {
+      const ownerId = `${process.pid}:shard-${shardId}`;
+      new LeaderElection({
+        redis: redisClients.primary,
+        key: "modus:leader:lavalink-health",
+        ownerId,
+        onAcquired: () => {
+          logger.info(
+            `Lavalink health check: leader election won (${ownerId})`,
+            undefined,
+            "music",
+          );
+          healthCheckWorker.start();
+        },
+        onLost: () => {
+          logger.warn(
+            `Lavalink health check: lost leader lease (${ownerId}) — stopping worker`,
+            undefined,
+            "music",
+          );
+          healthCheckWorker.stop();
+        },
+      }).start();
+    } else if (typeof shardId !== "number" || shardId === 0) {
+      healthCheckWorker.start();
     }
   }
 
