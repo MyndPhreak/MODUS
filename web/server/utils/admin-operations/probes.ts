@@ -42,6 +42,21 @@ interface ProbeDefinition {
   check: (signal: AbortSignal) => Promise<unknown>
 }
 
+interface DependencyProbeMetadata {
+  key: string
+  label: string
+  required: boolean
+}
+
+export const DEPENDENCY_PROBE_CATALOG = {
+  postgres: { key: 'postgres', label: 'Postgres', required: true },
+  redis: { key: 'redis', label: 'Redis', required: false },
+  r2: { key: 'r2', label: 'R2', required: true },
+  discord: { key: 'discord', label: 'Discord', required: true },
+  botHttp: { key: 'bot-http', label: 'Bot HTTP', required: true },
+  lavalink: { key: 'lavalink', label: 'Lavalink', required: false },
+} as const satisfies Record<string, DependencyProbeMetadata>
+
 function unconfiguredResult(
   probe: Pick<ProbeDefinition, 'key' | 'label' | 'required'>,
   checkedAt: string,
@@ -49,6 +64,7 @@ function unconfiguredResult(
   return {
     key: probe.key,
     label: probe.label,
+    required: probe.required,
     status: probe.required ? 'unhealthy' : 'unconfigured',
     checkedAt,
     message: `${probe.label} is not configured.`,
@@ -71,6 +87,7 @@ async function executeProbe(
     return {
       key: probe.key,
       label: probe.label,
+      required: probe.required,
       status: 'healthy',
       latencyMs: Math.max(0, Math.round(clock() - startedAt)),
       checkedAt,
@@ -80,6 +97,7 @@ async function executeProbe(
     return {
       key: probe.key,
       label: probe.label,
+      required: probe.required,
       status: 'unhealthy',
       latencyMs: Math.max(0, Math.round(clock() - startedAt)),
       checkedAt,
@@ -105,23 +123,17 @@ export async function runDependencyProbes(
 
   const probes: ProbeDefinition[] = [
     {
-      key: 'postgres',
-      label: 'Postgres',
-      required: true,
+      ...DEPENDENCY_PROBE_CATALOG.postgres,
       configured: deps.postgres !== null,
       check: (signal) => deps.postgres!.ping(signal),
     },
     {
-      key: 'redis',
-      label: 'Redis',
-      required: false,
+      ...DEPENDENCY_PROBE_CATALOG.redis,
       configured: deps.redis !== null,
       check: (signal) => deps.redis!.ping(signal),
     },
     {
-      key: 'r2',
-      label: 'R2',
-      required: true,
+      ...DEPENDENCY_PROBE_CATALOG.r2,
       configured: deps.r2 !== null,
       check: (signal) => deps.r2!.client.send(
         new HeadBucketCommand({ Bucket: deps.r2!.bucket }),
@@ -129,9 +141,7 @@ export async function runDependencyProbes(
       ),
     },
     {
-      key: 'discord',
-      label: 'Discord',
-      required: true,
+      ...DEPENDENCY_PROBE_CATALOG.discord,
       configured: deps.discord !== null && deps.discord.botToken.length > 0,
       check: async (signal) => requireOk(await deps.fetchImpl(DISCORD_CURRENT_USER_URL, {
         signal,
@@ -139,9 +149,7 @@ export async function runDependencyProbes(
       })),
     },
     {
-      key: 'bot-http',
-      label: 'Bot HTTP',
-      required: true,
+      ...DEPENDENCY_PROBE_CATALOG.botHttp,
       configured: deps.botHttp !== null && deps.botHttp.url.length > 0,
       check: async (signal) => requireOk(await deps.fetchImpl(deps.botHttp!.url, {
         signal,
@@ -149,9 +157,7 @@ export async function runDependencyProbes(
       })),
     },
     {
-      key: 'lavalink',
-      label: 'Lavalink',
-      required: false,
+      ...DEPENDENCY_PROBE_CATALOG.lavalink,
       configured: deps.lavalink !== null && deps.lavalink.versionUrl.length > 0,
       check: async (signal) => requireOk(await deps.fetchImpl(deps.lavalink!.versionUrl, {
         signal,

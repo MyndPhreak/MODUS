@@ -4,17 +4,25 @@ import type {
   OverallStatusInput,
 } from './types'
 
-const DEFAULT_STALE_SHARD_THRESHOLD_MS = 2 * 60 * 1000
+export const DEFAULT_STALE_SHARD_THRESHOLD_MS = 2 * 60 * 1000
 
-type OverallPolicyResult = Pick<AdminOverviewResponse, 'overallStatus' | 'attentionItems'>
+export type OverallPolicyResult = Pick<
+  AdminOverviewResponse,
+  'overallStatus' | 'attentionItems'
+> & {
+  fleet: Pick<AdminOverviewResponse['fleet'], 'shards' | 'versions'>
+}
+
+function severityRank(item: AttentionItem): number {
+  return item.severity === 'unhealthy' ? 0 : 1
+}
 
 export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyResult {
   const attentionItems: AttentionItem[] = []
-  const requiredDependencyKeys = new Set(input.requiredDependencyKeys)
 
   for (const dependency of input.dependencies) {
     if (
-      !requiredDependencyKeys.has(dependency.key) ||
+      !dependency.required ||
       (dependency.status !== 'unhealthy' && dependency.status !== 'degraded')
     ) {
       continue
@@ -34,6 +42,18 @@ export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyRes
   const freshShards = input.activeShards.filter((shard) => {
     return now - new Date(shard.heartbeatAt).getTime() <= staleShardThresholdMs
   })
+  const activeVersions = [...new Set(freshShards.map((shard) => shard.version))].sort()
+  const fleet: OverallPolicyResult['fleet'] = {
+    shards: {
+      active: freshShards.length,
+      expected: input.expectedShardCount,
+      stale: input.activeShards.length - freshShards.length,
+    },
+    versions: {
+      active: activeVersions,
+      disagreement: activeVersions.length > 1,
+    },
+  }
 
   if (input.activeShards.length < input.expectedShardCount) {
     attentionItems.push({
@@ -44,7 +64,7 @@ export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyRes
     })
   }
 
-  if (freshShards.length < input.activeShards.length) {
+  if (fleet.shards.stale > 0) {
     attentionItems.push({
       key: 'shards:stale',
       severity: 'degraded',
@@ -53,7 +73,7 @@ export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyRes
     })
   }
 
-  if (new Set(freshShards.map((shard) => shard.version)).size > 1) {
+  if (fleet.versions.disagreement) {
     attentionItems.push({
       key: 'shards:version-disagreement',
       severity: 'degraded',
@@ -62,13 +82,16 @@ export function deriveOverallStatus(input: OverallStatusInput): OverallPolicyRes
     })
   }
 
+  attentionItems.push(...(input.additionalAttentionItems ?? []))
+  attentionItems.sort((left, right) => severityRank(left) - severityRank(right))
+
   if (attentionItems.some((item) => item.severity === 'unhealthy')) {
-    return { overallStatus: 'unhealthy', attentionItems }
+    return { overallStatus: 'unhealthy', attentionItems, fleet }
   }
 
   if (attentionItems.length > 0) {
-    return { overallStatus: 'degraded', attentionItems }
+    return { overallStatus: 'degraded', attentionItems, fleet }
   }
 
-  return { overallStatus: 'healthy', attentionItems }
+  return { overallStatus: 'healthy', attentionItems, fleet }
 }

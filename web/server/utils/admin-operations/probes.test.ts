@@ -35,13 +35,13 @@ describe('runDependencyProbes', () => {
       now: () => new Date(checkedAt),
     })
 
-    expect(result.map(({ key, status }) => ({ key, status }))).toEqual([
-      { key: 'postgres', status: 'healthy' },
-      { key: 'redis', status: 'healthy' },
-      { key: 'r2', status: 'healthy' },
-      { key: 'discord', status: 'healthy' },
-      { key: 'bot-http', status: 'healthy' },
-      { key: 'lavalink', status: 'healthy' },
+    expect(result.map(({ key, required, status }) => ({ key, required, status }))).toEqual([
+      { key: 'postgres', required: true, status: 'healthy' },
+      { key: 'redis', required: false, status: 'healthy' },
+      { key: 'r2', required: true, status: 'healthy' },
+      { key: 'discord', required: true, status: 'healthy' },
+      { key: 'bot-http', required: true, status: 'healthy' },
+      { key: 'lavalink', required: false, status: 'healthy' },
     ])
     expect(result.every((probe) => probe.checkedAt === checkedAt)).toBe(true)
     expect(result.every((probe) => typeof probe.latencyMs === 'number')).toBe(true)
@@ -105,6 +105,7 @@ describe('runDependencyProbes', () => {
     expect(result.find((probe) => probe.key === 'redis')).toEqual({
       key: 'redis',
       label: 'Redis',
+      required: false,
       status: 'unconfigured',
       checkedAt,
       message: 'Redis is not configured.',
@@ -112,6 +113,7 @@ describe('runDependencyProbes', () => {
     expect(result.find((probe) => probe.key === 'lavalink')).toEqual({
       key: 'lavalink',
       label: 'Lavalink',
+      required: false,
       status: 'unconfigured',
       checkedAt,
       message: 'Lavalink is not configured.',

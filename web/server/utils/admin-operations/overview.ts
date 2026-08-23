@@ -12,14 +12,11 @@ import type {
   AdminOverviewResponse,
   AttentionItem,
   DependencyHealth,
-  OverallStatus,
   ShardHealth,
 } from './types'
 
-const STALE_SHARD_THRESHOLD_MS = 2 * 60 * 1000
 const ELEVATED_ERROR_THRESHOLD = 10
 const RECENT_RETENTION_WINDOW_MS = 24 * 60 * 60 * 1000
-const REQUIRED_DEPENDENCY_KEYS = ['postgres', 'r2', 'discord', 'bot-http']
 const OVERVIEW_CACHE_KEY = 'admin-overview'
 const OVERVIEW_CACHE_TTL_MS = 10_000
 
@@ -88,20 +85,6 @@ export function createAdminOverviewRouteHandler<
   }
 }
 
-function severityRank(item: AttentionItem): number {
-  return item.severity === 'unhealthy' ? 0 : 1
-}
-
-function overallStatusFor(
-  baseStatus: OverallStatus,
-  attentionItems: AttentionItem[],
-): OverallStatus {
-  if (baseStatus === 'unhealthy' || attentionItems.some((item) => item.severity === 'unhealthy')) {
-    return 'unhealthy'
-  }
-  return attentionItems.length > 0 ? 'degraded' : 'healthy'
-}
-
 export async function buildAdminOverview(
   deps: BuildAdminOverviewDeps,
   now: Date,
@@ -139,20 +122,6 @@ export async function buildAdminOverview(
   const expectedShardCount = shardRows.reduce((expected, row) => {
     return Math.max(expected, row.totalShards)
   }, 0)
-  const freshShards = shards.filter((shard) => {
-    return now.getTime() - new Date(shard.heartbeatAt).getTime() <= STALE_SHARD_THRESHOLD_MS
-  })
-  const activeVersions = [...new Set(freshShards.map((shard) => shard.version))].sort()
-
-  const policy = deriveOverallStatus({
-    now: now.toISOString(),
-    expectedShardCount,
-    activeShards: shards,
-    dependencies,
-    requiredDependencyKeys: REQUIRED_DEPENDENCY_KEYS,
-    staleShardThresholdMs: STALE_SHARD_THRESHOLD_MS,
-  })
-
   const additionalAttention: AttentionItem[] = []
   if (last24HourLogCounts.error >= ELEVATED_ERROR_THRESHOLD) {
     additionalAttention.push({
@@ -194,22 +163,19 @@ export async function buildAdminOverview(
     })
   }
 
-  const attentionItems = [...policy.attentionItems, ...additionalAttention]
-    .sort((left, right) => severityRank(left) - severityRank(right))
+  const policy = deriveOverallStatus({
+    now: now.toISOString(),
+    expectedShardCount,
+    activeShards: shards,
+    dependencies,
+    additionalAttentionItems: additionalAttention,
+  })
 
   return {
     generatedAt: now.toISOString(),
-    overallStatus: overallStatusFor(policy.overallStatus, attentionItems),
+    overallStatus: policy.overallStatus,
     fleet: {
-      shards: {
-        active: freshShards.length,
-        expected: expectedShardCount,
-        stale: shards.length - freshShards.length,
-      },
-      versions: {
-        active: activeVersions,
-        disagreement: activeVersions.length > 1,
-      },
+      ...policy.fleet,
       servers: {
         registered: last24HourServerCounts.total,
         online: last24HourServerCounts.online,
@@ -235,6 +201,6 @@ export async function buildAdminOverview(
         servers: last7DayServerCounts,
       },
     }),
-    attentionItems,
+    attentionItems: policy.attentionItems,
   }
 }

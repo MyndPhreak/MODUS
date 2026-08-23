@@ -8,6 +8,7 @@ export type OverallStatus = Exclude<DependencyStatus, 'unconfigured'>
 export interface DependencyHealth {
   key: string
   label: string
+  required: boolean
   status: DependencyStatus
   latencyMs?: number
   checkedAt: string
@@ -65,6 +66,6 @@ export interface OverallStatusInput {
   expectedShardCount: number
   activeShards: ShardHealth[]
   dependencies: DependencyHealth[]
-  requiredDependencyKeys: string[]
   staleShardThresholdMs?: number
+  additionalAttentionItems?: AttentionItem[]
 }

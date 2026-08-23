@@ -10,10 +10,12 @@ function dependency(
   key: string,
   label: string,
   status: DependencyHealth['status'] = 'healthy',
+  required = true,
 ): DependencyHealth {
   return {
     key,
     label,
+    required,
     status,
     latencyMs: 8,
     checkedAt: now.toISOString(),
@@ -45,11 +47,11 @@ function botStatus(
 function createDeps(overrides: Record<string, unknown> = {}) {
   const dependencies = [
     dependency('postgres', 'Postgres'),
-    dependency('redis', 'Redis'),
+    dependency('redis', 'Redis', 'healthy', false),
     dependency('r2', 'R2', 'unhealthy'),
     dependency('discord', 'Discord'),
     dependency('bot-http', 'Bot HTTP'),
-    dependency('lavalink', 'Lavalink'),
+    dependency('lavalink', 'Lavalink', 'healthy', false),
   ]
 
   return {
@@ -183,7 +185,7 @@ describe('buildAdminOverview', () => {
       },
       runProbes: async () => [
         dependency('postgres', 'Postgres'),
-        dependency('redis', 'Redis', 'unconfigured'),
+        dependency('redis', 'Redis', 'unconfigured', false),
         dependency('r2', 'R2'),
       ],
     })
@@ -200,6 +202,29 @@ describe('buildAdminOverview', () => {
       occurredAt: '2026-08-23T11:30:00.000Z',
       href: '/dashboard/admin/logs?source=retention&level=error',
     })
+  })
+
+  it('honors requiredness supplied by probe metadata without an overview key list', async () => {
+    const deps = createDeps({
+      repositories: {
+        ...createDeps().repositories,
+        botStatus: {
+          listAll: async () => [
+            botStatus(0, new Date(now.getTime() - 5_000), '1.21.0', 1),
+          ],
+        },
+      },
+      runProbes: async () => [
+        dependency('future-required-service', 'Future required service', 'unhealthy'),
+      ],
+    })
+
+    const result = await buildAdminOverview(deps, now)
+
+    expect(result.overallStatus).toBe('unhealthy')
+    expect(result.attentionItems.map((item) => item.key)).toEqual([
+      'dependency:future-required-service',
+    ])
   })
 })
 
