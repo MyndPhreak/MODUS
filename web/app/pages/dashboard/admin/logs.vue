@@ -1,316 +1,91 @@
 <template>
-  <div class="p-8 space-y-6 h-full flex flex-col">
-    <!-- Header -->
-    <div class="flex items-center justify-between flex-shrink-0">
-      <div>
-        <h1 class="text-2xl font-black text-white tracking-tight gradient-text">
-          Live Bot Logs
-        </h1>
-        <p class="text-gray-400 text-sm mt-1">
-          Real-time activity from the bot across all servers and shards.
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
-        <UButton
-          icon="i-heroicons-trash"
-          variant="ghost"
-          color="neutral"
-          @click="botLogs = []"
-          title="Clear View"
-          class="rounded-xl border border-white/8"
-        />
-        <UButton
-          icon="i-heroicons-arrow-path"
-          variant="ghost"
-          color="neutral"
-          @click="fetchInitialLogs"
-          :loading="logsRefreshing"
-          title="Refresh"
-          class="rounded-xl border border-white/8"
-        />
-      </div>
-    </div>
+  <main class="log-explorer flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6 lg:p-8">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80">Fleet evidence</p><h1 class="mt-1 text-2xl font-black tracking-tight text-white gradient-text">Log explorer</h1><p class="mt-1 text-sm text-gray-400">Search retained history while live events continue to stream.</p></div>
+      <div class="flex flex-wrap gap-2"><UButton icon="i-lucide-trash-2" color="neutral" variant="ghost" class="border border-white/8" @click="clearView">Clear view</UButton><UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" class="border border-white/8" :loading="historyLoading" @click="refreshHistory">Refresh</UButton></div>
+    </header>
 
-    <!-- Filters -->
-    <div class="flex flex-wrap items-center gap-3 flex-shrink-0">
-      <!-- Scope Filter -->
-      <div class="flex items-center gap-1 bg-gray-800/50 rounded-lg p-1">
-        <UButton
-          v-for="scope in logScopes"
-          :key="scope.value"
-          size="xs"
-          :variant="adminLogScope === scope.value ? 'solid' : 'ghost'"
-          :color="scope.color"
-          @click="adminLogScope = scope.value"
-          class="rounded-md text-xs font-bold"
-        >
-          {{ scope.label }}
-        </UButton>
+    <section class="glass-card rounded-2xl border border-white/8 p-4" aria-label="Log search filters">
+      <div class="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_10rem_10rem_auto]">
+        <UInput v-model="filters.search" icon="i-lucide-search" placeholder="Search log messages" aria-label="Search log messages" />
+        <USelect v-model="filters.level" :items="levelItems" aria-label="Log level" />
+        <USelect v-model="filters.scope" :items="scopeItems" aria-label="Log scope" />
+        <UButton :icon="filtersOpen ? 'i-lucide-chevron-up' : 'i-lucide-sliders-horizontal'" color="neutral" variant="soft" :aria-expanded="filtersOpen" aria-controls="advanced-log-filters" @click="filtersOpen = !filtersOpen">More filters</UButton>
       </div>
+      <div v-if="filtersOpen" id="advanced-log-filters" class="mt-3 grid gap-3 border-t border-white/8 pt-3 sm:grid-cols-2 xl:grid-cols-5">
+        <UInput v-model="filters.guildId" placeholder="Guild ID" aria-label="Guild ID" inputmode="numeric" />
+        <UInput v-model="filters.shardId" placeholder="Shard ID" aria-label="Shard ID" inputmode="numeric" />
+        <UInput v-model="filters.source" placeholder="Source" aria-label="Log source" />
+        <UInput v-model="filters.from" type="datetime-local" aria-label="Logs from" />
+        <UInput v-model="filters.to" type="datetime-local" aria-label="Logs to" />
+      </div>
+    </section>
 
-      <!-- Level Filter -->
-      <div class="flex items-center gap-1 bg-gray-800/50 rounded-lg p-1">
-        <UButton
-          v-for="lvl in adminLogLevels"
-          :key="lvl.value"
-          size="xs"
-          :variant="adminLogLevel === lvl.value ? 'solid' : 'ghost'"
-          :color="lvl.color"
-          @click="adminLogLevel = lvl.value"
-          class="rounded-md text-xs font-bold uppercase tracking-wider"
-        >
-          {{ lvl.label }}
-          <UBadge
-            v-if="getAdminLogCount(lvl.value) > 0"
-            variant="soft"
-            :color="lvl.color"
-            size="xs"
-            class="ml-1"
-          >
-            {{ getAdminLogCount(lvl.value) }}
-          </UBadge>
-        </UButton>
-      </div>
+    <section class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/8 bg-gray-950/55 px-4 py-2.5 text-xs" aria-live="polite">
+      <span class="inline-flex items-center gap-2 font-semibold text-gray-200"><span class="size-2 rounded-full" :class="connectionDotClass" aria-hidden="true" />Live stream: {{ connectionLabel }}</span>
+      <span class="text-gray-400">{{ state.visible.length.toLocaleString() }} shown</span>
+      <span v-if="state.pendingCount" class="font-semibold text-warning">{{ state.pendingCount }} pending</span>
+      <span v-if="historyError" class="text-error" role="alert">{{ historyError }}</span>
+      <div class="ml-auto flex flex-wrap items-center gap-3"><label class="flex cursor-pointer items-center gap-2 text-gray-300"><USwitch v-model="autoScroll" size="sm" /> Auto-scroll</label><UButton size="xs" :icon="state.paused ? 'i-lucide-play' : 'i-lucide-pause'" :color="state.paused ? 'primary' : 'neutral'" variant="soft" @click="togglePaused">{{ state.paused ? `Resume${state.pendingCount ? ` (${state.pendingCount})` : ''}` : 'Pause' }}</UButton></div>
+    </section>
 
-      <!-- Log count -->
-      <div class="ml-auto text-right">
-        <span class="text-xs text-gray-500 font-mono">
-          {{ filteredBotLogs.length }} / {{ botLogs.length }} entries
-        </span>
-        <p v-if="queryFilterSummary" class="mt-0.5 text-xs text-gray-400">
-          {{ queryFilterSummary }}
-        </p>
+    <section class="min-h-[24rem] flex-1 overflow-hidden rounded-2xl border border-gray-800/70 bg-gray-950 shadow-inner" aria-label="Log results">
+      <div v-if="historyLoading && !state.visible.length" class="flex h-full min-h-[24rem] items-center justify-center text-sm text-gray-400" aria-busy="true"><UIcon name="i-lucide-loader-circle" class="mr-2 size-5 animate-spin" /> Searching retained logs</div>
+      <div v-else-if="!state.visible.length" class="flex h-full min-h-[24rem] flex-col items-center justify-center px-6 text-center"><UIcon name="i-lucide-terminal" class="size-8 text-gray-600" /><p class="mt-3 text-sm font-semibold text-gray-200">No logs in this view</p><p class="mt-1 max-w-md text-xs text-gray-500">Adjust the filters, refresh retained history, or wait for a matching live event.</p></div>
+      <div v-else ref="terminal" class="h-full overflow-auto font-mono text-[11px] leading-5" tabindex="0" aria-label="Scrollable log entries">
+        <article v-for="log in state.visible" :key="log.$id" class="group grid min-w-[48rem] grid-cols-[5.5rem_3.5rem_3rem_minmax(0,1fr)] gap-x-3 border-b border-white/[0.035] px-4 py-1.5 hover:bg-white/[0.035]">
+          <time class="text-gray-500" :datetime="String(log.timestamp)">{{ formatTime(log.timestamp) }}</time><span class="font-black uppercase" :class="levelClass(log.level)">[{{ log.level }}]</span><span class="text-cyan-400/70">S{{ log.shardId ?? '—' }}</span>
+          <div class="min-w-0"><div class="flex flex-wrap items-baseline gap-x-2"><NuxtLink v-if="guildLink(log.guildId)" :to="guildLink(log.guildId)!" class="rounded text-violet-300/80 underline-offset-2 hover:text-violet-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">[{{ log.guildId }}]</NuxtLink><span v-else-if="log.guildId" class="text-gray-500">[{{ log.guildId }}]</span><span v-if="log.source" class="text-emerald-300/70">[{{ log.source }}]</span><span class="break-words text-gray-200">{{ log.message }}</span></div></div>
+        </article>
+        <div v-if="state.nextCursor" class="sticky bottom-0 flex justify-center border-t border-white/8 bg-gray-950/90 p-3 backdrop-blur"><UButton size="sm" color="neutral" variant="soft" icon="i-lucide-history" :loading="olderLoading" @click="loadOlder">Load older</UButton></div>
       </div>
-    </div>
-
-    <!-- Terminal -->
-    <div
-      class="bg-gray-950 rounded-xl border border-gray-800/50 p-4 font-mono text-[11px] flex-1 min-h-0 flex flex-col"
-    >
-      <div
-        v-if="botLogs.length === 0"
-        class="flex-1 flex items-center justify-center text-gray-600 italic"
-      >
-        <div class="text-center">
-          <UIcon
-            name="i-heroicons-signal"
-            class="w-8 h-8 mx-auto mb-2 opacity-30"
-          />
-          <p>Waiting for logs...</p>
-          <p class="text-[10px] mt-1 text-gray-700">
-            Logs will stream in real-time as the bot processes events.
-          </p>
-        </div>
-      </div>
-      <div v-else class="flex-1 overflow-y-auto space-y-0.5">
-        <div
-          v-for="log in filteredBotLogs"
-          :key="log.$id"
-          class="flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors"
-        >
-          <span class="text-gray-600 whitespace-nowrap shrink-0">{{
-            formatFullTime(log.timestamp)
-          }}</span>
-          <span
-            :class="[
-              'font-black uppercase min-w-[45px] shrink-0',
-              log.level === 'error'
-                ? 'text-red-400'
-                : log.level === 'warn'
-                  ? 'text-amber-400'
-                  : 'text-blue-400',
-            ]"
-            >[{{ log.level }}]</span
-          >
-          <span
-            v-if="log.shardId !== undefined"
-            class="text-cyan-500/60 shrink-0"
-            >S{{ log.shardId }}</span
-          >
-          <span
-            v-if="log.guildId && log.guildId !== 'global'"
-            class="text-violet-400/60 shrink-0 max-w-[120px] truncate"
-            title="Guild ID"
-            >[{{ log.guildId }}]</span
-          >
-          <span v-if="log.source" class="text-emerald-400/60 shrink-0"
-            >[{{ log.source }}]</span
-          >
-          <span class="text-gray-300 break-words">{{ log.message }}</span>
-        </div>
-      </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import {
-  filterAdminLogs,
-  parseAdminLogQuery,
-} from "~/utils/admin-operations";
-import type { AdminLogLevel } from "~/utils/admin-operations";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { applyHistoryPage, applyLiveLog, beginHistoryRequest, clearLogView, createAdminLogExplorerState, historyQuery, isCurrentHistoryRequest, matchesLogFilters, refreshLogHistory, routeQueryToLogFilters, serializeLogFilters, type AdminLogExplorerFilters, type AdminLogExplorerState } from '~/utils/admin-log-explorer'
+import { resumeLiveLogs, type ClientLogDoc } from '~/utils/admin-log-state'
 
-interface AdminLogEntry {
-  $id: string;
-  level: string;
-  timestamp: string;
-  source?: string | null;
-  guildId?: string | null;
-  shardId?: number | null;
-  message: string;
-}
+interface LogPage { items: ClientLogDoc[]; nextCursor: string | null }
+type ConnectionState = 'connecting' | 'connected' | 'reconnecting'
+const route = useRoute(); const router = useRouter(); const initialFilters = routeQueryToLogFilters(route.query)
+const filters = reactive<AdminLogExplorerFilters>(initialFilters); const state = ref<AdminLogExplorerState>(createAdminLogExplorerState())
+const historyLoading = ref(false); const olderLoading = ref(false); const historyError = ref<string | null>(null); const connection = ref<ConnectionState>('connecting'); const autoScroll = ref(true)
+const filtersOpen = ref(Boolean(initialFilters.guildId || initialFilters.shardId || initialFilters.source || initialFilters.from || initialFilters.to)); const terminal = ref<HTMLElement | null>(null)
+let eventSource: EventSource | null = null; let searchTimer: ReturnType<typeof setTimeout> | null = null; let syncingRoute = false
+const levelItems = [{ label: 'All levels', value: 'all' }, { label: 'Info', value: 'info' }, { label: 'Warnings', value: 'warn' }, { label: 'Errors', value: 'error' }]
+const scopeItems = [{ label: 'All scopes', value: 'all' }, { label: 'System', value: 'global' }, { label: 'Guild', value: 'guild' }]
+const connectionLabel = computed(() => ({ connecting: 'Connecting', connected: 'Connected', reconnecting: 'Reconnecting' })[connection.value])
+const connectionDotClass = computed(() => connection.value === 'connected' ? 'bg-success' : connection.value === 'reconnecting' ? 'bg-warning' : 'bg-gray-500')
 
-const route = useRoute();
-const botLogs = ref<AdminLogEntry[]>([]);
-const logsRefreshing = ref(false);
-const eventSource = ref<EventSource | null>(null);
-
-const adminLogScope = ref("all");
-const adminLogLevel = ref<AdminLogLevel>("all");
-const adminLogSource = ref<string | null>(null);
-const adminLogGuildId = ref<string | null>(null);
-const adminLogShardId = ref<number | null>(null);
-
-const logScopes = [
-  { value: "all", label: "All Logs", color: "neutral" as const },
-  { value: "global", label: "System", color: "primary" as const },
-  { value: "guild", label: "Per-Server", color: "info" as const },
-];
-
-const adminLogLevels: Array<{ value: AdminLogLevel; label: string; color: "neutral" | "info" | "warning" | "error" }> = [
-  { value: "all", label: "All", color: "neutral" as const },
-  { value: "info", label: "Info", color: "info" as const },
-  { value: "warn", label: "Warn", color: "warning" as const },
-  { value: "error", label: "Error", color: "error" as const },
-];
-
-const filteredBotLogs = computed(() => {
-  let logs = filterAdminLogs(botLogs.value, {
-    level: adminLogLevel.value,
-    source: adminLogSource.value,
-    guildId: adminLogGuildId.value,
-    shardId: adminLogShardId.value,
-  });
-
-  if (adminLogScope.value === "global") {
-    logs = logs.filter((l) => l.guildId === "global");
-  } else if (adminLogScope.value === "guild") {
-    logs = logs.filter((l) => l.guildId && l.guildId !== "global");
-  }
-
-  if (adminLogLevel.value !== "all") {
-    logs = logs.filter((l) => l.level === adminLogLevel.value);
-  }
-
-  return logs.sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-  );
-});
-
-const getAdminLogCount = (level: string) => {
-  let logs = filterAdminLogs(botLogs.value, {
-    level: level as AdminLogLevel,
-    source: adminLogSource.value,
-    guildId: adminLogGuildId.value,
-    shardId: adminLogShardId.value,
-  });
-  if (adminLogScope.value === "global") {
-    logs = logs.filter((l) => l.guildId === "global");
-  } else if (adminLogScope.value === "guild") {
-    logs = logs.filter((l) => l.guildId && l.guildId !== "global");
-  }
-  if (level === "all") return logs.length;
-  return logs.filter((l) => l.level === level).length;
-};
-
-const queryFilterSummary = computed(() => {
-  const filters = [
-    adminLogSource.value ? `source: ${adminLogSource.value}` : null,
-    adminLogGuildId.value ? "a selected server" : null,
-    adminLogShardId.value !== null ? `shard ${adminLogShardId.value}` : null,
-  ].filter(Boolean);
-  return filters.length ? `Filtered to ${filters.join(" · ")}` : null;
-});
-
-const syncQueryFilters = () => {
-  const filters = parseAdminLogQuery(route.query);
-  adminLogLevel.value = filters.level;
-  adminLogSource.value = filters.source;
-  adminLogGuildId.value = filters.guildId;
-  adminLogShardId.value = filters.shardId;
-};
-
-watch(
-  () => route.fullPath,
-  syncQueryFilters,
-  { immediate: true },
-);
-
-const fetchInitialLogs = async () => {
-  logsRefreshing.value = true;
+async function fetchHistory(append = false): Promise<void> {
+  const started = beginHistoryRequest(state.value); state.value = started.state; append ? olderLoading.value = true : historyLoading.value = true; historyError.value = null
   try {
-    // Admin logs endpoint returns all logs (no guild filter). The Postgres
-    // path orders by timestamp DESC and caps at 200 rows.
-    const docs = await $fetch<any[]>("/api/admin/logs");
-    botLogs.value = docs;
-  } catch (error) {
-    console.error("Error fetching logs:", error);
-  } finally {
-    logsRefreshing.value = false;
-  }
-};
-
-const setupRealtimeLogs = () => {
-  // SSE replaces the Appwrite Realtime subscription. EventSource reconnects
-  // automatically if the stream drops, so we don't need our own retry.
-  eventSource.value = new EventSource("/api/events/logs", {
-    withCredentials: true,
-  });
-  eventSource.value.onmessage = (ev) => {
-    try {
-      const { kind, log } = JSON.parse(ev.data);
-      if (kind === "create" && log) {
-        botLogs.value = [log, ...botLogs.value].slice(0, 200);
-      }
-    } catch (err) {
-      console.warn("[admin/logs] malformed SSE payload:", err);
-    }
-  };
-  eventSource.value.onerror = (err) => {
-    console.warn("[admin/logs] SSE error (auto-reconnecting):", err);
-  };
-};
-
-const formatFullTime = (dateString: string) => {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-};
-
-onMounted(async () => {
-  await fetchInitialLogs();
-  setupRealtimeLogs();
-});
-
-onUnmounted(() => {
-  if (eventSource.value) {
-    eventSource.value.close();
-    eventSource.value = null;
-  }
-});
+    const page = await $fetch<LogPage>('/api/admin/logs', { query: historyQuery(filters, append ? state.value.nextCursor : null) })
+    if (isCurrentHistoryRequest(state.value, started.requestId)) state.value = applyHistoryPage(state.value, page.items, page.nextCursor, append)
+  } catch { if (isCurrentHistoryRequest(state.value, started.requestId)) historyError.value = 'Retained logs could not be loaded. Refresh to try again.' }
+  finally { if (isCurrentHistoryRequest(state.value, started.requestId)) { historyLoading.value = false; olderLoading.value = false } }
+}
+async function syncUrlAndFetch(): Promise<void> { syncingRoute = true; await router.replace({ query: serializeLogFilters(filters) }); syncingRoute = false; state.value = clearLogView(refreshLogHistory(state.value)); await fetchHistory(false) }
+watch(() => filters.search, () => { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => void syncUrlAndFetch(), 350) })
+watch(() => [filters.level, filters.scope, filters.guildId, filters.shardId, filters.source, filters.from, filters.to], () => { if (searchTimer) clearTimeout(searchTimer); void syncUrlAndFetch() }, { deep: true })
+watch(() => route.fullPath, () => { if (!syncingRoute) Object.assign(filters, routeQueryToLogFilters(route.query)) })
+function loadOlder(): void { void fetchHistory(true) }; function clearView(): void { state.value = clearLogView(state.value) }; function refreshHistory(): void { state.value = refreshLogHistory(state.value); void fetchHistory(false) }
+function togglePaused(): void { state.value = state.value.paused ? resumeLiveLogs(state.value, 1_000) as AdminLogExplorerState : { ...state.value, paused: true } }
+function guildLink(guildId: string | null | undefined): string | null { return guildId && guildId !== 'global' ? `/dashboard/server/${encodeURIComponent(guildId)}/logs` : null }
+function levelClass(level: string): string { return level === 'error' ? 'text-error' : level === 'warn' ? 'text-warning' : 'text-info' }
+function formatTime(timestamp: string | Date): string { const date = new Date(timestamp); return Number.isNaN(date.getTime()) ? 'unknown' : date.toLocaleTimeString([], { hour12: false }) }
+async function scrollToLatest(): Promise<void> { if (!autoScroll.value || state.value.paused) return; await nextTick(); terminal.value?.scrollTo({ top: 0, behavior: 'smooth' }) }
+function setupRealtime(): void {
+  eventSource = new EventSource('/api/events/logs', { withCredentials: true }); eventSource.onopen = () => { connection.value = 'connected' }; eventSource.onerror = () => { connection.value = 'reconnecting' }
+  eventSource.onmessage = (event) => { try { const payload = JSON.parse(event.data) as { kind?: string; log?: ClientLogDoc }; if (payload.kind === 'create' && payload.log && matchesLogFilters(payload.log, filters)) { state.value = applyLiveLog(state.value, payload.log); void scrollToLatest() } } catch { /* Ignore malformed events without interrupting reconnect. */ } }
+}
+onMounted(() => { void fetchHistory(); setupRealtime() }); onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); eventSource?.close(); eventSource = null })
 </script>
 
 <style scoped>
-.gradient-text {
-  background: linear-gradient(to bottom right, #ffffff 30%, #a855f7);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+.gradient-text { background: linear-gradient(to bottom right, #fff 30%, #a855f7); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+@media (prefers-reduced-motion: reduce) { .log-explorer *, .log-explorer *::before, .log-explorer *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: 0.01ms !important; } }
 </style>

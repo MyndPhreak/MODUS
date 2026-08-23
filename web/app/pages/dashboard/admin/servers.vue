@@ -78,6 +78,7 @@ import { ref, computed, watch, onMounted, h, resolveComponent } from "vue";
 import type { TableColumn } from "@nuxt/ui";
 
 const UBadge = resolveComponent("UBadge");
+const NuxtLink = resolveComponent("NuxtLink");
 const USwitchEl = resolveComponent("USwitch");
 
 const toast = useToast();
@@ -174,9 +175,13 @@ const columns: TableColumn<ServerRow>[] = [
     header: "Guild ID",
     cell: ({ row }) =>
       h(
-        "span",
-        { class: "text-xs text-gray-500 font-mono" },
-        row.original.guild_id || row.original.$id,
+        NuxtLink,
+        {
+          to: `/dashboard/admin/logs?guildId=${encodeURIComponent(row.original.guild_id || row.original.$id)}`,
+          class: "rounded text-xs text-violet-300/80 font-mono hover:text-violet-200 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          title: `View logs for ${row.original.name}`,
+        },
+        () => row.original.guild_id || row.original.$id,
       ),
   },
   {
