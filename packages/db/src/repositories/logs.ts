@@ -4,7 +4,7 @@
  * Insert-heavy, read-rare. The (guild_id, timestamp DESC) index covers the
  * dashboard's paginated view; a bare timestamp index supports the admin log.
  */
-import { desc, eq, inArray, lt } from "drizzle-orm";
+import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Database } from "../client";
 import { logs, type LogEntry } from "../schema";
 
@@ -68,6 +68,30 @@ export class LogRepository {
       .orderBy(desc(logs.timestamp))
       .limit(limit);
     return rows.map(toDoc);
+  }
+
+  /** Counts each level from `since` and reports the oldest retained log. */
+  async countByLevelSince(since: Date): Promise<{
+    info: number;
+    warn: number;
+    error: number;
+    oldestTimestamp: Date | null;
+  }> {
+    const [row] = await this.db
+      .select({
+        info: sql<number>`count(*) filter (where ${logs.level} = 'info' and ${logs.timestamp} >= ${since})::int`,
+        warn: sql<number>`count(*) filter (where ${logs.level} = 'warn' and ${logs.timestamp} >= ${since})::int`,
+        error: sql<number>`count(*) filter (where ${logs.level} = 'error' and ${logs.timestamp} >= ${since})::int`,
+        oldestTimestamp: sql<Date | null>`min(${logs.timestamp})`,
+      })
+      .from(logs);
+
+    return {
+      info: row?.info ?? 0,
+      warn: row?.warn ?? 0,
+      error: row?.error ?? 0,
+      oldestTimestamp: row?.oldestTimestamp ?? null,
+    };
   }
 
   async deleteByGuild(guildId: string): Promise<number> {

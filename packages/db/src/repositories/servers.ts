@@ -156,6 +156,33 @@ export class ServerRepository {
     return row?.c ?? 0;
   }
 
+  /** Fleet counts for the admin operations overview. */
+  async getAdminCounts(since: Date): Promise<{
+    total: number;
+    online: number;
+    offline: number;
+    premium: number;
+    registeredSince: number;
+  }> {
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        online: sql<number>`count(*) filter (where ${servers.status})::int`,
+        offline: sql<number>`count(*) filter (where not ${servers.status})::int`,
+        premium: sql<number>`count(*) filter (where ${servers.premium})::int`,
+        registeredSince: sql<number>`count(*) filter (where ${servers.createdAt} >= ${since})::int`,
+      })
+      .from(servers);
+
+    return {
+      total: row?.total ?? 0,
+      online: row?.online ?? 0,
+      offline: row?.offline ?? 0,
+      premium: row?.premium ?? 0,
+      registeredSince: row?.registeredSince ?? 0,
+    };
+  }
+
   /**
    * Servers where the user is the owner or appears in `admin_user_ids`.
    * Backs GET /api/servers/my-servers.
