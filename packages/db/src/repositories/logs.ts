@@ -4,7 +4,19 @@
  * Insert-heavy, read-rare. The (guild_id, timestamp DESC) index covers the
  * dashboard's paginated view; a bare timestamp index supports the admin log.
  */
-import { desc, eq, inArray, lt, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { Database } from "../client";
 import { logs, type LogEntry } from "../schema";
 
@@ -26,6 +38,64 @@ export interface LogInput {
   shardId?: number;
   source?: string;
   timestamp?: Date;
+}
+
+export interface LogSearchInput {
+  search: string | null;
+  level: "info" | "warn" | "error" | null;
+  scope: "global" | "guild";
+  guildId: string | null;
+  shardId: number | null;
+  source: string | null;
+  from: Date | null;
+  to: Date | null;
+  limit: number;
+  cursor: { timestamp: Date; id: string } | null;
+}
+
+export interface LogSearchPage {
+  items: LogDoc[];
+  nextCursorRow: { timestamp: Date; id: string } | null;
+}
+
+function isAfterCursor(row: LogDoc, cursor: NonNullable<LogSearchInput["cursor"]>): boolean {
+  const timestampDifference = row.timestamp.getTime() - cursor.timestamp.getTime();
+  return timestampDifference < 0 || (timestampDifference === 0 && row.$id < cursor.id);
+}
+
+function finalizeLogSearchPage(rows: LogDoc[], limit: number): LogSearchPage {
+  const hasNextPage = rows.length > limit;
+  const items = rows.slice(0, limit);
+  const last = hasNextPage ? items.at(-1) : undefined;
+  return {
+    items,
+    nextCursorRow: last ? { timestamp: last.timestamp, id: last.$id } : null,
+  };
+}
+
+/** Pure reference implementation of the repository's filtering and ordering
+ * contract. It keeps cursor semantics deterministic without a live database. */
+export function applyLogSearchContract(rows: LogDoc[], input: LogSearchInput): LogSearchPage {
+  const filtered = rows.filter((row) => {
+    if (input.search && !row.message.toLocaleLowerCase().includes(input.search.toLocaleLowerCase())) return false;
+    if (input.level && row.level !== input.level) return false;
+    if (input.scope === "guild" && row.guildId !== input.guildId) return false;
+    if (input.shardId !== null && row.shardId !== input.shardId) return false;
+    if (input.source && row.source !== input.source) return false;
+    if (input.from && row.timestamp < input.from) return false;
+    if (input.to && row.timestamp > input.to) return false;
+    if (input.cursor && !isAfterCursor(row, input.cursor)) return false;
+    return true;
+  });
+
+  filtered.sort((left, right) => {
+    const timestampDifference = right.timestamp.getTime() - left.timestamp.getTime();
+    if (timestampDifference !== 0) return timestampDifference;
+    if (left.$id === right.$id) return 0;
+    return left.$id > right.$id ? -1 : 1;
+  });
+
+  return finalizeLogSearchPage(filtered.slice(0, input.limit + 1), input.limit);
 }
 
 export class LogRepository {
@@ -68,6 +138,35 @@ export class LogRepository {
       .orderBy(desc(logs.timestamp))
       .limit(limit);
     return rows.map(toDoc);
+  }
+
+  async searchPage(input: LogSearchInput): Promise<LogSearchPage> {
+    const conditions: SQL[] = [];
+    if (input.search) conditions.push(ilike(logs.message, `%${input.search}%`));
+    if (input.level) conditions.push(eq(logs.level, input.level));
+    if (input.scope === "guild" && input.guildId) conditions.push(eq(logs.guildId, input.guildId));
+    if (input.shardId !== null) conditions.push(eq(logs.shardId, input.shardId));
+    if (input.source) conditions.push(eq(logs.source, input.source));
+    if (input.from) conditions.push(gte(logs.timestamp, input.from));
+    if (input.to) conditions.push(lte(logs.timestamp, input.to));
+    if (input.cursor) {
+      conditions.push(or(
+        lt(logs.timestamp, input.cursor.timestamp),
+        and(
+          eq(logs.timestamp, input.cursor.timestamp),
+          lt(logs.id, input.cursor.id),
+        ),
+      )!);
+    }
+
+    const rows = await this.db
+      .select()
+      .from(logs)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(logs.timestamp), desc(logs.id))
+      .limit(input.limit + 1);
+
+    return finalizeLogSearchPage(rows.map(toDoc), input.limit);
   }
 
   /** Counts each level from `since` and reports the oldest retained log. */
