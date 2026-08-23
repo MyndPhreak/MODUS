@@ -29,6 +29,12 @@ export const CHANNEL_POLL_VOTES = "modus:realtime:poll-votes";
  */
 export const CHANNEL_MUSIC_STATE = "modus:realtime:music";
 
+/**
+ * Fleet-wide feature-switch changes — `{ kind: "changed" }`. Mirrors
+ * bot/EventBus.ts's CHANNEL_MUSIC_HEALTH; keep both in sync.
+ */
+export const CHANNEL_MUSIC_HEALTH = "modus:realtime:music-health";
+
 export interface Envelope<T = unknown> {
   origin: string;
   ts: number;

@@ -27,6 +27,7 @@ import {
   GiveawayRepository,
   GiveawayEntryRepository,
   XpUserRepository,
+  SystemFlagsRepository,
   type Database,
 } from "@modus/db";
 
@@ -52,6 +53,7 @@ export interface Repos {
   polls: PollRepository;
   giveaways: GiveawayRepository;
   giveawayEntries: GiveawayEntryRepository;
+  systemFlags: SystemFlagsRepository;
 }
 
 let cached: Repos | null = null;
@@ -87,6 +89,7 @@ export function getRepos(): Repos | null {
       polls: new PollRepository(db),
       giveaways: new GiveawayRepository(db),
       giveawayEntries: new GiveawayEntryRepository(db),
+      systemFlags: new SystemFlagsRepository(db),
     };
     return cached;
   } catch (err) {
