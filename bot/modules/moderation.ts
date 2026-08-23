@@ -387,7 +387,8 @@ const unbanCommand = new SlashCommandBuilder()
     opt
       .setName("user_id")
       .setDescription("The user ID to unban")
-      .setRequired(true),
+      .setRequired(true)
+      .setAutocomplete(true),
   )
   .addStringOption((opt) =>
     opt.setName("reason").setDescription("Reason for the unban"),
@@ -663,7 +664,9 @@ const moderationModule: BotModule = {
           interaction.options.getString("reason") || "No reason provided";
         const deleteDays = interaction.options.getInteger("delete_days") ?? 0;
 
-        const targetMember = guild.members.cache.get(targetUser.id);
+        const targetMember =
+          guild.members.cache.get(targetUser.id) ??
+          (await guild.members.fetch(targetUser.id).catch(() => null));
 
         if (targetMember) {
           const check = canModerate(moderator, targetMember, interaction);
@@ -685,10 +688,18 @@ const moderationModule: BotModule = {
           }
         }
 
-        await guild.members.ban(targetUser, {
-          reason,
-          deleteMessageSeconds: deleteDays * 86400,
-        });
+        try {
+          await guild.members.ban(targetUser, {
+            reason,
+            deleteMessageSeconds: deleteDays * 86400,
+          });
+        } catch (banError) {
+          moduleManager.logger.error("Ban failed", guildId, banError, "moderation");
+          await interaction.editReply(
+            "❌ I don't have permission to ban this user. Check my role permissions and position in the role list.",
+          );
+          return;
+        }
 
         const caseId = await getNextCaseId(moduleManager, guildId);
         const modCase: ModerationCase = {
@@ -1267,6 +1278,34 @@ const moderationModule: BotModule = {
         );
         break;
       }
+    }
+  },
+
+  async autocomplete(interaction: AutocompleteInteraction) {
+    if (interaction.commandName !== "unban" || !interaction.guild) {
+      await interaction.respond([]);
+      return;
+    }
+
+    const focused = interaction.options.getFocused().toLowerCase();
+
+    try {
+      const bans = await interaction.guild.bans.fetch();
+      const choices = bans
+        .filter(
+          (b) =>
+            b.user.tag.toLowerCase().includes(focused) ||
+            b.user.id.includes(focused),
+        )
+        .map((b) => ({
+          name: `${b.user.tag} (${b.user.id})`.slice(0, 100),
+          value: b.user.id,
+        }))
+        .slice(0, 25);
+
+      await interaction.respond(choices);
+    } catch {
+      await interaction.respond([]);
     }
   },
 };
