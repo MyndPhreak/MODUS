@@ -50,7 +50,7 @@ describe('admin audit repository query', () => {
       targetId: 'music',
       from: at('2026-08-22T00:00:00.000Z'),
       to: at('2026-08-23T13:00:00.000Z'),
-      cursor: { createdAt: cursorTime, id: 'cursor-id' },
+      cursor: { createdAt: cursorTime, id: '11111111-1111-4111-8111-111111111111' },
     })).toSQL()
 
     expect(query.sql).toBe(
@@ -72,7 +72,7 @@ describe('admin audit repository query', () => {
       '2026-08-23T13:00:00.000Z',
       '2026-08-23T12:00:00.000Z',
       '2026-08-23T12:00:00.000Z',
-      'cursor-id',
+      '11111111-1111-4111-8111-111111111111',
       51,
     ])
   })
@@ -85,6 +85,9 @@ describe('admin audit repository query', () => {
     expect(() => buildAdminAuditSearchQuery(db, input({ from: new Date('invalid') }))).toThrow('from')
     expect(() => buildAdminAuditSearchQuery(db, input({
       cursor: { createdAt: at('2026-08-23T12:00:00.000Z'), id: '' },
+    }))).toThrow('cursor')
+    expect(() => buildAdminAuditSearchQuery(db, input({
+      cursor: { createdAt: at('2026-08-23T12:00:00.000Z'), id: 'not-a-uuid' },
     }))).toThrow('cursor')
   })
 

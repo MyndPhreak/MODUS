@@ -30,6 +30,9 @@ export interface AdminAuditSearchPage {
   nextCursorRow: { createdAt: Date; id: string } | null;
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function assertSearchInput(input: AdminAuditSearchInput): void {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
     throw new RangeError("limit must be an integer between 1 and 100");
@@ -50,9 +53,10 @@ function assertSearchInput(input: AdminAuditSearchInput): void {
   }
 
   if (input.cursor && (
-    !Number.isFinite(input.cursor.createdAt.getTime()) || input.cursor.id.length === 0
+    !Number.isFinite(input.cursor.createdAt.getTime()) ||
+    !UUID_PATTERN.test(input.cursor.id)
   )) {
-    throw new TypeError("cursor must contain a valid date and non-empty id");
+    throw new TypeError("cursor must contain a valid date and UUID id");
   }
 }
 
