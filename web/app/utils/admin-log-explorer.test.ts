@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   applyHistoryPage,
   applyCoordinatedHistoryPage,
@@ -8,6 +8,7 @@ import {
   createAdminLogExplorerState,
   createHistoryCoordinator,
   createLogEventStream,
+  createRouteSyncCoordinator,
   historyQuery,
   localDateTimeToUtc,
   matchesLogFilters,
@@ -21,6 +22,10 @@ import {
   type AdminLogExplorerFilters,
 } from './admin-log-explorer'
 import type { ClientLogDoc } from './admin-log-state'
+
+const originalTimezone = process.env.TZ
+beforeAll(() => { process.env.TZ = 'America/New_York' })
+afterAll(() => { process.env.TZ = originalTimezone })
 
 function log($id: string, timestamp: string): ClientLogDoc {
   return {
@@ -48,33 +53,31 @@ const filters: AdminLogExplorerFilters = {
 
 describe('admin log explorer queries', () => {
   it('serializes trimmed filters and converts local date inputs to UTC', () => {
-    expect(serializeLogFilters(filters, 0)).toEqual({
+    expect(serializeLogFilters(filters)).toEqual({
       search: 'member joined',
       level: 'warn',
       scope: 'guild',
       guildId: '123',
       shardId: '0',
       source: 'gateway',
-      from: '2026-08-22T10:30:00.000Z',
-      to: '2026-08-23T10:30:00.000Z',
+      from: '2026-08-22T14:30:00.000Z',
+      to: '2026-08-23T14:30:00.000Z',
     })
   })
 
-  it('round-trips UTC URLs through datetime-local values in a non-UTC timezone', () => {
-    const offsetMinutes = 240
-    const utc = '2026-08-23T14:30:00.000Z'
-    const local = utcToLocalDateTime(utc, offsetMinutes)
-
-    expect(local).toBe('2026-08-23T10:30')
-    expect(localDateTimeToUtc(local, offsetMinutes)).toBe(utc)
-    expect(routeQueryToLogFilters({ from: utc }, offsetMinutes).from).toBe(local)
+  it('uses the date-specific platform offset across opposite DST seasons', () => {
+    expect(utcToLocalDateTime('2026-07-15T14:30:00.000Z')).toBe('2026-07-15T10:30')
+    expect(localDateTimeToUtc('2026-07-15T10:30')).toBe('2026-07-15T14:30:00.000Z')
+    expect(utcToLocalDateTime('2026-01-15T15:30:00.000Z')).toBe('2026-01-15T10:30')
+    expect(localDateTimeToUtc('2026-01-15T10:30')).toBe('2026-01-15T15:30:00.000Z')
+    expect(routeQueryToLogFilters({ from: '2026-01-15T15:30:00.000Z' }).from).toBe('2026-01-15T10:30')
   })
 
   it('serializes only valid scope and guild combinations', () => {
-    expect(serializeLogFilters({ ...filters, scope: 'all', guildId: '' }, 0).scope).toBe('all')
-    expect(serializeLogFilters({ ...filters, scope: 'global', guildId: '123' }, 0)).toMatchObject({ scope: 'global' })
-    expect(serializeLogFilters({ ...filters, scope: 'global', guildId: '123' }, 0)).not.toHaveProperty('guildId')
-    expect(serializeLogFilters({ ...filters, scope: 'guild', guildId: '' }, 0)).toMatchObject({ scope: 'guild' })
+    expect(serializeLogFilters({ ...filters, scope: 'all', guildId: '' }).scope).toBe('all')
+    expect(serializeLogFilters({ ...filters, scope: 'global', guildId: '123' })).toMatchObject({ scope: 'global' })
+    expect(serializeLogFilters({ ...filters, scope: 'global', guildId: '123' })).not.toHaveProperty('guildId')
+    expect(serializeLogFilters({ ...filters, scope: 'guild', guildId: '' })).toMatchObject({ scope: 'guild' })
   })
 
   it('omits empty filters and cursor while building a first-page request', () => {
@@ -203,6 +206,36 @@ describe('admin log explorer live state', () => {
 })
 
 describe('admin log explorer lifecycle helpers', () => {
+  it('keeps overlapping internal routes owned and still hydrates external navigation', () => {
+    const routes = createRouteSyncCoordinator()
+    const first = routes.begin({ search: 'first', scope: 'all' })
+    const second = routes.begin({ search: 'second', scope: 'all' })
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    if (!first || !second) throw new Error('Expected distinct internal route navigations')
+
+    routes.complete(first, { search: 'second', scope: 'all' })
+    expect(routes.shouldHydrate({ search: 'first', scope: 'all' })).toBe(true)
+    expect(routes.shouldHydrate({ search: 'back', scope: 'all' })).toBe(true)
+    expect(routes.shouldHydrate({ search: 'second', scope: 'all' })).toBe(false)
+    routes.complete(second, { search: 'second', scope: 'all' })
+    expect(routes.shouldHydrate({ search: 'second', scope: 'all' })).toBe(true)
+
+    const third = routes.begin({ search: 'third', scope: 'all' })
+    expect(third).not.toBeNull()
+    if (!third) throw new Error('Expected an internal route navigation')
+    routes.complete(third, { search: 'third', scope: 'all' })
+    expect(routes.shouldHydrate({ search: 'third', scope: 'all' })).toBe(false)
+    expect(routes.shouldHydrate({ search: 'third', scope: 'all' })).toBe(true)
+  })
+
+  it('does not retain ownership when the internal target is already current', () => {
+    const routes = createRouteSyncCoordinator()
+    const query = { search: 'current', scope: 'all' }
+    expect(routes.begin(query, query)).toBeNull()
+    expect(routes.shouldHydrate(query)).toBe(true)
+  })
+
   it('debounces rapid changes and cancels pending work', () => {
     vi.useFakeTimers()
     const calls: string[] = []

@@ -53,6 +53,7 @@ import {
   createDebouncedAction,
   createHistoryCoordinator,
   createLogEventStream,
+  createRouteSyncCoordinator,
   historyQuery,
   matchesLogFilters,
   refreshLogHistory,
@@ -79,9 +80,9 @@ const autoScroll = ref(true)
 const filtersOpen = ref(Boolean(initialFilters.guildId || initialFilters.shardId || initialFilters.source || initialFilters.from || initialFilters.to))
 const terminal = ref<HTMLElement | null>(null)
 const historyCoordinator = createHistoryCoordinator()
+const routeSync = createRouteSyncCoordinator()
 const searchDebounce = createDebouncedAction(350, () => { void synchronizeFilters() })
 let eventStream: { close(): void } | null = null
-let syncingRoute = false
 let applyingRoute = false
 const levelItems = [{ label: 'All levels', value: 'all' }, { label: 'Info', value: 'info' }, { label: 'Warnings', value: 'warn' }, { label: 'Errors', value: 'error' }]
 const scopeItems = [{ label: 'All scopes', value: 'all' }, { label: 'System', value: 'global' }, { label: 'Guild', value: 'guild' }]
@@ -122,8 +123,8 @@ function invalidateHistory(clearVisible: boolean): void {
 
 async function synchronizeFilters(): Promise<void> {
   const query = serializeLogFilters(filters)
-  syncingRoute = true
-  void router.replace({ query }).finally(() => { syncingRoute = false })
+  const navigation = routeSync.begin(query, route.query)
+  if (navigation) void router.replace({ query }).finally(() => { routeSync.complete(navigation, route.query) })
   await fetchHistory(false, { ...query, limit: 100 })
 }
 
@@ -148,7 +149,7 @@ watch(() => filters.guildId, (guildId) => {
 })
 watch(() => [filters.level, filters.shardId, filters.source, filters.from, filters.to], () => filterChanged(false), { deep: true })
 watch(() => route.fullPath, async () => {
-  if (syncingRoute) return
+  if (!routeSync.shouldHydrate(route.query)) return
   applyingRoute = true
   invalidateHistory(true)
   Object.assign(filters, routeQueryToLogFilters(route.query))

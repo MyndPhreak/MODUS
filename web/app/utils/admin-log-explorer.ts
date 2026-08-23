@@ -49,21 +49,19 @@ function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-export function utcToLocalDateTime(value: string, offsetMinutes = new Date().getTimezoneOffset()): string {
+export function utcToLocalDateTime(value: string): string {
   if (!value) return ''
-  const timestamp = Date.parse(value)
-  if (!Number.isFinite(timestamp)) return ''
-  const local = new Date(timestamp - offsetMinutes * 60_000)
-  return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())}T${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`
+  const local = new Date(value)
+  if (Number.isNaN(local.getTime())) return ''
+  return `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`
 }
 
-export function localDateTimeToUtc(value: string, offsetMinutes = new Date().getTimezoneOffset()): string {
+export function localDateTimeToUtc(value: string): string {
   if (!value) return ''
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value)
   if (!match) return ''
   const [, year, month, day, hour, minute] = match
-  const timestamp = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)) + offsetMinutes * 60_000
-  const date = new Date(timestamp)
+  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))
   return Number.isNaN(date.getTime()) ? '' : date.toISOString()
 }
 
@@ -73,7 +71,6 @@ export function emptyLogFilters(): AdminLogExplorerFilters {
 
 export function routeQueryToLogFilters(
   query: Record<string, RouteQueryValue>,
-  offsetMinutes = new Date().getTimezoneOffset(),
 ): AdminLogExplorerFilters {
   const result = emptyLogFilters()
   result.search = first(query.search)
@@ -86,14 +83,13 @@ export function routeQueryToLogFilters(
   if ((result.scope === 'all' || result.scope === 'global') && result.guildId) result.guildId = ''
   result.shardId = first(query.shardId) || first(query.shard_id) || first(query.shard)
   result.source = first(query.source)
-  result.from = utcToLocalDateTime(first(query.from), offsetMinutes)
-  result.to = utcToLocalDateTime(first(query.to), offsetMinutes)
+  result.from = utcToLocalDateTime(first(query.from))
+  result.to = utcToLocalDateTime(first(query.to))
   return result
 }
 
 export function serializeLogFilters(
   filters: AdminLogExplorerFilters,
-  offsetMinutes = new Date().getTimezoneOffset(),
 ): Record<string, string> {
   const query: Record<string, string> = { scope: filters.scope }
   const search = filters.search.trim()
@@ -105,8 +101,8 @@ export function serializeLogFilters(
   if (filters.scope === 'guild' && guildId) query.guildId = guildId
   if (shardId) query.shardId = shardId
   if (source) query.source = source
-  const from = localDateTimeToUtc(filters.from, offsetMinutes)
-  const to = localDateTimeToUtc(filters.to, offsetMinutes)
+  const from = localDateTimeToUtc(filters.from)
+  const to = localDateTimeToUtc(filters.to)
   if (from) query.from = from
   if (to) query.to = to
   return query
@@ -225,6 +221,37 @@ export function createDebouncedAction<T>(delay: number, action: (value: T) => vo
     cancel(): void {
       if (timer) clearTimeout(timer)
       timer = null
+    },
+  }
+}
+
+type RouteSyncValue = string | Array<string | null> | null | undefined
+
+function routeSyncKey(query: Record<string, RouteSyncValue>): string {
+  return JSON.stringify(Object.entries(query)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b)))
+}
+
+export function createRouteSyncCoordinator() {
+  let sequence = 0
+  const pending = new Map<number, string>()
+  return {
+    begin(query: Record<string, RouteSyncValue>, currentQuery?: Record<string, RouteSyncValue>): { id: number } | null {
+      if (currentQuery && routeSyncKey(query) === routeSyncKey(currentQuery)) return null
+      const id = ++sequence
+      pending.set(id, routeSyncKey(query))
+      return { id }
+    },
+    complete(navigation: { id: number }, currentQuery: Record<string, RouteSyncValue>): void {
+      const target = pending.get(navigation.id)
+      if (target && target !== routeSyncKey(currentQuery)) pending.delete(navigation.id)
+    },
+    shouldHydrate(query: Record<string, RouteSyncValue>): boolean {
+      const key = routeSyncKey(query)
+      const matching = [...pending.entries()].filter(([, target]) => target === key)
+      for (const [id] of matching) pending.delete(id)
+      return matching.length === 0
     },
   }
 }

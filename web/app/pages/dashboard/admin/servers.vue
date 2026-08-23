@@ -31,10 +31,10 @@
         class="w-40"
         aria-label="Server status"
       />
-      <div class="flex items-center gap-2">
-        <USwitch v-model="premiumOnly" color="warning" />
+      <label class="flex items-center gap-2">
+        <USwitch v-model="premiumOnly" color="warning" aria-label="Show premium servers only" />
         <span class="text-sm text-gray-400">Premium only</span>
-      </div>
+      </label>
       <span class="ml-auto text-sm text-gray-500">
         {{ total.toLocaleString() }} server{{ total === 1 ? "" : "s" }}
       </span>
