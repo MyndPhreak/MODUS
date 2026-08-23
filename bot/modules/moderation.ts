@@ -17,6 +17,7 @@ import {
   type ModerationSettingsType,
 } from "../lib/schemas";
 import { parseSettings } from "../lib/validateSettings";
+import { getChannelLockOverwrites } from "./lib/channelLock";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -1188,10 +1189,15 @@ const moderationModule: BotModule = {
           return;
         }
 
-        const everyoneRole = guild.roles.everyone;
-        await target.permissionOverwrites.edit(everyoneRole, {
-          SendMessages: false,
-        });
+        const lockOverwrites = getChannelLockOverwrites(settings.exemptRoleIds);
+        for (const overwrite of lockOverwrites) {
+          const targetId = overwrite.id === "@everyone" ? guild.roles.everyone : overwrite.id;
+          await target.permissionOverwrites.edit(targetId, {
+            SendMessages: overwrite.allow.includes(PermissionFlagsBits.SendMessages)
+              ? true
+              : false,
+          });
+        }
 
         const embed = new EmbedBuilder()
           .setColor(0xed4245)
@@ -1218,10 +1224,14 @@ const moderationModule: BotModule = {
           return;
         }
 
-        const everyoneRole = guild.roles.everyone;
-        await target.permissionOverwrites.edit(everyoneRole, {
+        await target.permissionOverwrites.edit(guild.roles.everyone, {
           SendMessages: null,
         });
+        for (const roleId of settings.exemptRoleIds) {
+          await target.permissionOverwrites.edit(roleId, {
+            SendMessages: null,
+          });
+        }
 
         const embed = new EmbedBuilder()
           .setColor(0x57f287)
