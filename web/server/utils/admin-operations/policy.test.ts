@@ -69,6 +69,44 @@ describe('deriveOverallStatus', () => {
     expect(result.attentionItems.map((item) => item.key)).toEqual([])
   })
 
+  it('degrades when no fleet telemetry has been reported', () => {
+    const result = deriveOverallStatus({
+      now,
+      expectedShardCount: 0,
+      activeShards: [],
+      dependencies: [],
+    })
+
+    expect(result.overallStatus).toBe('degraded')
+    expect(result.attentionItems).toEqual([{
+      key: 'fleet:no-telemetry',
+      severity: 'degraded',
+      title: 'Fleet telemetry is unavailable',
+      description: 'No active shard or version telemetry has been reported.',
+    }])
+  })
+
+  it('degrades with a stable missing-shards incident and fleet counts', () => {
+    const result = deriveOverallStatus({
+      now,
+      expectedShardCount: 3,
+      activeShards: [
+        { id: 0, heartbeatAt: freshHeartbeat, version: '1.21.0' },
+        { id: 1, heartbeatAt: freshHeartbeat, version: '1.21.0' },
+      ],
+      dependencies: [],
+    })
+
+    expect(result.overallStatus).toBe('degraded')
+    expect(result.fleet.shards).toEqual({ status: 'degraded', active: 2, expected: 3, stale: 0 })
+    expect(result.attentionItems).toEqual([{
+      key: 'shards:missing',
+      severity: 'degraded',
+      title: 'Shards are missing',
+      description: '2 of 3 expected shards are reporting.',
+    }])
+  })
+
   it('degrades when a shard heartbeat is stale', () => {
     const result = deriveOverallStatus({
       now,
@@ -141,7 +179,8 @@ describe('deriveOverallStatus', () => {
     })
 
     expect(result.fleet).toEqual({
-      shards: { active: 2, expected: 4, stale: 1 },
+      telemetryAvailable: true,
+      shards: { status: 'degraded', active: 2, expected: 4, stale: 1 },
       versions: { active: ['1.20.0', '1.21.0'], disagreement: true },
     })
     expect(result.attentionItems.map((item) => item.key)).toEqual([

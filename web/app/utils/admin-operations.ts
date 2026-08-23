@@ -15,7 +15,9 @@ export interface FilterableAdminLog {
 }
 
 export interface FleetTelemetryInput {
+  telemetryAvailable: boolean
   shards: {
+    status: 'healthy' | 'degraded' | 'unavailable'
     active: number
     expected: number
     stale: number
@@ -78,11 +80,7 @@ export function filterAdminLogs<T extends FilterableAdminLog>(
 export function getFleetTelemetryPresentation(
   fleet: FleetTelemetryInput,
 ): FleetTelemetryPresentation {
-  const available = fleet.shards.active > 0 ||
-    fleet.shards.expected > 0 ||
-    fleet.versions.active.length > 0
-
-  if (!available) {
+  if (!fleet.telemetryAvailable) {
     return {
       available: false,
       shardStatus: 'unavailable',
@@ -93,13 +91,9 @@ export function getFleetTelemetryPresentation(
     }
   }
 
-  const shardStatus = fleet.shards.stale > 0 || fleet.shards.active < fleet.shards.expected
-    ? 'degraded'
-    : 'healthy'
-
   return {
-    available: true,
-    shardStatus,
+    available: fleet.telemetryAvailable,
+    shardStatus: fleet.shards.status,
     shardValue: `${fleet.shards.active} / ${fleet.shards.expected}`,
     shardDetail: fleet.shards.stale
       ? `${fleet.shards.stale} stale heartbeat${fleet.shards.stale === 1 ? '' : 's'}`

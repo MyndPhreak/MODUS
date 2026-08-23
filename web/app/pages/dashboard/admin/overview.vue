@@ -222,7 +222,7 @@
               <div class="flex items-center justify-between gap-3">
                 <h3 class="text-sm font-semibold text-white">{{ window.label }}</h3>
                 <UBadge :color="window.historyComplete ? 'success' : 'warning'" variant="soft" size="xs">
-                  {{ window.historyComplete ? 'Full history' : 'Retained history' }}
+                  {{ window.historyComplete ? 'Full history' : 'Partial retained history' }}
                 </UBadge>
               </div>
               <dl class="mt-4 grid grid-cols-3 gap-3">
@@ -235,7 +235,7 @@
                   <dd class="mt-1 font-mono text-sm font-semibold text-white">{{ formatNumber(window.warnings) }}</dd>
                 </div>
                 <div>
-                  <dt class="text-xs text-gray-300">Servers</dt>
+                  <dt class="text-xs text-gray-300">Registered servers</dt>
                   <dd class="mt-1 font-mono text-sm font-semibold text-white">{{ formatNumber(window.registeredServers) }}</dd>
                 </div>
               </dl>
@@ -254,9 +254,7 @@ import { NuxtLink } from '#components'
 import { getFleetTelemetryPresentation } from '~/utils/admin-operations'
 import type {
   AdminOverviewResponse,
-  AttentionItem,
   DependencyStatus,
-  OverallStatus,
 } from '../../../../server/utils/admin-operations/types'
 
 type DisplayStatus = DependencyStatus | 'available' | 'unavailable'
@@ -273,31 +271,12 @@ const overview = shallowRef<AdminOverviewResponse | null>(null)
 const loading = ref(true)
 const requestError = ref<string | null>(null)
 
-const severityRank: Record<Exclude<OverallStatus, 'healthy'>, number> = {
-  unhealthy: 0,
-  degraded: 1,
-}
-
 const fleetTelemetry = computed(() => {
   if (!overview.value) return null
   return getFleetTelemetryPresentation(overview.value.fleet)
 })
 
-const attentionItems = computed<AttentionItem[]>(() => {
-  if (!overview.value) return []
-  const attention = [...overview.value.attentionItems]
-  if (!fleetTelemetry.value?.available) {
-    attention.push({
-      key: 'fleet:no-telemetry',
-      severity: 'degraded',
-      title: 'Fleet telemetry is unavailable',
-      description: 'No active shard or version telemetry has been reported.',
-    })
-  }
-  return attention.sort((left, right) => {
-    return severityRank[left.severity] - severityRank[right.severity]
-  })
-})
+const attentionItems = computed(() => overview.value?.attentionItems ?? [])
 
 const dependencyStatus = computed<DependencyStatus>(() => {
   if (!overview.value?.dependencies.length) return 'unconfigured'
@@ -321,8 +300,8 @@ const signalStations = computed<SignalStation[]>(() => {
     {
       id: 'overall',
       label: 'Overall state',
-      value: telemetry.available ? statusLabel(overview.value.overallStatus) : 'No telemetry',
-      status: telemetry.available ? overview.value.overallStatus : 'unavailable',
+      value: statusLabel(overview.value.overallStatus),
+      status: overview.value.overallStatus,
     },
     {
       id: 'shards',

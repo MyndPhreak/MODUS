@@ -8,7 +8,8 @@ import {
 describe('getFleetTelemetryPresentation', () => {
   it('marks a completely empty fleet snapshot as unavailable instead of healthy', () => {
     expect(getFleetTelemetryPresentation({
-      shards: { active: 0, expected: 0, stale: 0 },
+      telemetryAvailable: false,
+      shards: { status: 'unavailable', active: 0, expected: 0, stale: 0 },
       versions: { active: [], disagreement: false },
     })).toEqual({
       available: false,
@@ -22,7 +23,8 @@ describe('getFleetTelemetryPresentation', () => {
 
   it('retains the degraded shard presentation when telemetry reports a stale shard', () => {
     expect(getFleetTelemetryPresentation({
-      shards: { active: 1, expected: 2, stale: 1 },
+      telemetryAvailable: true,
+      shards: { status: 'degraded', active: 1, expected: 2, stale: 1 },
       versions: { active: ['1.21.0'], disagreement: false },
     })).toMatchObject({
       available: true,

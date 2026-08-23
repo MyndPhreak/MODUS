@@ -101,12 +101,41 @@ function createDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe('buildAdminOverview', () => {
+  it('returns a degraded no-telemetry incident when bot status is empty', async () => {
+    const base = createDeps()
+    const result = await buildAdminOverview(createDeps({
+      repositories: {
+        ...base.repositories,
+        botStatus: {
+          listAll: async () => [],
+        },
+      },
+      runProbes: async () => [
+        dependency('postgres', 'Postgres'),
+        dependency('redis', 'Redis', 'unconfigured', false),
+        dependency('r2', 'R2'),
+      ],
+    }), now)
+
+    expect(result.fleet.telemetryAvailable).toBe(false)
+    expect(result.fleet.shards).toEqual({ status: 'unavailable', active: 0, expected: 0, stale: 0 })
+    expect(result.fleet.versions).toEqual({ active: [], disagreement: false })
+    expect(result.overallStatus).toBe('degraded')
+    expect(result.attentionItems).toEqual([{
+      key: 'fleet:no-telemetry',
+      severity: 'degraded',
+      title: 'Fleet telemetry is unavailable',
+      description: 'No active shard or version telemetry has been reported.',
+    }])
+  })
+
   it('aggregates shard freshness, versions, repository summaries, and isolated probe failures', async () => {
     const result = await buildAdminOverview(createDeps(), now)
 
     expect(result.generatedAt).toBe('2026-08-23T12:00:00.000Z')
     expect(result.fleet).toEqual({
-      shards: { active: 2, expected: 4, stale: 1 },
+      telemetryAvailable: true,
+      shards: { status: 'degraded', active: 2, expected: 4, stale: 1 },
       versions: { active: ['1.20.0', '1.21.0'], disagreement: true },
       servers: { registered: 25, online: 20, offline: 5, premium: 4 },
       music: { enabled: true, reason: null, updatedAt: null },

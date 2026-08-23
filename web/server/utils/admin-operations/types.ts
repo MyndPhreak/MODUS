@@ -28,7 +28,9 @@ export interface AdminOverviewResponse {
   generatedAt: string
   overallStatus: OverallStatus
   fleet: {
+    telemetryAvailable: boolean
     shards: {
+      status: 'healthy' | 'degraded' | 'unavailable'
       active: number
       expected: number
       stale: number
