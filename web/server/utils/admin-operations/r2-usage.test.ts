@@ -115,6 +115,50 @@ describe('getR2Usage', () => {
     })
   })
 
+  it('times out when the Cloudflare response body never completes', async () => {
+    let signal: AbortSignal | undefined
+    let calls = 0
+    const stalledResponse = new Response(new ReadableStream({
+      start() {},
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+    const config = {
+      ...usageConfig(),
+      timeoutMs: 10,
+    }
+    const fetchImpl: R2UsageFetch = async (_input, init) => {
+      calls += 1
+      signal = init?.signal ?? undefined
+      return stalledResponse
+    }
+    const first = getR2Usage(fetchImpl, config)
+    const second = getR2Usage(fetchImpl, config)
+
+    let guard: ReturnType<typeof setTimeout> | undefined
+    const result = await Promise.race([
+      Promise.all([first, second]),
+      new Promise<'still-pending'>((resolve) => {
+        guard = setTimeout(() => resolve('still-pending'), 50)
+      }),
+    ])
+    if (guard) clearTimeout(guard)
+
+    expect(result).toEqual([
+      {
+        status: 'unavailable',
+        message: 'R2 usage analytics is temporarily unavailable.',
+      },
+      {
+        status: 'unavailable',
+        message: 'R2 usage analytics is temporarily unavailable.',
+      },
+    ])
+    expect(calls).toBe(1)
+    expect(signal?.aborted).toBe(true)
+  })
+
   it('shares an in-flight request and reuses the result cache', async () => {
     let calls = 0
     let resolveResponse!: (response: Response) => void

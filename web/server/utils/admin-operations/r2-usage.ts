@@ -175,30 +175,32 @@ async function fetchUsage(
   config: R2UsageConfig,
 ): Promise<R2Usage> {
   try {
-    const response = await withTimeout((signal) => fetchImpl(CLOUDFLARE_GRAPHQL_ENDPOINT, {
-      method: 'POST',
-      signal,
-      headers: {
-        Authorization: `Bearer ${config.apiToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: R2_USAGE_QUERY,
-        variables: {
-          accountTag: config.accountId,
-          bucketName: config.bucket,
+    return await withTimeout(async (signal) => {
+      const response = await fetchImpl(CLOUDFLARE_GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        signal,
+        headers: {
+          Authorization: `Bearer ${config.apiToken}`,
+          'Content-Type': 'application/json',
         },
-      }),
-    }), config.timeoutMs ?? R2_USAGE_TIMEOUT_MS)
+        body: JSON.stringify({
+          query: R2_USAGE_QUERY,
+          variables: {
+            accountTag: config.accountId,
+            bucketName: config.bucket,
+          },
+        }),
+      })
 
-    if (!response.ok) {
-      return {
-        status: 'unavailable',
-        message: 'R2 usage analytics is temporarily unavailable.',
+      if (!response.ok) {
+        return {
+          status: 'unavailable',
+          message: 'R2 usage analytics is temporarily unavailable.',
+        }
       }
-    }
 
-    return parseUsage(await response.json() as AnalyticsResponse)
+      return parseUsage(await response.json() as AnalyticsResponse)
+    }, config.timeoutMs ?? R2_USAGE_TIMEOUT_MS)
   } catch {
     return {
       status: 'unavailable',
