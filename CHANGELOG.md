@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.1](https://github.com/MyndPhreak/MODUS/compare/modus-v1.21.0...modus-v1.21.1) (2026-08-23)
+
+
+### 📖 Documentation
+
+* group commits at feature granularity instead of per sub-step ([cbdc706](https://github.com/MyndPhreak/MODUS/commit/cbdc706250589a7d029c412ec904d287bd3866db))
+
 ## [1.21.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.20.0...modus-v1.21.0) (2026-08-23)
 
 
