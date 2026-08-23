@@ -40,6 +40,7 @@ const isBotAdmin = computed(() => userStore.isAdmin);
 // Determine active tab from current route
 const activeTab = computed(() => {
   const path = route.path;
+  if (path.includes("/dashboard/admin/overview")) return "overview";
   if (path.includes("/dashboard/admin/ai")) return "ai";
   if (path.includes("/dashboard/admin/servers")) return "servers";
   if (path.includes("/dashboard/admin/logs")) return "logs";
@@ -49,6 +50,12 @@ const activeTab = computed(() => {
 
 // Sidebar tab definitions
 const sidebarTabs = [
+  {
+    id: "overview",
+    label: "Operations Overview",
+    icon: "i-lucide-activity",
+    to: "/dashboard/admin/overview",
+  },
   {
     id: "modules",
     label: "Global Modules",
