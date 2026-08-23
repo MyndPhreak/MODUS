@@ -1,3 +1,6 @@
+import type { R2Usage } from './r2-usage'
+import type { RecentSummaries } from './summaries'
+
 export type DependencyStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unconfigured'
 
 export type OverallStatus = Exclude<DependencyStatus, 'unconfigured'>
@@ -21,8 +24,33 @@ export interface AttentionItem {
 }
 
 export interface AdminOverviewResponse {
+  generatedAt: string
   overallStatus: OverallStatus
+  fleet: {
+    shards: {
+      active: number
+      expected: number
+      stale: number
+    }
+    versions: {
+      active: string[]
+      disagreement: boolean
+    }
+    servers: {
+      registered: number
+      online: number
+      offline: number
+      premium: number
+    }
+    music: {
+      enabled: boolean
+      reason: string | null
+      updatedAt: string | null
+    }
+  }
   dependencies: DependencyHealth[]
+  r2Usage: R2Usage
+  recentSummaries: RecentSummaries
   attentionItems: AttentionItem[]
 }
 

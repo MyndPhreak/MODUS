@@ -45,6 +45,9 @@ export default defineNuxtConfig({
     // Shared secret for the bot's /music control API. Must match BOT_API_SECRET
     // on the bot. When set, unauthenticated calls to the bot are rejected.
     botApiSecret: "", // Set via NUXT_BOT_API_SECRET
+    // Optional direct Lavalink reachability probe (private operator config).
+    lavalinkVersionUrl: "", // Set via NUXT_LAVALINK_VERSION_URL
+    lavalinkPassword: "", // Set via NUXT_LAVALINK_PASSWORD
     // ── Object storage (Cloudflare R2) ────────────────────────────────────
     // Required for recordings + welcome backgrounds.
     r2AccountId: "", // Set via NUXT_R2_ACCOUNT_ID

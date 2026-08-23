@@ -120,6 +120,15 @@ export function isRealtimeAvailable(): boolean {
   return !!process.env.REDIS_URL;
 }
 
+/** Reuses the eventbus primary connection for operational reachability checks. */
+export async function pingRedis(): Promise<string> {
+  const current = getClients();
+  if (!current) {
+    throw new Error("Redis is not configured.");
+  }
+  return current.primary.ping();
+}
+
 /**
  * Publish a message to a channel, wrapped in the same `{ origin, ts, payload }`
  * envelope the bot's EventBus emits and subscribes to (bot/EventBus.ts). Used by
