@@ -1,6 +1,14 @@
 import { PermissionFlagsBits } from "discord.js";
 
-export function getChannelLockOverwrites(exemptRoleIds: string[]) {
+type ChannelLockOverwrite = {
+  id: string;
+  allow: bigint[];
+  deny: bigint[];
+};
+
+export function getChannelLockOverwrites(
+  exemptRoleIds: string[],
+): ChannelLockOverwrite[] {
   return [
     { id: "@everyone", allow: [], deny: [PermissionFlagsBits.SendMessages] },
     ...exemptRoleIds.map((id) => ({
