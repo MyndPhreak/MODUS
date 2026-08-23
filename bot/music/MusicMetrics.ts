@@ -293,6 +293,10 @@ export class MusicMetrics {
    * consumer (`statusLine()`, once per 5-minute sweep) only ever sums them, so
    * nothing needs the per-revision history. Gauges — health, node load, and
    * players by status — are current-state and are not drained.
+   *
+   * Callers that only need node load (e.g. `LavalinkHealthCheckWorker`) must
+   * use `nodeLoads()` instead — calling this method would race `statusLine()`
+   * for the drained counters.
    */
   snapshot(): MusicMetricsSnapshot {
     const playersByStatus = emptyStatusCounts();
@@ -324,8 +328,18 @@ export class MusicMetrics {
       commandToAudioLatencyMs: this.commandToAudio.drain(),
       recoveryGapMs: this.recoveryGap.drain(),
       resolutionLatencyMs: { count: 0, totalMs: 0, maxMs: 0, averageMs: 0 },
-      nodes: this.nodes().map(toNodeLoad),
+      nodes: this.nodeLoads(),
     };
+  }
+
+  /**
+   * Current Lavalink node load, identical to `snapshot().nodes` but without
+   * draining any interval counter. Safe for callers that only need node load
+   * — e.g. a probe that ticks independently of the 5-minute status sweep —
+   * and must not race `snapshot()`'s single draining consumer (`statusLine()`).
+   */
+  nodeLoads(): MusicNodeLoad[] {
+    return this.nodes().map(toNodeLoad);
   }
 
   /**

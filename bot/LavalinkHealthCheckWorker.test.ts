@@ -13,9 +13,7 @@ function makeRuntime(results: MusicResult<unknown>[]): HealthCheckMusicRuntime {
       },
     },
     metrics: {
-      snapshot: () => ({
-        nodes: [{ nodeId: "node-a", available: true, administrativeState: "enabled" as const }],
-      }),
+      nodeLoads: () => [{ nodeId: "node-a", available: true, administrativeState: "enabled" as const }],
     },
   };
 }
@@ -124,7 +122,7 @@ describe("LavalinkHealthCheckWorker", () => {
     process.env.BOT_ADMIN_IDS = "admin-1";
     const runtime: HealthCheckMusicRuntime = {
       engine: { async loadTracks() { throw new Error("should not be called"); } },
-      metrics: { snapshot: () => ({ nodes: [] }) },
+      metrics: { nodeLoads: () => [] },
     };
     const db = makeDb();
     const worker = new LavalinkHealthCheckWorker(makeClient([]), runtime, db, logger());
@@ -146,12 +144,10 @@ describe("LavalinkHealthCheckWorker", () => {
         },
       },
       metrics: {
-        snapshot: () => ({
-          nodes: [
-            { nodeId: "node-bad", available: true, administrativeState: "enabled" as const },
-            { nodeId: "node-good", available: true, administrativeState: "enabled" as const },
-          ],
-        }),
+        nodeLoads: () => [
+          { nodeId: "node-bad", available: true, administrativeState: "enabled" as const },
+          { nodeId: "node-good", available: true, administrativeState: "enabled" as const },
+        ],
       },
     };
     const db = makeDb();
@@ -162,5 +158,63 @@ describe("LavalinkHealthCheckWorker", () => {
 
     expect(db.calls).toHaveLength(0);
     expect(calls).toBeGreaterThan(0);
+  });
+
+  it("does not count MUSIC_RELAY_OFFLINE as an extraction failure", async () => {
+    process.env.BOT_ADMIN_IDS = "admin-1";
+    const relayOffline: MusicResult<unknown> = {
+      ok: false,
+      error: { code: "MUSIC_RELAY_OFFLINE" } as any,
+    };
+    const runtime = makeRuntime([relayOffline, relayOffline]);
+    const db = makeDb();
+    const worker = new LavalinkHealthCheckWorker(makeClient([]), runtime, db, logger());
+
+    await worker.runOnce();
+    await worker.runOnce();
+
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it("does not count MUSIC_NODE_CAPACITY as an extraction failure, but a genuine extraction error still counts", async () => {
+    process.env.BOT_ADMIN_IDS = "admin-1";
+    const nodeCapacity: MusicResult<unknown> = {
+      ok: false,
+      error: { code: "MUSIC_NODE_CAPACITY" } as any,
+    };
+    const runtime = makeRuntime([nodeCapacity, nodeCapacity, failure, failure]);
+    const db = makeDb();
+    const worker = new LavalinkHealthCheckWorker(makeClient([]), runtime, db, logger());
+
+    await worker.runOnce(); // MUSIC_NODE_CAPACITY -> skipped, treated as healthy
+    await worker.runOnce(); // MUSIC_NODE_CAPACITY -> skipped, treated as healthy
+    expect(db.calls).toHaveLength(0);
+
+    await worker.runOnce(); // genuine failure (1/2)
+    await worker.runOnce(); // genuine failure (2/2) -> disables
+    expect(db.calls).toEqual([{ enabled: false, reason: "lavalink-health-check" }]);
+  });
+
+  it("takes 2 fresh consecutive failures to re-disable after a manual re-enable, not 1", async () => {
+    process.env.BOT_ADMIN_IDS = "admin-1";
+    const runtime = makeRuntime([failure, failure, failure, failure]);
+    const db = makeDb();
+    const worker = new LavalinkHealthCheckWorker(makeClient([]), runtime, db, logger());
+
+    await worker.runOnce(); // fail (1/2)
+    await worker.runOnce(); // fail (2/2) -> disables
+    expect(db.calls).toHaveLength(1);
+
+    // A bot admin manually re-enables from the dashboard, bypassing the
+    // worker entirely — this must not carry over any stale failure count.
+    await db.setMusicEnabled(true, "manual");
+    expect(db.calls).toHaveLength(2);
+
+    await worker.runOnce(); // one failed tick right after re-enable
+    expect(db.calls).toHaveLength(2); // must NOT re-disable on a single failed tick
+
+    await worker.runOnce(); // second consecutive failure since re-enable -> re-disables
+    expect(db.calls).toHaveLength(3);
+    expect(db.calls[2]).toEqual({ enabled: false, reason: "lavalink-health-check" });
   });
 });

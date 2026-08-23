@@ -13,7 +13,7 @@
 import type { Client } from "discord.js";
 import type { LavalinkLoadRequest, LavalinkLoadResult } from "./music/LavalinkAdapter";
 import type { MusicResult } from "./music/types";
-import type { MusicMetricsSnapshot } from "./music/MusicMetrics";
+import type { MusicNodeLoad } from "./music/MusicMetrics";
 import type { DatabaseService } from "./DatabaseService";
 import type { Logger } from "./Logger";
 
@@ -35,8 +35,16 @@ export interface HealthCheckEngine {
 }
 
 export interface HealthCheckMetricsSource {
-  snapshot(): Pick<MusicMetricsSnapshot, "nodes">;
+  nodeLoads(): readonly MusicNodeLoad[];
 }
+
+/**
+ * `loadTracks` error codes that mean node *selection* failed before any
+ * YouTube request was attempted (see `NodeRegistry.selectNode`) — not a
+ * genuine extraction verdict. A node returning one of these must not count
+ * toward "this node failed to extract".
+ */
+const NODE_UNAVAILABLE_ERROR_CODES = new Set(["MUSIC_RELAY_OFFLINE", "MUSIC_NODE_CAPACITY"]);
 
 export interface HealthCheckMusicRuntime {
   engine: HealthCheckEngine;
@@ -106,6 +114,7 @@ export class LavalinkHealthCheckWorker {
     if (!enabled) return; // already disabled — don't re-disable or re-DM every tick
 
     await this.db.setMusicEnabled(false, DISABLE_REASON);
+    this.consecutiveFailures = 0;
     await this.notifyAdmins(
       "🚨 Lavalink health check: every available node failed to resolve a known-good " +
         "YouTube video twice in a row. Music has been disabled fleet-wide. Check the " +
@@ -113,11 +122,18 @@ export class LavalinkHealthCheckWorker {
     );
   }
 
-  /** Fleet-wide result: true unless every available node failed the probe. */
+  /**
+   * Fleet-wide result: true unless every genuinely-probed node failed
+   * extraction. Nodes that never produced a genuine extraction verdict
+   * (because `loadTracks` failed on node selection instead — see
+   * `NODE_UNAVAILABLE_ERROR_CODES`) are skipped rather than counted as
+   * failures; if every node in the tick's list is skipped, the tick is
+   * healthy, same as having zero available nodes to begin with.
+   */
   private async probeOnce(): Promise<boolean> {
     const nodes = this.musicRuntime.metrics
-      .snapshot()
-      .nodes.filter((node) => node.available && node.administrativeState === "enabled");
+      .nodeLoads()
+      .filter((node) => node.available && node.administrativeState === "enabled");
 
     if (nodes.length === 0) {
       // No available node at all is a pre-existing MUSIC_RELAY_OFFLINE
@@ -126,6 +142,7 @@ export class LavalinkHealthCheckWorker {
       return true;
     }
 
+    let sawGenuineFailure = false;
     for (const node of nodes) {
       const result = await this.musicRuntime.engine.loadTracks({
         guildId: PROBE_GUILD_ID,
@@ -136,8 +153,12 @@ export class LavalinkHealthCheckWorker {
         nodeId: node.nodeId,
       });
       if (result.ok) return true;
+      if (NODE_UNAVAILABLE_ERROR_CODES.has(result.error.code)) continue; // no genuine verdict — skip
+      sawGenuineFailure = true;
     }
-    return false;
+    // Every node was skipped (node selection failed, not extraction) — treat
+    // as healthy, same as the zero-available-nodes case above.
+    return !sawGenuineFailure;
   }
 
   private async notifyAdmins(message: string): Promise<void> {
