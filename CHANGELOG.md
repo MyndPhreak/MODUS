@@ -1,5 +1,84 @@
 # Changelog
 
+## [1.21.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.20.0...modus-v1.21.0) (2026-08-23)
+
+
+### ✨ Features
+
+* **bot:** add automod reply/reaction actions, action delay, and new triggers ([55997c4](https://github.com/MyndPhreak/MODUS/commit/55997c46cc3292a1ccc6e4856641dd450456acc1))
+* **bot:** add DatabaseService.isMusicEnabled/setMusicEnabled ([f8468ad](https://github.com/MyndPhreak/MODUS/commit/f8468ad679f9cc208266430aa86185569232ab17))
+* **bot:** add LavalinkHealthCheckWorker ([6f3de0e](https://github.com/MyndPhreak/MODUS/commit/6f3de0e466014ac61fd21c0dcdda4f80498989a4))
+* **bot:** gate play/playqueue on the fleet-wide music switch ([1296c56](https://github.com/MyndPhreak/MODUS/commit/1296c56991058e84e9f5706189098c9ba8c55c53))
+* **bot:** start LavalinkHealthCheckWorker behind leader election ([bafb282](https://github.com/MyndPhreak/MODUS/commit/bafb282057a0955e2f1958ce9ef1995c8eca7626))
+* dashboard module page RBAC ([23886eb](https://github.com/MyndPhreak/MODUS/commit/23886ebd7a4ec6b9eaddca99b608dc12713d4d0f))
+* **db:** add module_access table for per-module dashboard RBAC ([cbbbd36](https://github.com/MyndPhreak/MODUS/commit/cbbbd36bc71b670726f4f34d647c23e712ff2e76))
+* **db:** add ModuleAccessRepository ([9704168](https://github.com/MyndPhreak/MODUS/commit/9704168b9ff69fcfddd3d1690c9c036288957ee0))
+* **db:** add system_flags table for fleet-wide feature switches ([b9afc05](https://github.com/MyndPhreak/MODUS/commit/b9afc05412e04901da5a8863917c09dc3f8f02e1))
+* **web:** add "Your Servers" list to the public XP directory ([ca019c2](https://github.com/MyndPhreak/MODUS/commit/ca019c2cdbf55e5e19a4b3cf04b9d2f4db27fdee))
+* **web:** add admin music-system API routes ([44243b2](https://github.com/MyndPhreak/MODUS/commit/44243b21d530044ba9b8d56871018a958ab2708c))
+* **web:** add automod Quick-Create sentence builder that promotes to full Timeline editor ([cb7cd2b](https://github.com/MyndPhreak/MODUS/commit/cb7cd2b17ad5228ced8eaddebb43865bab1d3f75))
+* **web:** add automod UI for new actions/triggers, and fix silent field drop ([9d975d7](https://github.com/MyndPhreak/MODUS/commit/9d975d78e76060d299445d2a358a0243ea6d18ae))
+* **web:** add loading skeleton to Your Servers section ([46deb5e](https://github.com/MyndPhreak/MODUS/commit/46deb5e3b9e14b860c3c57f411d6048ac45b76e8))
+* **web:** add module access management to every module settings page ([91bed4a](https://github.com/MyndPhreak/MODUS/commit/91bed4a38ced65eef8fc5ba2bf10d1a8ddf42651))
+* **web:** add module-access API routes ([d0370fe](https://github.com/MyndPhreak/MODUS/commit/d0370fe458fcc8fc3f62197b3f51664494cf77eb))
+* **web:** add module-scoped partial access to the dashboard permission gate ([b69f5d7](https://github.com/MyndPhreak/MODUS/commit/b69f5d742dd5c1007dc3afb2f2fd69c0646a54f5))
+* **web:** add ModuleAccessSection component ([d4af466](https://github.com/MyndPhreak/MODUS/commit/d4af4662a48c5872c363daacd0998779089f75a0))
+* **web:** add Music System admin dashboard page ([62ac4f6](https://github.com/MyndPhreak/MODUS/commit/62ac4f69bd9a58efc55167e17e96d85026810c8a))
+* **web:** add requireModuleAccess and getAccessibleModules guards ([414dd4e](https://github.com/MyndPhreak/MODUS/commit/414dd4e6ca4917565be64500a629e58270dacf2e))
+* **web:** allow module-scoped users to read guild channels/roles ([d8e9029](https://github.com/MyndPhreak/MODUS/commit/d8e90298d548d42a11cf1fb8c6deb31c696c0115))
+* **web:** assemble automod rule editor as a collapsible Timeline ([dd92814](https://github.com/MyndPhreak/MODUS/commit/dd92814c430c099b6159edae7efddc646272fc48))
+* **web:** color-code automod condition sub-group nesting depth ([f3278e1](https://github.com/MyndPhreak/MODUS/commit/f3278e13c271740561727cdd331cdaf5d88aea11))
+* **web:** extract automod ActionsNode with numbered drag-to-reorder actions ([174e394](https://github.com/MyndPhreak/MODUS/commit/174e3949edd2d198ca2cd8cdd95180b96d661cb8))
+* **web:** filter dashboard sidebar and gate module pages by accessible modules ([608455f](https://github.com/MyndPhreak/MODUS/commit/608455f0ad602a77ad5d87f356a6cc2d6e62e014))
+* **web:** group automod trigger picker by event category, slim header row ([5e00b34](https://github.com/MyndPhreak/MODUS/commit/5e00b34282fbebf119199d6055af308821b6cbc7))
+* **web:** register ModuleAccessRepository in getRepos() ([b34f738](https://github.com/MyndPhreak/MODUS/commit/b34f738fa2c2e632ed1f5c8f1db23ba195a607d0))
+* **web:** scope automod routes to requireModuleAccess ([eb697a2](https://github.com/MyndPhreak/MODUS/commit/eb697a2a954603b4cab4864db6ea68d919948478))
+* **web:** scope events and embeds routes to requireModuleAccess ([5fe7567](https://github.com/MyndPhreak/MODUS/commit/5fe7567aaaf4715f600ad3c671aedba18bce1c1a))
+* **web:** scope giveaways routes to requireModuleAccess ([3246ddd](https://github.com/MyndPhreak/MODUS/commit/3246ddd250832fcfe370cdfaf510a0933f234f0e))
+* **web:** scope guild-configs module routes to requireModuleAccess ([58e5d7f](https://github.com/MyndPhreak/MODUS/commit/58e5d7ff1e999e7360519ef03373b2f21bd64fbe))
+* **web:** scope music routes to requireModuleAccess ([945b50b](https://github.com/MyndPhreak/MODUS/commit/945b50bd22c58c3c97841bb2498733790ae25f2a))
+* **web:** scope polls routes to requireModuleAccess ([80c3a4b](https://github.com/MyndPhreak/MODUS/commit/80c3a4b0c6381eb6374a199ab03d0181f7eb2697))
+* **web:** scope tags routes to requireModuleAccess ([864c53a](https://github.com/MyndPhreak/MODUS/commit/864c53aa717218d52a711540fd87f25fd0100bad))
+* **web:** scope tickets and recording routes to requireModuleAccess ([8ad2278](https://github.com/MyndPhreak/MODUS/commit/8ad22780a92c66f1099cba625b2f21e05a6f553d))
+* **web:** scope triggers routes to requireModuleAccess ([0b77121](https://github.com/MyndPhreak/MODUS/commit/0b771211a0eb4502fd794669b322a755b5c4f8eb))
+* **web:** show live thumbnail preview for automod image URL fields ([8af328a](https://github.com/MyndPhreak/MODUS/commit/8af328a1609838ab89b95276f23a9aa5f3d8b69d))
+* **web:** show removable chips for selected automod exempt roles/channels ([f9686b7](https://github.com/MyndPhreak/MODUS/commit/f9686b7fe29c5fa4de946cd50909f0a7f907b25f))
+
+
+### 🐛 Bug Fixes
+
+* **bot:** correct Lavalink health-check probe defects from final review ([8c3ad97](https://github.com/MyndPhreak/MODUS/commit/8c3ad97e44e4283bf67dfc974920718afd3a9b4d))
+* **bot:** stop consecutiveFailures from growing unbounded while music stays disabled ([612ed18](https://github.com/MyndPhreak/MODUS/commit/612ed1884488a4a0e8dcb6676ae5acb02a8b54e7))
+* **bot:** use PUBLIC_WEB_URL for XP Discord link buttons ([f0a9b74](https://github.com/MyndPhreak/MODUS/commit/f0a9b74b31b013c983627b7777eb79df9d0c9e41))
+* **logs:** Fix non-func logs clear button with api endpoint for clearing logs ([4ffd069](https://github.com/MyndPhreak/MODUS/commit/4ffd069cc6d3ac3f2cc27b49faf7491d597ee468))
+* **web:** accept either tags or embeds grant on shared routes ([a2ee8a4](https://github.com/MyndPhreak/MODUS/commit/a2ee8a456efbf868ec46aa3aa3713216e2091b41))
+* **web:** bound automod priority/cooldown sliders with visible max and number input ([aab1e2f](https://github.com/MyndPhreak/MODUS/commit/aab1e2f98e37159c94f89ec1b0aefe299d7fb66f))
+* **web:** correct Discord login link on private leaderboard page ([a13c68e](https://github.com/MyndPhreak/MODUS/commit/a13c68e3f0409cd52774f732efba998ffad76fdc))
+* **web:** filter bulk guild-configs read to the caller's accessible modules ([d50f372](https://github.com/MyndPhreak/MODUS/commit/d50f3722f81b89db8c9862e3ac43e0f76e1afeff))
+* **web:** fix automod redesign type gate, drag-and-drop, and Quick-Create safety holes ([fb4a02e](https://github.com/MyndPhreak/MODUS/commit/fb4a02e92c1a57f1eac600c601b63eda196252fe))
+* **web:** fix XP nav link and leaderboard user navigation ([f27bc26](https://github.com/MyndPhreak/MODUS/commit/f27bc261331ffe84ac107cc808e5a32f7b7cee05))
+* **web:** gate poll-votes SSE stream on polls module access ([80207df](https://github.com/MyndPhreak/MODUS/commit/80207dfc90d0016d363e7a2cbf39ec223aa9944b))
+* **web:** improve global auth middleware ([f007777](https://github.com/MyndPhreak/MODUS/commit/f0077772851547d0282a63183acdb54de2473814))
+* **web:** migrate AI usage route to requireModuleAccess ([c6a41f7](https://github.com/MyndPhreak/MODUS/commit/c6a41f7afe351641ff0b8abd47d23995f92e0492))
+* **web:** Resize XP card designer and remove redundant background color. ([2ab6c2e](https://github.com/MyndPhreak/MODUS/commit/2ab6c2ebdcde1b11b3487fda39d7ddf9eae62539))
+* **web:** return user to the originating page after Discord login ([b33dc4d](https://github.com/MyndPhreak/MODUS/commit/b33dc4d7b57db078d5e60d5548e2484817e04623))
+* **web:** route Access Denied button to first accessible module for scoped users ([388b13c](https://github.com/MyndPhreak/MODUS/commit/388b13ca3350544f87e073d9d44606225a206212))
+* **web:** route Access-Denied button to a module with a real page ([7f53906](https://github.com/MyndPhreak/MODUS/commit/7f53906735dc2ac4541c5a582861b86d3a27d858))
+* **web:** stop Your Servers list from racing /api/discord/me for guilds ([553f0de](https://github.com/MyndPhreak/MODUS/commit/553f0deb465b945b43c7131fd40885028d1396f8))
+* **web:** stop Your Servers skeleton from waiting on session hydration ([1aa05eb](https://github.com/MyndPhreak/MODUS/commit/1aa05eb9e3c279111595959f3014fc34b9d41cf0))
+* **web:** surface expired-Discord-token state on the Your Servers list ([4fe5d49](https://github.com/MyndPhreak/MODUS/commit/4fe5d490313f3bc5fa79378be57d7c8a7ce211f6))
+* **web:** validate roleIds array elements are strings ([36bc870](https://github.com/MyndPhreak/MODUS/commit/36bc87085d0d88255883330f66a5a71203469bf4))
+
+
+### ♻️ Refactors
+
+* **web:** extract fetchGuildMemberRoleIds helper from join.post.ts ([97a20f7](https://github.com/MyndPhreak/MODUS/commit/97a20f7e812797180fbec1067e8799ba68b90e56))
+
+
+### 📖 Documentation
+
+* **web:** fix stale requireGuildManager references in comments ([85cb076](https://github.com/MyndPhreak/MODUS/commit/85cb076207561f149a635dba3192ecfe04ba2721))
+
 ## [1.20.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.19.1...modus-v1.20.0) (2026-08-18)
 
 
