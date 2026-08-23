@@ -1,16 +1,19 @@
 /**
  * GET /api/admin/logs
  *
- * Most recent 200 log entries across all guilds. Used by the admin logs
- * page for the initial snapshot before the SSE stream takes over.
+ * Searchable retained log history across all guilds. Live updates continue
+ * over the bounded Redis SSE stream.
  *
  * Auth: bot admins only — this returns log entries across every guild, so it
  * must not be readable by ordinary authenticated users.
  */
 import { getRepos } from "../../utils/db";
 import { requireBotAdmin } from "../../utils/session";
-
-const LIMIT = 200;
+import { mapAdminLogSearchPage } from "../../utils/admin-logs/api-response";
+import {
+  AdminLogQueryError,
+  parseAdminLogQuery,
+} from "../../utils/admin-logs/query";
 
 export default defineEventHandler(async (event) => {
   await requireBotAdmin(event);
@@ -23,11 +26,25 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  let query;
   try {
-    return await repos.logs.listAll(LIMIT);
+    query = parseAdminLogQuery(getQuery(event));
+  } catch (error) {
+    if (error instanceof AdminLogQueryError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: error.message,
+      });
+    }
+    throw error;
+  }
+
+  try {
+    const page = await repos.logs.searchPage(query);
+    return mapAdminLogSearchPage(page);
   } catch (error: any) {
     console.error(
-      "[Admin Logs API] Postgres listAll failed:",
+      "[Admin Logs API] Postgres searchPage failed:",
       error?.message || error,
     );
     throw createError({
