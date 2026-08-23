@@ -59,7 +59,6 @@
           <p class="text-xs text-gray-300">Generated {{ formatTimestamp(overview.generatedAt) }}</p>
         </div>
         <div class="relative mt-5">
-          <div aria-hidden="true" class="absolute left-[16.67%] right-[16.67%] top-5 hidden h-px bg-gradient-to-r from-violet-500/30 via-indigo-400/50 to-violet-500/30 md:block" />
           <ol class="relative grid gap-4 md:grid-cols-3 md:gap-8">
             <li v-for="station in signalStations" :key="station.id" class="flex items-start gap-3">
               <span
