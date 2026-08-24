@@ -1,5 +1,7 @@
 <template>
-  <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+  <main
+    class="flex-1 flex flex-col min-w-0 overflow-hidden relative pl-16 md:pl-0"
+  >
     <!-- Header Section (Floating) -->
     <div v-if="$slots.header" class="absolute top-0 inset-x-0 z-20">
       <slot name="header" />
