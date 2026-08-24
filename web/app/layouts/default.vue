@@ -8,6 +8,39 @@ const { state: serverSidebar } = useServerSidebar();
 const isMounted = ref(false);
 const route = useRoute();
 
+// Mobile sidebar: collapsed to an icon-only rail by default, expands into
+// an overlay on top of the main content (rather than pushing it) when
+// toggled open. Always collapses back on navigation.
+const mobileSidebarOpen = ref(false);
+
+function toggleMobileSidebar() {
+  mobileSidebarOpen.value = !mobileSidebarOpen.value;
+}
+
+watch(
+  () => route.fullPath,
+  () => {
+    mobileSidebarOpen.value = false;
+  },
+);
+
+// Tailwind class helper for nav rows: hides labels/text and centers the
+// icon on the collapsed mobile rail, while always showing full content on
+// md+ regardless of the mobile toggle state.
+function navLabelClass(expanded: boolean) {
+  return expanded ? "" : "hidden md:inline";
+}
+
+function navRowClass(active: boolean, expanded: boolean) {
+  return [
+    "flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+    expanded ? "" : "justify-center md:justify-start",
+    active
+      ? "bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]"
+      : "text-gray-400 hover:text-white hover:bg-white/5",
+  ];
+}
+
 // Sidebar servers list
 const sidebarServers = ref<any[]>([]);
 
@@ -89,21 +122,30 @@ const mainNavLinks = computed(() => {
     <div class="ambient-orb ambient-orb-1"></div>
     <div class="ambient-orb ambient-orb-2"></div>
 
-    <DashboardSidebar>
-      <template #header>
+    <!-- Mobile backdrop: shown behind the expanded sidebar overlay -->
+    <div
+      v-if="mobileSidebarOpen"
+      class="fixed inset-0 bg-black/60 z-30 md:hidden"
+      @click="mobileSidebarOpen = false"
+    />
+
+    <DashboardSidebar :expanded="mobileSidebarOpen">
+      <template #header="{ expanded }">
         <!-- Default header: brand -->
         <div
           v-if="!isServerContext"
-          class="flex items-center gap-3 px-6 py-6 border-b border-white/5 bg-[#050507]/20"
+          class="flex items-center gap-3 px-3 py-6 border-b border-white/5 bg-[#050507]/20"
+          :class="expanded ? 'md:px-6 px-6' : 'justify-center md:justify-start md:px-6'"
         >
           <div class="relative flex-shrink-0">
             <img
               src="/modus2-animated.svg"
               alt="MODUS Logo"
-              class="relative w-16 rounded-xl"
+              class="relative rounded-xl"
+              :class="expanded ? 'w-16' : 'w-8 md:w-16'"
             />
           </div>
-          <div>
+          <div :class="navLabelClass(expanded)">
             <h1 class="text-base font-black text-white tracking-tight">
               MODUS
             </h1>
@@ -121,18 +163,20 @@ const mainNavLinks = computed(() => {
           <NuxtLink
             to="/dashboard"
             class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-gray-500 hover:text-white transition-colors border-b border-white/5 group"
+            :class="expanded ? '' : 'justify-center md:justify-start'"
           >
             <UIcon
               name="i-heroicons-arrow-left"
               class="text-sm group-hover:-translate-x-0.5 transition-transform"
             />
-            Back to Dashboard
+            <span :class="navLabelClass(expanded)">Back to Dashboard</span>
           </NuxtLink>
 
           <!-- Admin context header -->
           <div
             v-if="serverSidebar?.guild?.id === '__admin__'"
             class="flex items-center gap-3 px-5 py-4"
+            :class="expanded ? '' : 'justify-center md:justify-start'"
           >
             <div
               class="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-400/30 flex items-center justify-center"
@@ -142,7 +186,7 @@ const mainNavLinks = computed(() => {
                 class="w-4 h-4 text-violet-300"
               />
             </div>
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-1" :class="navLabelClass(expanded)">
               <h2 class="text-sm font-bold text-white truncate">Bot Admin</h2>
               <p
                 class="text-[9px] text-violet-400 uppercase tracking-wider font-semibold"
@@ -153,7 +197,11 @@ const mainNavLinks = computed(() => {
           </div>
 
           <!-- Guild info (server context) -->
-          <div v-else class="flex items-center gap-3 px-5 py-4">
+          <div
+            v-else
+            class="flex items-center gap-3 px-5 py-4"
+            :class="expanded ? '' : 'justify-center md:justify-start'"
+          >
             <UAvatar
               v-if="serverSidebar?.guild?.icon"
               :src="`https://cdn.discordapp.com/icons/${serverSidebar.guild.id}/${serverSidebar.guild.icon}.png`"
@@ -165,7 +213,7 @@ const mainNavLinks = computed(() => {
               :alt="serverSidebar?.guild?.name || '?'"
               size="sm"
             />
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-1" :class="navLabelClass(expanded)">
               <h2 class="text-sm font-bold text-white truncate">
                 {{ serverSidebar?.guild?.name }}
               </h2>
@@ -180,174 +228,180 @@ const mainNavLinks = computed(() => {
       </template>
 
       <!-- Navigation -->
-      <nav class="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
-        <!-- Default navigation -->
-        <template v-if="!isServerContext">
-          <!-- Section: Main -->
-          <p
-            class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
-          >
-            Main
-          </p>
-          <template v-for="link in mainNavLinks" :key="link.to">
-            <NuxtLink
-              :to="link.to"
-              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mb-1"
-              :class="
-                isActive(link.to)
-                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              "
+      <template #default="{ expanded }">
+        <nav class="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
+          <!-- Default navigation -->
+          <template v-if="!isServerContext">
+            <!-- Section: Main -->
+            <p
+              class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
+              :class="navLabelClass(expanded)"
             >
-              <UIcon :name="link.icon" class="text-base shrink-0" />
-              <span>{{ link.label }}</span>
-            </NuxtLink>
-          </template>
+              Main
+            </p>
+            <template v-for="link in mainNavLinks" :key="link.to">
+              <NuxtLink
+                :to="link.to"
+                :class="[navRowClass(isActive(link.to), expanded), 'mb-1']"
+              >
+                <UIcon :name="link.icon" class="text-base shrink-0" />
+                <span :class="navLabelClass(expanded)">{{ link.label }}</span>
+              </NuxtLink>
+            </template>
 
-          <!-- Divider -->
-          <div class="my-3 mx-1 border-t border-white/5" />
+            <!-- Divider -->
+            <div class="my-3 mx-1 border-t border-white/5" />
 
-          <!-- Section: Servers -->
-          <p
-            class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
-          >
-            My Servers
-          </p>
-
-          <!-- Connected servers list -->
-          <template v-if="sidebarServers.length > 0">
-            <NuxtLink
-              v-for="server in sidebarServers"
-              :key="server.$id"
-              :to="`/dashboard/server/${server.$id}/modules`"
-              class="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 mb-1 group"
-              :class="
-                route.path.startsWith(`/dashboard/server/${server.$id}`)
-                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              "
+            <!-- Section: Servers -->
+            <p
+              class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
+              :class="navLabelClass(expanded)"
             >
-              <!-- Guild icon or fallback -->
-              <div class="relative shrink-0 w-5 h-5">
-                <img
-                  v-if="server.icon"
-                  :src="
-                    getGuildIconUrl(server.$id, server.icon, 32) || undefined
-                  "
-                  :alt="server.name"
-                  class="w-5 h-5 rounded-md object-cover ring-1 ring-white/10"
-                />
-                <div
-                  v-else
-                  class="w-5 h-5 rounded-md bg-gradient-to-br from-violet-600/40 to-indigo-600/40 border border-white/10 flex items-center justify-center"
-                >
-                  <span class="text-[8px] font-black text-white/60">{{
-                    server.name?.charAt(0)?.toUpperCase() || "?"
-                  }}</span>
+              My Servers
+            </p>
+
+            <!-- Connected servers list -->
+            <template v-if="sidebarServers.length > 0">
+              <NuxtLink
+                v-for="server in sidebarServers"
+                :key="server.$id"
+                :to="`/dashboard/server/${server.$id}/modules`"
+                :class="[
+                  navRowClass(
+                    route.path.startsWith(`/dashboard/server/${server.$id}`),
+                    expanded,
+                  ),
+                  'mb-1 group',
+                ]"
+              >
+                <!-- Guild icon or fallback -->
+                <div class="relative shrink-0 w-5 h-5">
+                  <img
+                    v-if="server.icon"
+                    :src="
+                      getGuildIconUrl(server.$id, server.icon, 32) ||
+                      undefined
+                    "
+                    :alt="server.name"
+                    class="w-5 h-5 rounded-md object-cover ring-1 ring-white/10"
+                  />
+                  <div
+                    v-else
+                    class="w-5 h-5 rounded-md bg-gradient-to-br from-violet-600/40 to-indigo-600/40 border border-white/10 flex items-center justify-center"
+                  >
+                    <span class="text-[8px] font-black text-white/60">{{
+                      server.name?.charAt(0)?.toUpperCase() || "?"
+                    }}</span>
+                  </div>
                 </div>
-              </div>
-              <span class="truncate">{{ server.name }}</span>
-            </NuxtLink>
-          </template>
-          <p v-else class="px-3 py-1.5 text-xs text-gray-600 italic">
-            No servers yet
-          </p>
-
-          <!-- Add Server link -->
-          <NuxtLink
-            to="/dashboard/discover"
-            class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mt-1"
-            :class="
-              isActive('/dashboard/discover')
-                ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            "
-          >
-            <UIcon name="i-heroicons-plus-circle" class="text-base shrink-0" />
-            <span>Add Server</span>
-          </NuxtLink>
-        </template>
-
-        <!-- Server context navigation -->
-        <template v-else-if="serverSidebar">
-          <p
-            class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
-          >
-            Configuration
-          </p>
-          <template v-for="tab in serverSidebar.tabs" :key="tab.id">
-            <!-- Category header (server sidebar) -->
-            <div
-              v-if="tab.groupLabel"
-              class="mt-4 mb-1 mx-3 pt-3 border-t border-white/5"
-            >
-              <span class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
-                {{ tab.groupLabel }}
-              </span>
-            </div>
-            <!-- Plain separator (admin sidebar) -->
-            <div
-              v-else-if="tab.separator"
-              class="my-2 mx-3 border-t border-white/5"
-            />
-            <!-- Route-based tab (NuxtLink) -->
-            <NuxtLink
-              v-if="tab.to && !tab.disabled"
-              :to="tab.to"
-              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-              :class="
-                serverSidebar.activeTab === tab.id
-                  ? 'bg-secondary-500/15 text-secondary-400 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              "
-            >
-              <UIcon :name="tab.icon" class="text-base shrink-0" />
-              <span>{{ tab.label }}</span>
-              <UBadge
-                v-if="tab.badge"
-                variant="soft"
-                color="neutral"
-                size="xs"
-                class="ml-auto"
-              >
-                {{ tab.badge }}
-              </UBadge>
-            </NuxtLink>
-            <!-- Action-based tab (button) -->
-            <button
+                <span class="truncate" :class="navLabelClass(expanded)">{{
+                  server.name
+                }}</span>
+              </NuxtLink>
+            </template>
+            <p
               v-else
-              class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-              :class="
-                serverSidebar.activeTab === tab.id
-                  ? 'bg-secondary-500/15 text-secondary-200 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]'
-                  : tab.disabled
-                    ? 'text-gray-600 cursor-not-allowed'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-              "
-              :disabled="tab.disabled"
-              @click="tab.action?.()"
+              class="px-3 py-1.5 text-xs text-gray-600 italic"
+              :class="navLabelClass(expanded)"
             >
-              <UIcon :name="tab.icon" class="text-base shrink-0" />
-              <span>{{ tab.label }}</span>
-              <UBadge
-                v-if="tab.badge"
-                variant="soft"
-                color="neutral"
-                size="xs"
-                class="ml-auto"
-              >
-                {{ tab.badge }}
-              </UBadge>
-            </button>
+              No servers yet
+            </p>
+
+            <!-- Add Server link -->
+            <NuxtLink
+              to="/dashboard/discover"
+              :class="[
+                navRowClass(isActive('/dashboard/discover'), expanded),
+                'mt-1',
+              ]"
+            >
+              <UIcon
+                name="i-heroicons-plus-circle"
+                class="text-base shrink-0"
+              />
+              <span :class="navLabelClass(expanded)">Add Server</span>
+            </NuxtLink>
           </template>
-        </template>
-      </nav>
+
+          <!-- Server context navigation -->
+          <template v-else-if="serverSidebar">
+            <p
+              class="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-600"
+              :class="navLabelClass(expanded)"
+            >
+              Configuration
+            </p>
+            <template v-for="tab in serverSidebar.tabs" :key="tab.id">
+              <!-- Category header (server sidebar) -->
+              <div
+                v-if="tab.groupLabel"
+                class="mt-4 mb-1 mx-3 pt-3 border-t border-white/5"
+              >
+                <span
+                  class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase"
+                  :class="navLabelClass(expanded)"
+                >
+                  {{ tab.groupLabel }}
+                </span>
+              </div>
+              <!-- Plain separator (admin sidebar) -->
+              <div
+                v-else-if="tab.separator"
+                class="my-2 mx-3 border-t border-white/5"
+              />
+              <!-- Route-based tab (NuxtLink) -->
+              <NuxtLink
+                v-if="tab.to && !tab.disabled"
+                :to="tab.to"
+                :class="navRowClass(serverSidebar.activeTab === tab.id, expanded)"
+              >
+                <UIcon :name="tab.icon" class="text-base shrink-0" />
+                <span :class="navLabelClass(expanded)">{{ tab.label }}</span>
+                <UBadge
+                  v-if="tab.badge"
+                  variant="soft"
+                  color="neutral"
+                  size="xs"
+                  class="ml-auto"
+                  :class="navLabelClass(expanded)"
+                >
+                  {{ tab.badge }}
+                </UBadge>
+              </NuxtLink>
+              <!-- Action-based tab (button) -->
+              <button
+                v-else
+                :class="[
+                  navRowClass(serverSidebar.activeTab === tab.id, expanded),
+                  tab.disabled ? 'text-gray-600 cursor-not-allowed' : '',
+                ]"
+                :disabled="tab.disabled"
+                @click="tab.action?.()"
+              >
+                <UIcon :name="tab.icon" class="text-base shrink-0" />
+                <span :class="navLabelClass(expanded)">{{ tab.label }}</span>
+                <UBadge
+                  v-if="tab.badge"
+                  variant="soft"
+                  color="neutral"
+                  size="xs"
+                  class="ml-auto"
+                  :class="navLabelClass(expanded)"
+                >
+                  {{ tab.badge }}
+                </UBadge>
+              </button>
+            </template>
+          </template>
+        </nav>
+      </template>
 
       <!-- User Profile Section -->
-      <template #footer>
+      <template #footer="{ expanded }">
         <div v-if="isMounted" class="p-6 bg-black/40 border-t border-white/5">
           <div
             class="flex items-center gap-3 p-3 rounded-2xl glass-card border-white/10 hover:bg-white/10 transition-all cursor-pointer group"
+            :class="expanded ? '' : 'justify-center md:justify-start'"
           >
             <div class="relative flex-shrink-0">
               <div
@@ -369,7 +423,10 @@ const mainNavLinks = computed(() => {
                 }}</span>
               </div>
             </div>
-            <div class="flex-1 min-w-0 text-left text-slate-200">
+            <div
+              class="flex-1 min-w-0 text-left text-slate-200"
+              :class="navLabelClass(expanded)"
+            >
               <p class="text-sm font-bold truncate">
                 {{ userStore.userName }}
               </p>
@@ -395,7 +452,7 @@ const mainNavLinks = computed(() => {
             class="w-full mt-4 rounded-xl border border-white/5 hover:bg-red-500/10 hover:text-red-400 transition-colors"
             icon="i-heroicons-arrow-left-on-rectangle"
           >
-            Logout
+            <span :class="navLabelClass(expanded)">Logout</span>
           </UButton>
         </div>
       </template>
@@ -406,6 +463,15 @@ const mainNavLinks = computed(() => {
       <template #header>
         <DashboardNavbar>
           <template #left>
+            <UButton
+              icon="i-heroicons-bars-3"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              class="md:hidden"
+              :aria-label="mobileSidebarOpen ? 'Close menu' : 'Open menu'"
+              @click="toggleMobileSidebar"
+            />
             <h2
               class="text-xl font-black text-white tracking-tight gradient-text ml-4"
             >
