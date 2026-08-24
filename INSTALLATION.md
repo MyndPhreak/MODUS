@@ -162,7 +162,3 @@ For development, you can run the bot and web dashboard natively using Node.js an
    cd web
    pnpm run dev
    ```
-
-## Migrating from Appwrite
-
-If you are upgrading an older installation of MODUS that used Appwrite, do not start with a fresh database. Refer to the [Migration Runbook](docs/migration-runbook.md) for detailed instructions on transitioning to Postgres + R2 seamlessly.
