@@ -138,6 +138,86 @@ async function renderRankCardViaApi(
   return Buffer.from(await response.arrayBuffer());
 }
 
+function buildRankEmbed(
+  targetUser: { displayName: string; displayAvatarURL: (options: { size: number }) => string },
+  guild: { name: string; iconURL: (options: { size: number }) => string | null },
+  totalXp: number,
+  rank: number,
+): EmbedBuilder {
+  const progress = getXpProgress(totalXp);
+  return new EmbedBuilder()
+    .setColor(0x6366f1)
+    .setTitle(`⭐ ${targetUser.displayName}'s Rank & Level`)
+    .setThumbnail(targetUser.displayAvatarURL({ size: 128 }))
+    .addFields(
+      { name: "Rank", value: `**#${rank}**`, inline: true },
+      { name: "Level", value: `**Level ${progress.level}**`, inline: true },
+      { name: "Total XP", value: `**${formatNumber(totalXp)} XP**`, inline: true },
+      {
+        name: "Level Progress",
+        value: `${progressBar(progress.xpInCurrentLevel, progress.xpNeededForNextLevel)} **${progress.progressPercent}%** (${formatNumber(progress.xpInCurrentLevel)}/${formatNumber(progress.xpNeededForNextLevel)} XP)`,
+        inline: false,
+      },
+    )
+    .setFooter({
+      text: `${guild.name} • XP Leaderboard`,
+      iconURL: guild.iconURL({ size: 64 }) ?? undefined,
+    })
+    .setTimestamp();
+}
+
+async function buildRankCardPayload(
+  guildId: string,
+  member: GuildMember,
+  totalXp: number,
+  rank: number,
+  messageCount: number,
+  moduleManager: ModuleManager,
+): Promise<{ files?: AttachmentBuilder[]; embeds?: EmbedBuilder[] }> {
+  try {
+    const imageBuffer = await renderRankCardViaApi(
+      guildId,
+      member,
+      totalXp,
+      rank,
+      messageCount,
+    );
+    return {
+      files: [new AttachmentBuilder(imageBuffer, { name: `rank-${member.user.username}.png` })],
+    };
+  } catch (err) {
+    moduleManager.logger.error("Failed to render rank card", guildId, err, "xp");
+    return { embeds: [buildRankEmbed(member, member.guild, totalXp, rank)] };
+  }
+}
+
+export function buildXpShareRow(
+  guildId: string,
+  targetUserId: string,
+  type: "rank" | "check",
+  leaderboardUrl?: string,
+): ActionRowBuilder<ButtonBuilder> {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`xp:share-${type}:${guildId}:${targetUserId}`)
+      .setLabel("Share")
+      .setEmoji("📤")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  if (leaderboardUrl) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel(type === "rank" ? "View Full Leaderboard" : "View Web Leaderboard")
+        .setEmoji(type === "rank" ? "🏆" : "🌐")
+        .setStyle(ButtonStyle.Link)
+        .setURL(leaderboardUrl),
+    );
+  }
+
+  return row;
+}
+
 // ── Opt-In Prompt ──────────────────────────────────────────────────────
 
 async function sendXpOptInPrompt(message: Message) {
@@ -514,59 +594,18 @@ const xpModule: BotModule = {
       const messageCount = (dbUser?.message_count ?? 0) + (cached?.pendingMessages ?? 0);
       const rank = await db.getXpUserRank(guildId, totalXp);
 
-      try {
-        const imageBuffer = await renderRankCardViaApi(
-          guildId,
-          member,
-          totalXp,
-          rank,
-          messageCount,
-        );
-
-        const attachment = new AttachmentBuilder(imageBuffer, {
-          name: `rank-${targetUser.username}.png`,
-        });
-
-        const webUrl = `${PUBLIC_URL}/xp/${guildId}`;
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setLabel("View Full Leaderboard")
-            .setEmoji("🏆")
-            .setStyle(ButtonStyle.Link)
-            .setURL(webUrl),
-        );
-
-        await interaction.editReply({
-          files: [attachment],
-          components: [row],
-        });
-      } catch (err) {
-        moduleManager.logger.error("Failed to render rank card", guildId, err, "xp");
-
-        // Fallback to text embed if image rendering fails
-        const progress = getXpProgress(totalXp);
-        const embed = new EmbedBuilder()
-          .setColor(0x6366f1)
-          .setTitle(`⭐ ${targetUser.displayName}'s Rank & Level`)
-          .setThumbnail(targetUser.displayAvatarURL({ size: 128 }))
-          .addFields(
-            { name: "Rank", value: `**#${rank}**`, inline: true },
-            { name: "Level", value: `**Level ${progress.level}**`, inline: true },
-            { name: "Total XP", value: `**${formatNumber(totalXp)} XP**`, inline: true },
-            {
-              name: "Level Progress",
-              value: `${progressBar(progress.xpInCurrentLevel, progress.xpNeededForNextLevel)} **${progress.progressPercent}%** (${formatNumber(progress.xpInCurrentLevel)}/${formatNumber(progress.xpNeededForNextLevel)} XP)`,
-              inline: false,
-            },
-          )
-          .setFooter({
-            text: `${interaction.guild.name} • XP Leaderboard`,
-            iconURL: interaction.guild.iconURL({ size: 64 }) ?? undefined,
-          })
-          .setTimestamp();
-
-        await interaction.editReply({ embeds: [embed] });
-      }
+      const rankCard = await buildRankCardPayload(
+        guildId,
+        member,
+        totalXp,
+        rank,
+        messageCount,
+        moduleManager,
+      );
+      await interaction.editReply({
+        ...rankCard,
+        components: [buildXpShareRow(guildId, targetUser.id, "rank", `${PUBLIC_URL}/xp/${guildId}`)],
+      });
       return;
     }
 
@@ -651,13 +690,11 @@ const xpModule: BotModule = {
           })
           .setTimestamp();
 
-        const webUrl = `${PUBLIC_URL}/xp/${guildId}`;
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setLabel("View Web Leaderboard")
-            .setEmoji("🌐")
-            .setStyle(ButtonStyle.Link)
-            .setURL(webUrl),
+        const row = buildXpShareRow(
+          guildId,
+          targetUser.id,
+          "check",
+          `${PUBLIC_URL}/xp/${guildId}`,
         );
 
         await interaction.editReply({ embeds: [embed], components: [row] });
@@ -801,6 +838,66 @@ const xpModule: BotModule = {
     const action = parts[1]; // "optin", "optout", "lb-prev", "lb-next"
     const guildId = parts[2];
     const targetUserId = parts[3];
+
+    // ── Share private rank / XP check ──
+    if (action === "share-rank" || action === "share-check") {
+      if (!interaction.channel?.isSendable()) {
+        await interaction.reply({
+          content: "I can't share this result in this channel.",
+          flags: [MessageFlags.Ephemeral],
+        });
+        return;
+      }
+
+      await interaction.deferUpdate();
+
+      if (action === "share-check") {
+        await interaction.channel.send({ embeds: interaction.message.embeds });
+      } else {
+        const guild = interaction.guild;
+        if (!guild || !targetUserId) {
+          await interaction.editReply({
+            content: "That rank card is no longer available to share.",
+            components: [],
+          });
+          return;
+        }
+
+        const member =
+          guild.members.cache.get(targetUserId) ??
+          (await guild.members.fetch(targetUserId).catch(() => null));
+        const cached = userCache.get(cacheKey(guildId, targetUserId));
+        const dbUser = await moduleManager.databaseService.getXpUser(guildId, targetUserId);
+
+        if (!member || (!dbUser && !cached)) {
+          await interaction.editReply({
+            content: "That rank card is no longer available to share.",
+            components: [],
+          });
+          return;
+        }
+
+        const totalXp = (dbUser?.xp ?? 0) + (cached?.pendingXp ?? 0);
+        const messageCount =
+          (dbUser?.message_count ?? 0) + (cached?.pendingMessages ?? 0);
+        const rank = await moduleManager.databaseService.getXpUserRank(guildId, totalXp);
+        const rankCard = await buildRankCardPayload(
+          guildId,
+          member,
+          totalXp,
+          rank,
+          messageCount,
+          moduleManager,
+        );
+        await interaction.channel.send(rankCard);
+      }
+
+      await interaction.editReply({
+        content: "✅ Shared in this channel.",
+        components: [],
+      });
+      return;
+    }
 
     // ── Opt-in / Opt-out Buttons ──
     if (action === "optin" || action === "optout") {
