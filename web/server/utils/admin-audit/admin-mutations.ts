@@ -192,6 +192,14 @@ export function createAiConfigRouteHandler<Event>(
     const { config, reason } = parseAiConfigBody(await deps.parseBody(event), createHttpError)
     const previous = await repository.getConfig()
     const rotated = Boolean(config.aiApiKey) && config.aiApiKey !== previous?.aiApiKey
+    // GET strips the real key before it ever reaches the dashboard (see
+    // ai.get.ts), so the form field is always blank unless the admin just
+    // typed a new one. A blank submit must mean "leave the credential
+    // alone" — not "clear it" — or every settings-only save wipes the key.
+    const mergedConfig: GlobalAiConfig = {
+      ...config,
+      aiApiKey: config.aiApiKey ? config.aiApiKey : previous?.aiApiKey,
+    }
 
     let auditEventId: string
     try {
@@ -200,9 +208,9 @@ export function createAiConfigRouteHandler<Event>(
         action: 'ai.updated',
         target: { type: 'ai', id: 'global' },
         before: toAiAuditState(previous, false),
-        after: toAiAuditState(config, rotated),
+        after: toAiAuditState(mergedConfig, rotated),
         reason,
-        mutate: (tx) => repository.setConfig(tx, config),
+        mutate: (tx) => repository.setConfig(tx, mergedConfig),
       } as AuditedMutationInput<unknown>)
       auditEventId = result.auditEventId
     } catch (error) {
