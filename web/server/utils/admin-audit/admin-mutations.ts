@@ -118,6 +118,9 @@ export interface GlobalAiConfig {
   aiApiKey?: string
   aiModel?: string
   aiBaseUrl?: string
+  maxInputTokens?: number
+  maxOutputTokens?: number
+  rateLimitSeconds?: number
 }
 
 export interface AiConfigRepository {
@@ -142,12 +145,19 @@ function parseAiConfigBody(
     throw createHttpError(400, 'Body must be a JSON object with the global AI config.')
   }
   const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason : null
+  const positiveInt = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? Math.floor(value)
+      : undefined
   return {
     config: {
       aiProvider: typeof body.aiProvider === 'string' ? body.aiProvider : undefined,
       aiApiKey: typeof body.aiApiKey === 'string' ? body.aiApiKey : undefined,
       aiModel: typeof body.aiModel === 'string' ? body.aiModel : undefined,
       aiBaseUrl: typeof body.aiBaseUrl === 'string' ? body.aiBaseUrl : undefined,
+      maxInputTokens: positiveInt(body.maxInputTokens),
+      maxOutputTokens: positiveInt(body.maxOutputTokens),
+      rateLimitSeconds: positiveInt(body.rateLimitSeconds),
     },
     reason,
   }
@@ -159,6 +169,9 @@ function toAiAuditState(config: GlobalAiConfig | null, rotated: boolean): AuditS
     provider: config?.aiProvider,
     model: config?.aiModel,
     baseUrl: config?.aiBaseUrl,
+    maxInputTokens: config?.maxInputTokens,
+    maxOutputTokens: config?.maxOutputTokens,
+    rateLimitSeconds: config?.rateLimitSeconds,
     credentialPresent: Boolean(config?.aiApiKey),
     credentialRotated: rotated,
   }

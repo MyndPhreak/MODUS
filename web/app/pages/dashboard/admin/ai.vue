@@ -12,8 +12,8 @@
           Global AI Settings
         </h1>
         <p class="text-gray-400 text-sm mt-1">
-          Default provider &amp; key used by all Premium guilds that haven't
-          configured their own. Falls back to
+          Default provider, key &amp; token limits used by all Premium guilds
+          that haven't configured their own key. Falls back to
           <code class="text-xs bg-gray-800 px-1 rounded">.env</code> if not set
           here.
         </p>
@@ -75,6 +75,53 @@
             icon="i-heroicons-globe-alt"
           />
         </UFormField>
+
+        <UFormField
+          label="Max Response Tokens"
+          hint="Raise this if the AI's replies get cut off mid-sentence."
+        >
+          <UInput
+            v-model.number="globalAI.maxOutputTokens"
+            type="number"
+            min="1"
+            placeholder="512"
+          />
+        </UFormField>
+
+        <UFormField
+          label="Max Input Tokens"
+          hint="Caps how much of a user's message is sent to the model."
+        >
+          <UInput
+            v-model.number="globalAI.maxInputTokens"
+            type="number"
+            min="1"
+            placeholder="500"
+          />
+        </UFormField>
+
+        <UFormField
+          label="Per-User Cooldown (seconds)"
+          hint="Rate limit applied per user on the shared key."
+        >
+          <UInput
+            v-model.number="globalAI.rateLimitSeconds"
+            type="number"
+            min="1"
+            placeholder="60"
+          />
+        </UFormField>
+      </div>
+
+      <div class="px-6 pt-0 pb-4 -mt-1">
+        <p class="text-xs text-gray-500">
+          <UIcon
+            name="i-heroicons-information-circle"
+            class="inline w-3.5 h-3.5 mb-0.5"
+          />
+          These three limits apply to every guild on the shared/Premium key —
+          individual guilds can't override them from their own dashboard.
+        </p>
       </div>
 
       <div
@@ -160,6 +207,9 @@ const globalAI = ref({
   aiApiKey: "",
   aiModel: "llama-3.3-70b-versatile",
   aiBaseUrl: "",
+  maxOutputTokens: 512,
+  maxInputTokens: 500,
+  rateLimitSeconds: 60,
 });
 const savedProvider = ref(globalAI.value.aiProvider);
 const savingGlobalAI = ref(false);

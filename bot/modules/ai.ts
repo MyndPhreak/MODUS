@@ -141,6 +141,29 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// A single Discord message caps out at 2000 characters. A raised
+// `maxOutputTokens` can easily produce a longer reply, so split on the
+// nearest paragraph/word boundary rather than hard-truncating mid-sentence.
+const DISCORD_MESSAGE_LIMIT = 2000;
+const MAX_REPLY_CHUNKS = 3; // caps a single AI turn at ~6000 chars of replies
+
+export function splitIntoDiscordChunks(
+  text: string,
+  maxLen: number = DISCORD_MESSAGE_LIMIT,
+): string[] {
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0) splitAt = remaining.lastIndexOf(" ", maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt).trimEnd());
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 /**
  * Build the context messages that fit within the remaining token budget.
  * Returns an array of ChatMessage entries (oldest first) that fit.
@@ -845,10 +868,14 @@ export function registerAIEvents(moduleManager: ModuleManager) {
           return;
         }
 
-        // Enforce shared-key token/rate limits regardless of guild settings
-        settings.rateLimitSeconds = 60;
-        settings.maxInputTokens = 500;
-        settings.maxOutputTokens = 512;
+        // Enforce shared-key token/rate limits regardless of guild settings —
+        // guild dashboards can't raise these for the shared key. Values come
+        // from the platform admin's global AI defaults (dashboard: Global AI
+        // Settings) when set, so all Premium guilds on the shared key get the
+        // same, admin-tunable caps instead of a fixed 512-token ceiling.
+        settings.rateLimitSeconds = globalConfig?.rateLimitSeconds ?? 60;
+        settings.maxInputTokens = globalConfig?.maxInputTokens ?? 500;
+        settings.maxOutputTokens = globalConfig?.maxOutputTokens ?? 512;
       }
 
       // ─ Rate limit check ─────────────────────────────────────────
@@ -1028,7 +1055,7 @@ export function registerAIEvents(moduleManager: ModuleManager) {
 
         } else {
           // No tool calls, we have our final text reply
-          reply = result.content.slice(0, 1990) || "🤔 I got nothing on that one.";
+          reply = result.content || "🤔 I got nothing on that one.";
           break;
         }
       }
@@ -1037,7 +1064,14 @@ export function registerAIEvents(moduleManager: ModuleManager) {
          reply = "⚠️ I had to stop thinking because it took too many steps. Here is what I have so far.";
       }
 
-      await message.reply(reply);
+      // ─ Send reply, splitting across messages if it exceeds Discord's cap ─
+      const replyChunks = splitIntoDiscordChunks(reply).slice(0, MAX_REPLY_CHUNKS);
+      await message.reply(replyChunks[0]);
+      for (const chunk of replyChunks.slice(1)) {
+        if ("send" in message.channel) {
+          await message.channel.send(chunk).catch(() => {});
+        }
+      }
 
       // ─ Push to context buffer ────────────────────────────────────
       if (settings.contextEnabled) {
