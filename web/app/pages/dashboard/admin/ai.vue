@@ -37,10 +37,21 @@
           <UInput
             v-model="globalAI.aiApiKey"
             type="password"
-            placeholder="sk-... or your provider key"
+            :placeholder="
+              hasStoredApiKey
+                ? 'Key is set — leave blank to keep it'
+                : 'sk-... or your provider key'
+            "
             icon="i-heroicons-lock-closed"
             autocomplete="off"
           />
+          <p class="text-xs mt-1" :class="hasStoredApiKey ? 'text-emerald-400' : 'text-amber-400'">
+            {{
+              hasStoredApiKey
+                ? "✅ A key is currently on file. It's never shown here — leave this blank to keep it."
+                : "⚠️ No key on file. The shared/Premium AI path won't work until one is set."
+            }}
+          </p>
         </UFormField>
 
         <UFormField label="Default Model">
@@ -212,6 +223,7 @@ const globalAI = ref({
   rateLimitSeconds: 60,
 });
 const savedProvider = ref(globalAI.value.aiProvider);
+const hasStoredApiKey = ref(false);
 const savingGlobalAI = ref(false);
 const confirmOpen = ref(false);
 const reason = ref("");
@@ -273,9 +285,10 @@ const loadGlobalAI = async () => {
   try {
     const saved = await $fetch<Record<string, any>>("/api/global-config/ai");
     if (saved && Object.keys(saved).length > 0) {
-      globalAI.value = { ...globalAI.value, ...saved };
+      const { hasApiKey, ...rest } = saved;
+      globalAI.value = { ...globalAI.value, ...rest, aiApiKey: "" };
+      hasStoredApiKey.value = Boolean(hasApiKey);
       savedProvider.value = globalAI.value.aiProvider;
-      if (globalAI.value.aiApiKey) await fetchGlobalAIModels();
     }
   } catch (error) {
     console.error("Error loading global AI config:", error);
@@ -296,6 +309,8 @@ const saveGlobalAI = async () => {
       method: "PUT",
       body: { ...globalAI.value, reason: reason.value.trim() || undefined },
     });
+    if (globalAI.value.aiApiKey) hasStoredApiKey.value = true;
+    globalAI.value.aiApiKey = "";
     savedProvider.value = globalAI.value.aiProvider;
     confirmOpen.value = false;
     toast.add({
