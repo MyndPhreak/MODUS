@@ -66,12 +66,12 @@ describe('getR2Usage', () => {
       query: string
       variables: Record<string, string>
     }
-    expect(body.variables).toEqual({
-      accountTag: 'account-tag',
-      bucketName: 'private-bucket',
-    })
+    expect(body.variables.accountTag).toBe('account-tag')
+    expect(body.variables.bucketName).toBe('private-bucket')
+    expect(typeof body.variables.datetimeGeq).toBe('string')
+    expect(typeof body.variables.datetimeLeq).toBe('string')
     expect(body.query).toContain('r2StorageAdaptiveGroups')
-    expect(body.query).toContain('filter: { bucketName: $bucketName }')
+    expect(body.query).toContain('filter: { bucketName: $bucketName, datetime_geq: $datetimeGeq, datetime_leq: $datetimeLeq }')
     expect(body.query).toContain('orderBy: [datetime_DESC]')
     expect(body.query).toContain('limit: 1')
     expect(body.query).toContain('max {')

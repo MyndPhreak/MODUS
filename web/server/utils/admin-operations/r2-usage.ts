@@ -4,13 +4,15 @@ const CLOUDFLARE_GRAPHQL_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphq
 const R2_USAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const R2_USAGE_TIMEOUT_MS = 5_000
 
+const R2_USAGE_QUERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
 const R2_USAGE_QUERY = `
-  query R2StorageLatest($accountTag: string!, $bucketName: string!) {
+  query R2StorageLatest($accountTag: string!, $bucketName: string!, $datetimeGeq: Time!, $datetimeLeq: Time!) {
     viewer {
       accounts(filter: { accountTag: $accountTag }) {
         r2StorageAdaptiveGroups(
           limit: 1
-          filter: { bucketName: $bucketName }
+          filter: { bucketName: $bucketName, datetime_geq: $datetimeGeq, datetime_leq: $datetimeLeq }
           orderBy: [datetime_DESC]
         ) {
           max {
@@ -122,6 +124,7 @@ function selectLatestSample(samples: StorageSample[]): StorageSample | null {
 
 function parseUsage(response: AnalyticsResponse): R2Usage {
   if (response.errors?.length) {
+    console.error('[R2 usage] GraphQL errors:', JSON.stringify(response.errors))
     return {
       status: 'unavailable',
       message: 'R2 usage analytics is temporarily unavailable.',
@@ -133,6 +136,7 @@ function parseUsage(response: AnalyticsResponse): R2Usage {
   }) ?? []
   const sample = selectLatestSample(samples)
   if (!sample) {
+    console.error('[R2 usage] No sample in response:', JSON.stringify(response))
     return {
       status: 'unavailable',
       message: 'R2 usage analytics has no reported sample.',
@@ -188,11 +192,14 @@ async function fetchUsage(
           variables: {
             accountTag: config.accountId,
             bucketName: config.bucket,
+            datetimeGeq: new Date(Date.now() - R2_USAGE_QUERY_WINDOW_MS).toISOString(),
+            datetimeLeq: new Date().toISOString(),
           },
         }),
       })
 
       if (!response.ok) {
+        console.error(`[R2 usage] HTTP ${response.status}:`, await response.text())
         return {
           status: 'unavailable',
           message: 'R2 usage analytics is temporarily unavailable.',
@@ -201,7 +208,8 @@ async function fetchUsage(
 
       return parseUsage(await response.json() as AnalyticsResponse)
     }, config.timeoutMs ?? R2_USAGE_TIMEOUT_MS)
-  } catch {
+  } catch (error) {
+    console.error('[R2 usage] fetch threw:', error)
     return {
       status: 'unavailable',
       message: 'R2 usage analytics is temporarily unavailable.',
