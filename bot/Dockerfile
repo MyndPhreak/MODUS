@@ -13,6 +13,16 @@ FROM node:22-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 
+# @discordjs/opus doesn't always ship a prebuilt binary for the current Node
+# ABI (e.g. no node-v127 build for 0.10.0 — https://github.com/discordjs/opus/releases).
+# When that happens it falls back to compiling from source via node-gyp, which
+# needs Python + a C++ toolchain.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /repo
 
 # Copy workspace manifests first (Docker layer caching).
