@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`web/`** — Nuxt 4 dashboard (Vue 3, SSR for public pages, SPA for `/dashboard/**`).
 - **`packages/db/`** (`@modus/db`) — Shared Postgres schema, drizzle client, and repositories consumed by both `bot` and `web`.
 
-**Runtime:** Node.js 22 | **Package Manager:** pnpm v10.9.0 (enforced via `packageManager` field — do not use npm or yarn).
+**Runtime:** Node.js 22 | **Package Manager:** pnpm v11.24.0 (enforced via `packageManager` field — do not use npm or yarn). Workspace-wide settings (`overrides`, `patchedDependencies`, `allowBuilds`) live in `pnpm-workspace.yaml`, not the `pnpm` field in `package.json` — pnpm 11 silently ignores that legacy location.
 
 > **Note:** The Appwrite → Postgres + R2 migration is complete on `main`. Remaining Appwrite references (the `node-appwrite` devDependency and `migrate:all` script in `packages/db`, comments about legacy file IDs) are transitional migration tooling, not live code paths — see [docs/migration-runbook.md](docs/migration-runbook.md) for history.
 

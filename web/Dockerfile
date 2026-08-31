@@ -12,7 +12,7 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:22-slim AS builder
 
-RUN corepack enable && corepack prepare pnpm@10.9.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 
 WORKDIR /repo
 
