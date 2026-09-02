@@ -69,7 +69,7 @@
               icon="i-heroicons-arrow-path"
               variant="ghost"
               :loading="globalAIModelsLoading"
-              :disabled="!globalAI.aiApiKey"
+              :disabled="!globalAI.aiApiKey && !hasStoredApiKey"
               title="Fetch available models"
               @click="fetchGlobalAIModels"
             />
@@ -257,6 +257,11 @@ const aiProviderLinks = [
 ];
 
 const fetchGlobalAIModels = async () => {
+  // A typed key always wins; otherwise fall back to the one already on file
+  // (the field is left blank after load/save, so we never re-send it as text).
+  const useStored = !globalAI.value.aiApiKey && hasStoredApiKey.value;
+  if (!globalAI.value.aiApiKey && !useStored) return;
+
   globalAIModelsLoading.value = true;
   globalAIModelsWarning.value = "";
   try {
@@ -266,7 +271,9 @@ const fetchGlobalAIModels = async () => {
         method: "POST",
         body: {
           provider: globalAI.value.aiProvider,
-          apiKey: globalAI.value.aiApiKey || "__validate_only__",
+          ...(useStored
+            ? { useStored: true }
+            : { apiKey: globalAI.value.aiApiKey }),
           baseUrl: globalAI.value.aiBaseUrl || undefined,
         },
       },
@@ -289,6 +296,7 @@ const loadGlobalAI = async () => {
       globalAI.value = { ...globalAI.value, ...rest, aiApiKey: "" };
       hasStoredApiKey.value = Boolean(hasApiKey);
       savedProvider.value = globalAI.value.aiProvider;
+      if (hasStoredApiKey.value) fetchGlobalAIModels();
     }
   } catch (error) {
     console.error("Error loading global AI config:", error);

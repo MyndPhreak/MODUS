@@ -8,12 +8,21 @@
 
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { requireAuthedUserId } from "../../utils/session";
+import { requireAuthedUserId, requireBotAdmin } from "../../utils/session";
+import { getRepos } from "../../utils/db";
 
 interface RequestBody {
   provider: string;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
+  /**
+   * Use the shared-key that's already stored in the global AI config instead
+   * of a key from the request body. The dashboard never receives that key
+   * back (see ai.get.ts), so this is the only way it can validate/refresh
+   * the model list without asking the admin to re-paste it. Bot-admin only —
+   * it triggers outbound calls billed against the shared key.
+   */
+  useStored?: boolean;
 }
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
@@ -51,12 +60,35 @@ const FALLBACK_MODELS: Record<string, string[]> = {
 };
 
 export default defineEventHandler(async (event) => {
-  // This endpoint makes outbound requests to a caller-supplied base URL with a
-  // caller-supplied key, so it must not be reachable unauthenticated.
-  await requireAuthedUserId(event);
-
   const body = await readBody<RequestBody>(event);
-  const { provider, apiKey, baseUrl } = body;
+  let { provider, apiKey, baseUrl } = body;
+
+  if (body.useStored) {
+    // Reuses the shared key already on file — restricted to bot admins,
+    // since it spends the shared/Premium key's quota on the caller's behalf.
+    await requireBotAdmin(event);
+    const repos = getRepos();
+    if (!repos) {
+      throw createError({
+        statusCode: 503,
+        statusMessage: "Database unavailable (NUXT_DATABASE_URL not set).",
+      });
+    }
+    const stored = await repos.guildConfigs.getGlobalAIConfig();
+    if (!stored?.aiApiKey) {
+      throw createError({
+        statusCode: 400,
+        message: "No API key stored yet — enter one first.",
+      });
+    }
+    apiKey = stored.aiApiKey;
+    provider = provider || stored.aiProvider;
+    baseUrl = baseUrl ?? stored.aiBaseUrl;
+  } else {
+    // This endpoint makes outbound requests to a caller-supplied base URL
+    // with a caller-supplied key, so it must not be reachable unauthenticated.
+    await requireAuthedUserId(event);
+  }
 
   if (!provider || !apiKey) {
     throw createError({
