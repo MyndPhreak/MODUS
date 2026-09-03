@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.22.0](https://github.com/PPO-GG/MODUS/compare/modus-v1.21.0...modus-v1.22.0) (2026-09-02)
+
+
+### ✨ Features
+
+* **api:** add audited admin mutation service ([f3bbee6](https://github.com/PPO-GG/MODUS/commit/f3bbee6a94390624694092a008cdf5085fc7ee9e))
+* **api:** add searchable admin log history ([2a9c2ed](https://github.com/PPO-GG/MODUS/commit/2a9c2ed874d4777c11fcb5552d1d69444c72ec6d))
+* **api:** define admin log query contracts ([7b31d47](https://github.com/PPO-GG/MODUS/commit/7b31d477461a1a954b9062b749964e2cf7289942))
+* **api:** expose admin operations overview ([8d3cb48](https://github.com/PPO-GG/MODUS/commit/8d3cb484ea752932364554b598bec6edfc60b129))
+* **bot:** add share actions for XP results ([e1bbdb2](https://github.com/PPO-GG/MODUS/commit/e1bbdb287159298b51a6515df8e3ea5c16dc1787))
+* **bot:** make AI response/token limits admin-configurable globally ([dd97a74](https://github.com/PPO-GG/MODUS/commit/dd97a742a2be8ab256085e2fbd41ee910bd5bde6))
+* **db:** add admin operations summary queries ([1073cc6](https://github.com/PPO-GG/MODUS/commit/1073cc63081172a6f06d4cb1df7216f409aa330b))
+* **db:** add bot admin audit events ([cca9e06](https://github.com/PPO-GG/MODUS/commit/cca9e06799cb1e18fbc92a3813179aee5efe586e))
+* **db:** add cursor-paginated log search ([1d4a70b](https://github.com/PPO-GG/MODUS/commit/1d4a70bf31b0000070d4a7311b97eb8da7253fd5))
+* **web:** add admin operations overview ([662af53](https://github.com/PPO-GG/MODUS/commit/662af539960097cb22fb0be237b0a5bfb5c2fc59))
+* **web:** add bot admin audit trail ([12c9896](https://github.com/PPO-GG/MODUS/commit/12c9896acc550c600b9aaecaf12c380ec80721a7))
+* **web:** add dependency and R2 usage probes ([4976d63](https://github.com/PPO-GG/MODUS/commit/4976d6351f624aec63635c1a47d9ed89165a00b7))
+* **web:** audit AI and premium controls ([76fba44](https://github.com/PPO-GG/MODUS/commit/76fba44073351c608f5ff717036d8df808661e35))
+* **web:** audit global system controls ([ce84017](https://github.com/PPO-GG/MODUS/commit/ce840170a23e18df35eb55fe70046e618dd60eff))
+* **web:** enhance admin log explorer ([f8683e4](https://github.com/PPO-GG/MODUS/commit/f8683e46acb1d75d2b097371c0ce7ccf4c25f905))
+* **web:** make dashboard sidebar mobile friendly ([#69](https://github.com/PPO-GG/MODUS/issues/69)) ([835a5fe](https://github.com/PPO-GG/MODUS/commit/835a5fe72433cdea051c45341970d7d06d3c6fd2))
+* **web:** manage giveaway history in dashboard ([dbcc359](https://github.com/PPO-GG/MODUS/commit/dbcc359f362ae46e6353c01f962e4fe8228ae041))
+* **web:** manage giveaway history in dashboard ([e9fa082](https://github.com/PPO-GG/MODUS/commit/e9fa0828613914dc10f745c23371287f354608db))
+
+
+### 🐛 Bug Fixes
+
+* **api:** align admin log cursor bounds ([f1f1c28](https://github.com/PPO-GG/MODUS/commit/f1f1c289c54a955500e0991263f0561863d9a6c5))
+* **api:** centralize admin overview health policy ([2af45fb](https://github.com/PPO-GG/MODUS/commit/2af45fbe01fe82633e05eb6cf710584550336d9d))
+* **api:** harden admin log query validation ([c5a2810](https://github.com/PPO-GG/MODUS/commit/c5a281079d78ac27bd8c6811bb14dbc98f447053))
+* **api:** harden admin log route contracts ([82efc79](https://github.com/PPO-GG/MODUS/commit/82efc79f2dd1e6f52c962fcb6ad4f10a1becc9a0))
+* **api:** seal audit authorization and redaction ([3c8236b](https://github.com/PPO-GG/MODUS/commit/3c8236b35c6dbfb9c6db33986d9285adc5bd573e))
+* **api:** simplify audit service boundary and harden secret redaction ([fe895f8](https://github.com/PPO-GG/MODUS/commit/fe895f867c67215b2667eede26fdbb23389759ac))
+* **bot:** harden /ban permission errors and add /unban autocomplete ([49437a2](https://github.com/PPO-GG/MODUS/commit/49437a203cfe74edbab457b1d025a36ec87885e1))
+* **bot:** install python3/make/g++ in Docker builder for opus fallback build ([3372756](https://github.com/PPO-GG/MODUS/commit/3372756612c2b23992f19ac28e1577eea66199cd))
+* **bot:** type channel lock permission flags ([4bcaae2](https://github.com/PPO-GG/MODUS/commit/4bcaae299fc8876c163ce9c658c91430a054c8fb))
+* **bot:** whitelist exempt roles during channel locks ([288386e](https://github.com/PPO-GG/MODUS/commit/288386e7e47bbc41840473e4d60711df47ad44f9))
+* **ci:** stop pinning pnpm 10 in Actions, let it read packageManager ([6ab2a5b](https://github.com/PPO-GG/MODUS/commit/6ab2a5baae8302d2509ab5ce22fac02b4e529d9b))
+* **db:** harden admin log search query ([e173087](https://github.com/PPO-GG/MODUS/commit/e173087c95dfedfe3cf7037d83e5bd975b1c1ff5))
+* **db:** validate audit event cursors ([ffacc4e](https://github.com/PPO-GG/MODUS/commit/ffacc4e14e0b83feff41a5920d8f67978633c9d4))
+* **web:** bound R2 analytics body parsing ([5d8f37e](https://github.com/PPO-GG/MODUS/commit/5d8f37eac88f60c5f294c271996d84bcec1a3699))
+* **web:** bound R2 usage analytics query to a 7-day window ([59547b0](https://github.com/PPO-GG/MODUS/commit/59547b0470a8f10f5735acd5ed7af1179521a915))
+* **web:** centralize fleet telemetry health ([6ef5d14](https://github.com/PPO-GG/MODUS/commit/6ef5d1457a3ddb17d89dc4471251349c85c65e2d))
+* **web:** correct admin log date and route sync ([45b22a3](https://github.com/PPO-GG/MODUS/commit/45b22a3980900c10f019d891f41b98a4ac112610))
+* **web:** handle degraded required dependencies ([fc269ff](https://github.com/PPO-GG/MODUS/commit/fc269ff9e4cbb7437f0e66a2031b5b7c88c2a83b))
+* **web:** harden admin log explorer ([7280f04](https://github.com/PPO-GG/MODUS/commit/7280f04428c94e6c01c33448c36322c1736e90df))
+* **web:** install python3/make/g++ in Docker builder for opus fallback build ([dc7e656](https://github.com/PPO-GG/MODUS/commit/dc7e656619bf54138620845b0288536535ffdd3a))
+* **web:** let global AI model refresh use the already-stored key ([8e5290b](https://github.com/PPO-GG/MODUS/commit/8e5290b001054fbbd2cbeef8635229996441d520))
+* **web:** preserve paused logs during refresh ([f327ad8](https://github.com/PPO-GG/MODUS/commit/f327ad809dc71db6aa0bba89ed42464e108d13ca))
+* **web:** refine admin operations overview ([e333be8](https://github.com/PPO-GG/MODUS/commit/e333be849bfcaad152da9e87cb9be5e586c958e4))
+* **web:** remove stray connector line from fleet signal panel ([2619072](https://github.com/PPO-GG/MODUS/commit/26190720338b0c72def3d59cc248566f29cd8093))
+* **web:** show whether a global AI key is already on file ([d71803f](https://github.com/PPO-GG/MODUS/commit/d71803ff5833527b1cde9e8775fe9ddc9bfbc69f))
+* **web:** stop global AI config save from wiping the shared API key ([27deef0](https://github.com/PPO-GG/MODUS/commit/27deef02720a3635be7bf9325ac78ff2307ffcd1))
+
+
+### 📖 Documentation
+
+* align AGENTS.md commit granularity with CLAUDE.md ([3784383](https://github.com/PPO-GG/MODUS/commit/378438330272e516c1c3a3d5942d108870240670))
+* group commits at feature granularity instead of per sub-step ([cbdc706](https://github.com/PPO-GG/MODUS/commit/cbdc706250589a7d029c412ec904d287bd3866db))
+* **web:** add R2 usage to admin operations design ([94a3eaa](https://github.com/PPO-GG/MODUS/commit/94a3eaad59c0ddaed81a750862bb9b6b11fe71ea))
+* **web:** design admin operations core ([8f7ce03](https://github.com/PPO-GG/MODUS/commit/8f7ce032af6270a6c89355f2c4ef52142f6d67ac))
+* **web:** plan admin operations core ([b21f5bf](https://github.com/PPO-GG/MODUS/commit/b21f5bf07f1af51fe50196890c35fc1178122415))
+
 ## [1.21.0](https://github.com/MyndPhreak/MODUS/compare/modus-v1.20.0...modus-v1.21.0) (2026-08-23)
 
 
