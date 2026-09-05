@@ -158,21 +158,59 @@ const navLinks = [
   { label: "XP", href: "/xp", icon: "i-lucide-trophy" },
 ];
 
-const scrollToSection = (hash: string) => {
+/**
+ * Scroll to a homepage section, waiting for it to exist. After a
+ * client-side navigation the target isn't in the DOM yet on the next tick,
+ * so poll a few frames before giving up.
+ */
+const scrollToSection = async (hash: string) => {
   const id = hash.replace(/^\/?#/, "");
-  const el = document.getElementById(id);
-  if (el) {
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  for (let frame = 0; frame < 30; frame++) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
 };
 
-const handleNavLinkClick = (event: MouseEvent, href: string) => {
-  // Only intercept hash-anchor links (e.g. "/#features") when on the homepage.
-  // Clean path links like "/xp" should navigate normally.
-  if (route.path === "/" && href.includes("#")) {
-    event.preventDefault();
-    scrollToSection(href);
+/**
+ * Route these links through the router instead of letting the browser do a
+ * document load. They were plain anchors, so every click re-booted the
+ * whole app — and with it a session hydration that calls Discord's
+ * ~1-req/s /users/@me/guilds. Two clicks inside a second was enough to
+ * take a 429 and silently empty the user's guild list (see c84c8f0).
+ *
+ * The `href` stays on the anchor for crawlers and modified clicks; only a
+ * plain left click is intercepted.
+ */
+const handleNavLinkClick = async (event: MouseEvent, href: string) => {
+  if (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
   }
+  event.preventDefault();
+
+  const hashIndex = href.indexOf("#");
+  const path = (hashIndex === -1 ? href : href.slice(0, hashIndex)) || "/";
+  const hash = hashIndex === -1 ? "" : href.slice(hashIndex);
+
+  // Arriving from another page: hand the hash to the router and let its
+  // scroll behaviour place us, exactly as the browser did back when these
+  // were document loads. Scrolling ourselves here just races it.
+  if (route.path !== path) {
+    await navigateTo(href);
+    return;
+  }
+
+  // Already on the page, so no navigation happens and the scroll is ours.
+  if (hash) await scrollToSection(hash);
 };
 
 const scrollToTop = () => {
