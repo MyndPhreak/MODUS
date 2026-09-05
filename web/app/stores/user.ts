@@ -199,8 +199,14 @@ export const useUserStore = defineStore("user", {
             permissions: g.permissions,
           })),
         };
-      } catch (err) {
-        console.warn("[UserStore] /api/discord/me failed:", err);
+      } catch (err: any) {
+        // The endpoint reports the real upstream status/code in
+        // data.upstream — log that rather than the opaque FetchError, or a
+        // rate limit is indistinguishable from a dead token.
+        console.warn(
+          "[UserStore] /api/discord/me failed:",
+          err?.data?.data?.upstream ?? err?.data ?? err,
+        );
       }
     },
 
