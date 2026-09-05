@@ -183,6 +183,67 @@
       </div>
     </div>
 
+    <!-- YOUR SERVERS: LIST COULDN'T BE BUILT -->
+    <div
+      v-else-if="userStore.initialized && userStore.isLoggedIn && myServersError"
+      class="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-amber-500/5 border border-amber-500/20"
+    >
+      <div class="flex items-center gap-3">
+        <UIcon
+          name="i-heroicons-exclamation-triangle"
+          class="w-6 h-6 text-amber-400 shrink-0"
+        />
+        <p class="text-sm text-zinc-300">
+          <template v-if="myServersError === 'reauth'">
+            Your Discord connection has expired. Log in again to see the
+            servers you're ranked in.
+          </template>
+          <template v-else>
+            Couldn't reach Discord just now, so we can't tell which servers
+            you're in.
+          </template>
+        </p>
+      </div>
+      <UButton
+        v-if="myServersError === 'reauth'"
+        :href="`/api/auth/discord?returnTo=${encodeURIComponent('/xp')}`"
+        external
+        color="warning"
+        variant="soft"
+        size="sm"
+        icon="i-simple-icons-discord"
+        class="shrink-0"
+      >
+        Reconnect Discord
+      </UButton>
+      <UButton
+        v-else
+        color="warning"
+        variant="soft"
+        size="sm"
+        icon="i-heroicons-arrow-path"
+        class="shrink-0"
+        @click="retryMyServers"
+      >
+        Try Again
+      </UButton>
+    </div>
+
+    <!-- YOUR SERVERS: NONE RUNNING MODUS XP -->
+    <div
+      v-else-if="userStore.initialized && userStore.isLoggedIn"
+      class="flex items-center gap-3 p-5 rounded-2xl bg-white/[0.02] border border-white/10"
+    >
+      <UIcon
+        name="i-heroicons-user-circle"
+        class="w-6 h-6 text-indigo-400 shrink-0"
+      />
+      <p class="text-sm text-zinc-400">
+        None of the servers you're in are running MODUS XP yet. Browse the
+        public leaderboards below, or add MODUS to a server you manage.
+      </p>
+    </div>
+
     <!-- YOUR SERVERS: LOGGED OUT PROMPT -->
     <div
       v-else-if="userStore.initialized && !userStore.isLoggedIn"
@@ -577,32 +638,69 @@ const myServers = ref<
 // effect once the client has mounted and is about to check the session.
 const myServersLoading = ref(true);
 
+/**
+ * Why the list couldn't be built. "reauth" means the Discord authorization
+ * itself is dead and only logging in again fixes it; "unreachable" means
+ * Discord (or we) failed transiently and retrying is worth a shot. Telling
+ * them apart matters — offering "Reconnect Discord" for a rate limit sends
+ * people through a login that cannot help.
+ */
+const myServersError = ref<"reauth" | "unreachable" | null>(null);
+
+async function loadMyServers() {
+  myServersLoading.value = true;
+  myServersError.value = null;
+  try {
+    if (!userStore.isLoggedIn) return;
+
+    // Reuse the guild list already fetched during session hydration
+    // (userStore.init() -> /api/discord/me) instead of asking Discord
+    // again — /users/@me/guilds is tightly rate-limited, and a second
+    // near-simultaneous call to it reliably 429s. A list left over from a
+    // previous visit is still worth using: the XP shown against each
+    // server is read live from our own database either way.
+    const guildIds = userStore.userGuilds.map((g) => g.id);
+    if (guildIds.length === 0) {
+      myServers.value = [];
+      // The session survives a failed Discord hydration, so with no guild
+      // list we can't tell "you're in none" from "we never got one" —
+      // unless hydration told us it failed. Say so instead of rendering
+      // nothing at all.
+      if (userStore.discordSyncError) {
+        myServersError.value =
+          userStore.discordSyncError.code === "discord_token_expired"
+            ? "reauth"
+            : "unreachable";
+      }
+      return;
+    }
+
+    myServers.value = await $fetch("/api/xp/my-servers", {
+      query: { guildIds: guildIds.join(",") },
+    });
+  } catch (err: any) {
+    myServers.value = [];
+    myServersError.value =
+      err?.data?.data?.code === "discord_token_expired"
+        ? "reauth"
+        : "unreachable";
+  } finally {
+    myServersLoading.value = false;
+  }
+}
+
+/** Re-hydrate the session first — the guild list usually came from there. */
+async function retryMyServers() {
+  myServersLoading.value = true;
+  await userStore.fetchUserSession();
+  await loadMyServers();
+}
+
 watch(
   () => userStore.initialized,
   async (ready) => {
     if (!ready) return;
-    if (!userStore.isLoggedIn) {
-      myServersLoading.value = false;
-      return;
-    }
-    // Reuse the guild list already fetched during session hydration
-    // (userStore.init() -> /api/discord/me) instead of asking Discord
-    // again — /users/@me/guilds is tightly rate-limited, and a second
-    // near-simultaneous call to it reliably 429s.
-    const guildIds = userStore.userGuilds.map((g) => g.id);
-    if (guildIds.length === 0) {
-      myServersLoading.value = false;
-      return;
-    }
-    try {
-      myServers.value = await $fetch("/api/xp/my-servers", {
-        query: { guildIds: guildIds.join(",") },
-      });
-    } catch {
-      myServers.value = [];
-    } finally {
-      myServersLoading.value = false;
-    }
+    await loadMyServers();
   },
   { immediate: true },
 );

@@ -39,6 +39,13 @@ export const useUserStore = defineStore("user", {
     isLoggedIn: false,
     loading: false,
     initialized: false,
+    /**
+     * Why the last /api/discord/me hydration failed, when it did. The
+     * session stays logged in through such a failure, so callers that need
+     * the guild list can't infer it from isLoggedIn — without this they
+     * just see an empty list and can't tell it apart from "no servers".
+     */
+    discordSyncError: null as { code: string; status: number } | null,
   }),
 
   // Only persist the Discord profile — isLoggedIn is always revalidated
@@ -199,6 +206,7 @@ export const useUserStore = defineStore("user", {
             permissions: g.permissions,
           })),
         };
+        this.discordSyncError = null;
       } catch (err: any) {
         // The endpoint reports the real upstream status/code in
         // data.upstream — log that rather than the opaque FetchError, or a
@@ -207,12 +215,17 @@ export const useUserStore = defineStore("user", {
           "[UserStore] /api/discord/me failed:",
           err?.data?.data?.upstream ?? err?.data ?? err,
         );
+        this.discordSyncError = {
+          code: err?.data?.data?.code ?? "discord_unreachable",
+          status: err?.status ?? err?.statusCode ?? 0,
+        };
       }
     },
 
     clearState() {
       this.discord = null;
       this.isLoggedIn = false;
+      this.discordSyncError = null;
     },
 
     async logout() {
